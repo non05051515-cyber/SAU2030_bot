@@ -1,0 +1,56 @@
+{
+  "bot_username": "SAU2030_bot",
+  "support_username": "",
+  "custom_icons_enabled": false,
+  "products": [
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة والمساعدة في المهام.",
+      "color": "#10a37f",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "description": "منصة لمشاهدة الفيديو ومتابعة القنوات وصنّاع المحتوى.",
+      "color": "#ff0033",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "canva",
+      "name": "Canva",
+      "description": "أداة لإنشاء التصاميم والمحتوى المرئي.",
+      "color": "#00c4cc",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "spotify",
+      "name": "Spotify",
+      "description": "خدمة للاستماع إلى الموسيقى والمحتوى الصوتي.",
+      "color": "#1db954",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "capcut",
+      "name": "CapCut",
+      "description": "أداة لتحرير الفيديو وإعداد المقاطع.",
+      "color": "#d5d8e5",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة وتحليل المحتوى.",
+      "color": "#d97757",
+      "custom_emoji_id": ""
+    },
+    {
+      "id": "grok",
+      "name": "Grok",
+      "description": "مساعد ذكاء اصطناعي للمحادثة والإجابة عن الأسئلة.",
+      "color": "#809dff",
+      "custom_emoji_id": ""
+    }
+  ]
+}
