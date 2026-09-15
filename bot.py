@@ -66,7 +66,6 @@ def show_product(api,chat_id,product_id):
     send_message(api,chat_id,f"{product['icon']} <b>{product['name']}</b>\n\n📦 {product['product']}\n📝 {product['description']}\n\n💰 السعر: {price}",{"inline_keyboard":[[button("🛒 تفاصيل الطلب",f"buy:{product_id}")],[button("↩️ المنتجات","products")],[button("🏠 الرئيسية","home")]]})
 
 def broadcast_product(api,admin_id,args):
-    # /notify product_id added stock price
     parts=args.split()
     if len(parts)!=4:
         send_message(api,admin_id,"⚙️ <b>صيغة الإرسال</b>\n\n<code>/notify youtube 10 25 15</code>\n\nالترتيب: معرف المنتج، الكمية المضافة، المخزون الحالي، السعر")
@@ -120,8 +119,15 @@ def main():
                     if m.get("chat",{}).get("type")!="private": continue
                     cid=m["chat"]["id"]; t=m.get("text",""); save_user(cid)
                     ce=next((e for e in m.get("entities",[]) if e.get("type")=="custom_emoji"),None)
-                    if cid==ADMIN_ID and t.startswith("/notify "): broadcast_product(api,cid,t.split(" ",1)[1])
-                    elif cid==ADMIN_ID and t=="/notify": broadcast_product(api,cid,"")
+                    if t.startswith("/myid"):
+                        send_message(api,cid,f"🆔 Telegram ID: <code>{cid}</code>")
+                    elif t.startswith("/notify"):
+                        if cid != ADMIN_ID:
+                            send_message(api,cid,f"❌ هذا الحساب غير مصرح له بإرسال التنبيهات.\n\n🆔 Telegram ID لحسابك: <code>{cid}</code>")
+                        elif t.startswith("/notify "):
+                            broadcast_product(api,cid,t.split(" ",1)[1])
+                        else:
+                            broadcast_product(api,cid,"")
                     elif ce: send_message(api,cid,"Emoji ID: <code>"+str(ce.get("custom_emoji_id"))+"</code>")
                     elif t.startswith("/start"): show_start(api,cid)
                     elif t.startswith("/products"): show_products(api,cid)
