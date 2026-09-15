@@ -84,7 +84,9 @@ def main():
                     m=u["message"]
                     if m.get("chat",{}).get("type")!="private": continue
                     cid=m["chat"]["id"]; t=m.get("text","")
-                    if t.startswith("/start"): show_start(api,cid)
+                    ce=next((e for e in m.get("entities",[]) if e.get("type")=="custom_emoji"),None)
+                    if ce: send_message(api,cid,"Emoji ID: <code>"+str(ce.get("custom_emoji_id"))+"</code>")
+                    elif t.startswith("/start"): show_start(api,cid)
                     elif t.startswith("/products"): show_products(api,cid)
                     elif t in MENU_ACTIONS: handle_action(api,cid,MENU_ACTIONS[t])
                     else: show_home(api,cid)
