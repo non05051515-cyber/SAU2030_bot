@@ -37,22 +37,22 @@ def show_products(api,chat_id): send_message(api,chat_id,"🛍 <b>المنتجا
 def show_product(api,chat_id,product_id):
     product=PRODUCTS.get(product_id)
     if not product: show_products(api,chat_id); return
+    if product_id=="chatgpt":
+        text=("🤖 <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\n"
+              "اختر نوع الاشتراك المناسب لك:\n\n"
+              "🔐 <b>بلس شهر — حساب خاص</b>\n"
+              "اشتراك لمدة شهر بحساب مخصص لك مع بيانات دخول خاصة.\n\n"
+              "📧 <b>بلس شهر — على إيميلك</b>\n"
+              "اشتراك لمدة شهر يتم تفعيله على حسابك المرتبط بإيميلك.\n\n"
+              "📅 المدة: شهر واحد")
+        kb={"inline_keyboard":[[button("🔐 بلس شهر • حساب خاص","chatgpt_private")],[button("📧 بلس شهر • على إيميلك","chatgpt_email")],[button("↩️ العودة إلى المنتجات","products")]]}
+        send_message(api,chat_id,text,kb); return
     if product_id=="youtube":
         text=("▶️ YouTube Premium | يوتيوب بريميوم\n\n"
               "استمتع بتجربة مشاهدة أفضل مع YouTube Premium.\n\n"
-              "🚫 بدون إعلانات\n"
-              "▶️ تشغيل الفيديوهات في الخلفية\n"
-              "📥 تنزيل المقاطع للمشاهدة بدون إنترنت\n"
-              "🎵 يشمل YouTube Music Premium\n"
-              "🖥 يعمل على الجوال والكمبيوتر والتلفزيون\n\n"
-              "⚡ التفعيل: فوري بعد الطلب\n"
-              "📅 المدة: شهر واحد\n"
-              "💵 السعر: 15 ر.س")
-        # Telegram entity offsets/lengths are UTF-16 code units. ▶️ is 2 units.
-        entities=[
-            {"type":"custom_emoji","offset":0,"length":2,"custom_emoji_id":str(product.get("custom_emoji_id","5330032308139343696"))},
-            {"type":"bold","offset":3,"length":36}
-        ]
+              "🚫 بدون إعلانات\n▶️ تشغيل الفيديوهات في الخلفية\n📥 تنزيل المقاطع للمشاهدة بدون إنترنت\n🎵 يشمل YouTube Music Premium\n🖥 يعمل على الجوال والكمبيوتر والتلفزيون\n\n"
+              "⚡ التفعيل: فوري بعد الطلب\n📅 المدة: شهر واحد\n💵 السعر: 15 ر.س")
+        entities=[{"type":"custom_emoji","offset":0,"length":2,"custom_emoji_id":str(product.get("custom_emoji_id","5330032308139343696"))},{"type":"bold","offset":3,"length":36}]
         kb={"inline_keyboard":[[button("🛒 شراء الآن • 15 ر.س","buy:youtube")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]}
         send_message(api,chat_id,text,kb,entities); return
     price=f"{product['price']} {product.get('currency','ر.س')}" if product.get('price') is not None else "سيتم تحديده"
@@ -64,10 +64,13 @@ def handle_action(api,chat_id,action):
     if action=="home": show_home(api,chat_id)
     elif action=="products": show_products(api,chat_id)
     elif action.startswith("product:"): show_product(api,chat_id,action.split(":",1)[1])
-    elif action=="youtube_info": send_message(api,chat_id,"ℹ️ <b>معلومات إضافية</b>\n\nاشتراك YouTube Premium لمدة شهر واحد (30 يومًا).\nيشمل مزايا المشاهدة بدون إعلانات والتشغيل في الخلفية والتنزيل وYouTube Music Premium.",{"inline_keyboard":[[button("↩️ رجوع","product:youtube")]]})
+    elif action=="chatgpt_private": send_message(api,chat_id,"🔐 <b>ChatGPT Plus — حساب خاص</b>\n\nاشتراك Plus لمدة شهر.\n👤 حساب مخصص لك مع بيانات دخول خاصة.\n📅 المدة: شهر واحد\n⚡ التفعيل: بعد إتمام الطلب",{"inline_keyboard":[[button("🛒 طلب المنتج","buy:chatgpt_private")],[button("↩️ رجوع","product:chatgpt")]]})
+    elif action=="chatgpt_email": send_message(api,chat_id,"📧 <b>ChatGPT Plus — على إيميلك</b>\n\nاشتراك Plus لمدة شهر.\n📩 يتم التفعيل على حسابك المرتبط بإيميلك.\n📅 المدة: شهر واحد\n⚡ التفعيل: بعد إتمام الطلب",{"inline_keyboard":[[button("🛒 طلب المنتج","buy:chatgpt_email")],[button("↩️ رجوع","product:chatgpt")]]})
     elif action.startswith("buy:"):
-        pid=action.split(":",1)[1]; p=PRODUCTS.get(pid)
-        if p: send_message(api,chat_id,f"🛒 <b>طلب {p['name']}</b>\n\nتم الوصول إلى صفحة الطلب.\nسيتم إضافة نظام الدفع لاحقاً.",{"inline_keyboard":[[button("↩️ رجوع",f"product:{pid}")]]})
+        pid=action.split(":",1)[1]
+        names={"chatgpt_private":"ChatGPT Plus — حساب خاص","chatgpt_email":"ChatGPT Plus — على إيميلك"}
+        p=PRODUCTS.get(pid); name=names.get(pid,p.get("name") if p else None)
+        if name: send_message(api,chat_id,f"🛒 <b>طلب {name}</b>\n\nتم الوصول إلى صفحة الطلب.\nسيتم إضافة نظام الدفع لاحقاً.",{"inline_keyboard":[[button("↩️ رجوع","product:chatgpt" if pid.startswith("chatgpt_") else f"product:{pid}")]]})
     elif action=="support": send_message(api,chat_id,"💬 <b>الدعم الفني</b>\n\nسيتم إضافة حساب الدعم هنا.",home_keyboard())
     elif action=="wallet": send_message(api,chat_id,"👛 المحفظة\n\nالمحفظة غير مفعّلة حاليًا.",home_keyboard())
     elif action=="api": send_message(api,chat_id,"🔗 API\n\nسيتم إضافة إعدادات API لاحقاً.",home_keyboard())
