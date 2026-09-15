@@ -13,7 +13,10 @@
     {
       "id": "youtube",
       "name": "YouTube",
-      "description": "منصة لمشاهدة الفيديو ومتابعة القنوات وصنّاع المحتوى.",
+      "product": "YouTube Premium لمدة شهر",
+      "description": "استمتع بمشاهدة YouTube بدون إعلانات، وتشغيل الفيديوهات في الخلفية، وإمكانية تنزيل المحتوى للمشاهدة بلا إنترنت، بالإضافة إلى مزايا YouTube Music Premium.",
+      "price": 15,
+      "currency": "ر.س",
       "color": "#ff0033",
       "custom_emoji_id": "5330032308139343696"
     },
