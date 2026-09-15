@@ -54,7 +54,7 @@ def show_product(api,chat_id,product_id):
     product=PRODUCTS.get(product_id)
     if not product: show_products(api,chat_id); return
     if product_id=="chatgpt":
-        text=("🤖 <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\nاختر نوع الاشتراك المناسب لك:\n\n🔐 <b>بلس شهر — حساب خاص</b>\nاشتراك لمدة شهر بحساب مخصص لك مع بيانات دخول خاصة.\n\n📧 <b>بلس شهر — على إيميلك</b>\nاشتراك لمدة شهر يتم تفعيله على حسابك المرتبط بإيميلك.\n\n📅 المدة: شهر واحد")
+        text=("<tg-emoji emoji-id=\"5310259124817134249\">🤖</tg-emoji> <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\nاختر نوع الاشتراك المناسب لك:\n\n🔐 <b>بلس شهر — حساب خاص</b>\nاشتراك لمدة شهر بحساب مخصص لك مع بيانات دخول خاصة.\n\n📧 <b>بلس شهر — على إيميلك</b>\nاشتراك لمدة شهر يتم تفعيله على حسابك المرتبط بإيميلك.\n\n📅 المدة: شهر واحد")
         kb={"inline_keyboard":[[button("🔐 بلس شهر • حساب خاص","chatgpt_private")],[button("📧 بلس شهر • على إيميلك","chatgpt_email")],[button("↩️ العودة إلى المنتجات","products")]]}
         send_message(api,chat_id,text,kb); return
     if product_id=="youtube":
