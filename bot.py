@@ -3,7 +3,7 @@ import json, os, time, urllib.request
 from pathlib import Path
 BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "catalog.json").read_text(encoding="utf-8"))
-FALLBACK_ICONS = {"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️"}
+FALLBACK_ICONS = {"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️","netflix":"📺"}
 PRODUCTS = {item["id"]: dict(item, icon=FALLBACK_ICONS.get(item["id"],"▫️"), product=item.get("product",item["name"])) for item in CONFIG["products"]}
 class TelegramAPI:
     def __init__(self, token): self.base_url=f"https://api.telegram.org/bot{token}/"
@@ -16,7 +16,7 @@ class TelegramAPI:
         return result.get("result")
 def button(text,callback): return {"text":text,"callback_data":callback}
 def home_keyboard():
-    return {"keyboard":[[{"text":"🛍 المنتجات"},{"text":"💬 الدعم"}],[{"text":"👛 المحفظة"},{"text":"🔗 API"}],[{"text":"🛡 الضمان"}]],"resize_keyboard":True,"is_persistent":True,"input_field_placeholder":"اختر من القائمة"}
+    return {"keyboard":[[{"text":"🚀 ابدأ"},{"text":"🛍 المنتجات"},{"text":"💬 الدعم"}],[{"text":"👛 المحفظة"},{"text":"🔗 API"}],[{"text":"🛡 الضمان"}]],"resize_keyboard":True,"is_persistent":True,"input_field_placeholder":"اختر من القائمة"}
 def product_button(product_id,product):
     eid=product.get("custom_emoji_id","")
     if CONFIG.get("custom_icons_enabled") and eid: return {"text":product["name"],"callback_data":f"product:{product_id}","icon_custom_emoji_id":str(eid)}
@@ -55,6 +55,7 @@ def handle_callback(api,q):
     if m.get("chat",{}).get("type")=="private": handle_action(api,m["chat"]["id"],q.get("data","home"))
 def handle_action(api,chat_id,action):
     if action=="enter_store" or action=="home": show_home(api,chat_id)
+    elif action=="start": show_start(api,chat_id)
     elif action=="products": show_products(api,chat_id)
     elif action.startswith("product:"): show_product(api,chat_id,action.split(":",1)[1])
     elif action=="chatgpt_private": send_message(api,chat_id,"🔐 <b>ChatGPT Plus — حساب خاص</b>\n\nاشتراك Plus لمدة شهر.\n👤 حساب مخصص لك مع بيانات دخول خاصة.\n📅 المدة: شهر واحد\n⚡ التفعيل: بعد إتمام الطلب",{"inline_keyboard":[[button("🛒 طلب المنتج","buy:chatgpt_private")],[button("↩️ رجوع","product:chatgpt")]]})
@@ -66,7 +67,7 @@ def handle_action(api,chat_id,action):
     elif action=="wallet": send_message(api,chat_id,"👛 المحفظة\n\nالمحفظة غير مفعّلة حاليًا.",home_keyboard())
     elif action=="api": send_message(api,chat_id,"🔗 API\n\nسيتم إضافة إعدادات API لاحقاً.",home_keyboard())
     elif action=="warranty": send_message(api,chat_id,"🛡 الضمان\n\nسيتم إضافة سياسة الضمان هنا.",home_keyboard())
-MENU_ACTIONS={"🛍 المنتجات":"products","💬 الدعم":"support","👛 المحفظة":"wallet","🔗 API":"api","🛡 الضمان":"warranty"}
+MENU_ACTIONS={"🚀 ابدأ":"start","🛍 المنتجات":"products","💬 الدعم":"support","👛 المحفظة":"wallet","🔗 API":"api","🛡 الضمان":"warranty"}
 def main():
     token=os.getenv("BOT_TOKEN")
     if not token: raise RuntimeError("BOT_TOKEN environment variable is missing.")
