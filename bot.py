@@ -62,7 +62,8 @@ def order_name(pid):
     names={"chatgpt_private":"ChatGPT Plus — حساب خاص","chatgpt_email":"ChatGPT Plus — على إيميلك"};p=PRODUCTS.get(pid);return names.get(pid,p.get("name") if p else pid)
 def back_action(pid):return "product:chatgpt" if pid.startswith("chatgpt_") else f"product:{pid}"
 def show_payment_methods(api,cid,pid):
-    send_message(api,cid,f"💳 <b>اختر طريقة الدفع</b>\n\n🛒 المنتج: <b>{order_name(pid)}</b>",{"inline_keyboard":[[button("🏦 تحويل بنكي — الراجحي",f"paybank:{pid}")],[button("🪙 USDT — Bybit",f"paybybit:{pid}")],[button("↩️ رجوع",back_action(pid))]]})
+    bybit_button={"text":"USDT — Bybit","callback_data":f"paybybit:{pid}","icon_custom_emoji_id":"5472387796574418157"}
+    send_message(api,cid,f"💳 <b>اختر طريقة الدفع</b>\n\n🛒 المنتج: <b>{order_name(pid)}</b>",{"inline_keyboard":[[button("🏦 تحويل بنكي — الراجحي",f"paybank:{pid}")],[bybit_button],[button("↩️ رجوع",back_action(pid))]]})
 def payment_value(name):return os.getenv(name,"غير مضاف بعد")
 def show_bank(api,cid,pid):
     text=("🏦 <b>التحويل البنكي — مصرف الراجحي</b>\n\n"+f"اسم الحساب: <b>{payment_value('PAYMENT_BANK_HOLDER')}</b>\n"+f"رقم الحساب:\n<code>{payment_value('PAYMENT_BANK_ACCOUNT')}</code>\n\n"+f"الآيبان:\n<code>{payment_value('PAYMENT_BANK_IBAN')}</code>\n\n⚠️ تأكد من البيانات قبل التحويل، ثم اضغط «تم التحويل» وأرسل صورة الإيصال.")
