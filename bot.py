@@ -74,7 +74,13 @@ def broadcast_product(api,admin_id,args):
     p=PRODUCTS.get(pid)
     if not p:
         send_message(api,admin_id,"❌ معرف المنتج غير موجود.\n\nالمتاح: <code>"+" | ".join(PRODUCTS.keys())+"</code>"); return
-    text=f"{p['icon']} <b>{p['name']}</b>\n➕ تمت الإضافة: <b>{added}</b>\n📦 المخزون الحالي: <b>{stock}</b>\n💰 السعر: <b>{price} ر.س</b>"
+    if pid=="chatgpt":
+        text=(f'<tg-emoji emoji-id="5310259124817134249">🤖</tg-emoji> <b>{p["name"]}</b>\n'
+              f'<tg-emoji emoji-id="5397916757333654639">➕</tg-emoji> تمت الإضافة: <b>{added}</b>\n'
+              f'📦 المخزون الحالي: <b>{stock}</b>\n'
+              f'<tg-emoji emoji-id="5816492162488995555">💰</tg-emoji> السعر: <b>{price} ر.س</b>')
+    else:
+        text=f"{p['icon']} <b>{p['name']}</b>\n➕ تمت الإضافة: <b>{added}</b>\n📦 المخزون الحالي: <b>{stock}</b>\n💰 السعر: <b>{price} ر.س</b>"
     kb={"inline_keyboard":[[button("🛒 شراء الآن",f"product:{pid}")]]}
     users=load_users(); ok=0
     for uid in users:
