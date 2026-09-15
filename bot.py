@@ -4,7 +4,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "catalog.json").read_text(encoding="utf-8"))
 ADMIN_ID = 8386371522
-USERS_FILE = BASE / "users.json"
+USERS_FILE = Path("/data/users.json")
 FALLBACK_ICONS = {"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️","netflix":"📺"}
 PRODUCTS = {item["id"]: dict(item, icon=FALLBACK_ICONS.get(item["id"],"▫️"), product=item.get("product",item["name"])) for item in CONFIG["products"]}
 
