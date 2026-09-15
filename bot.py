@@ -9,43 +9,13 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 
+CONFIG = json.loads((BASE / "catalog.json").read_text(encoding="utf-8"))
+FALLBACK_ICONS = {"chatgpt": "🤖", "youtube": "▶️", "canva": "🎨",
+                  "spotify": "🎵", "capcut": "🎬", "claude": "✳️", "grok": "✖️"}
 PRODUCTS = {
-    "chatgpt": {
-        "name": "ChatGPT",
-        "icon": "🤖",
-        "product": "ChatGPT Plus",
-        "description": "اشتراك ChatGPT Plus لمدة شهر",
-    },
-    "youtube": {
-        "name": "YouTube Premium",
-        "icon": "▶️",
-        "product": "YouTube Premium",
-        "description": "اشتراك YouTube Premium لمدة شهر",
-    },
-    "gemini": {
-        "name": "Gemini",
-        "icon": "♊",
-        "product": "Gemini Pro",
-        "description": "اشتراك Gemini لمدة شهر",
-    },
-    "kitkat": {
-        "name": "KitKat",
-        "icon": "🍫",
-        "product": "KitKat",
-        "description": "منتج KitKat",
-    },
-    "grok": {
-        "name": "Grok",
-        "icon": "✖️",
-        "product": "Grok",
-        "description": "اشتراك Grok لمدة شهر",
-    },
-    "product6": {
-        "name": "المنتج السادس",
-        "icon": "⭐",
-        "product": "المنتج السادس",
-        "description": "تفاصيل المنتج السادس",
-    },
+    item["id"]: dict(item, icon=FALLBACK_ICONS.get(item["id"], "▫️"),
+                     product=item.get("product", item["name"]))
+    for item in CONFIG["products"]
 }
 
 
@@ -64,7 +34,8 @@ class TelegramAPI:
             with urllib.request.urlopen(request, timeout=40) as response:
                 result = json.load(response)
         except Exception as exc:
-            print("Telegram API error:", exc)
+            print("Telegram API error:", type(exc).__name__)
+            time.sleep(3)
             return None
 
         return result.get("result")
@@ -79,18 +50,23 @@ def button(text, callback):
 
 def home_keyboard():
     return {
-        "inline_keyboard": [
-            [button("🛍 المنتجات", "products")],
-            [
-                button("💬 الدعم", "support"),
-                button("👛 المحفظة", "wallet"),
-            ],
-            [
-                button("🔗 API", "api"),
-                button("🛡 الضمان", "warranty"),
-            ],
-        ]
+        "keyboard": [
+            [{"text": "🛍 المنتجات"}, {"text": "💬 الدعم"}],
+            [{"text": "👛 المحفظة"}, {"text": "🔗 API"}],
+            [{"text": "🛡 الضمان"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True,
+        "input_field_placeholder": "اختر من القائمة",
     }
+
+
+def product_button(product_id, product):
+    emoji_id = product.get("custom_emoji_id", "")
+    if CONFIG.get("custom_icons_enabled") and emoji_id:
+        return {"text": product["name"], "callback_data": f"product:{product_id}",
+                "icon_custom_emoji_id": str(emoji_id)}
+    return button(f"{product['icon']} {product['name']}", f"product:{product_id}")
 
 
 def products_keyboard():
@@ -98,15 +74,12 @@ def products_keyboard():
 
     items = list(PRODUCTS.items())
 
-    for i in range(0, len(items), 2):
+    for i in range(0, len(items), 3):
         row = []
 
-        for product_id, product in items[i:i + 2]:
+        for product_id, product in items[i:i + 3]:
             row.append(
-                button(
-                    f"{product['icon']} {product['name']}",
-                    f"product:{product_id}",
-                )
+                product_button(product_id, product)
             )
 
         rows.append(row)
@@ -130,7 +103,7 @@ def send_message(api, chat_id, text, keyboard=None):
 
 def show_home(api, chat_id):
     text = (
-        "👋 أهلاً بك في SAU2030\n\n"
+        "👋 أهلاً بك في VEXA STORE\n\n"
         "🛍 متجر الخدمات الرقمية\n"
         "اختر القسم المطلوب من القائمة:"
     )
@@ -141,6 +114,7 @@ def show_home(api, chat_id):
         text,
         home_keyboard(),
     )
+    show_products(api, chat_id)
 
 
 def show_products(api, chat_id):
@@ -164,12 +138,12 @@ def show_product(api, chat_id, product_id):
         f"📦 {product['product']}\n"
         f"📝 {product['description']}\n\n"
         "💰 السعر: سيتم تحديده\n"
-        "🟢 الحالة: متوفر"
+        "الطلب غير مفعّل حاليًا"
     )
 
     keyboard = {
         "inline_keyboard": [
-            [button("🛒 شراء الآن", f"buy:{product_id}")],
+            [button("🛒 تفاصيل الطلب", f"buy:{product_id}")],
             [button("↩️ المنتجات", "products")],
             [button("🏠 الرئيسية", "home")],
         ]
@@ -184,8 +158,13 @@ def handle_callback(api, query):
         callback_query_id=query["id"],
     )
 
-    chat_id = query["message"]["chat"]["id"]
-    action = query.get("data", "home")
+    message = query.get("message", {})
+    if message.get("chat", {}).get("type") != "private":
+        return
+    handle_action(api, message["chat"]["id"], query.get("data", "home"))
+
+
+def handle_action(api, chat_id, action):
 
     if action == "home":
         show_home(api, chat_id)
@@ -232,7 +211,7 @@ def handle_callback(api, query):
         send_message(
             api,
             chat_id,
-            "👛 المحفظة\n\nرصيدك الحالي: 0.00",
+            "👛 المحفظة\n\nالمحفظة غير مفعّلة حاليًا.",
             home_keyboard(),
         )
 
@@ -251,6 +230,10 @@ def handle_callback(api, query):
             "🛡 الضمان\n\nسيتم إضافة سياسة الضمان هنا.",
             home_keyboard(),
         )
+
+
+MENU_ACTIONS = {"🛍 المنتجات": "products", "💬 الدعم": "support",
+                "👛 المحفظة": "wallet", "🔗 API": "api", "🛡 الضمان": "warranty"}
 
 
 def main():
@@ -316,6 +299,8 @@ def main():
                         show_home(api, chat_id)
                     elif text.startswith("/products"):
                         show_products(api, chat_id)
+                    elif text in MENU_ACTIONS:
+                        handle_action(api, chat_id, MENU_ACTIONS[text])
                     else:
                         show_home(api, chat_id)
 
