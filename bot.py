@@ -3,8 +3,21 @@ import json, os, time, urllib.request
 from pathlib import Path
 BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "catalog.json").read_text(encoding="utf-8"))
+ADMIN_ID = 8386371522
+USERS_FILE = BASE / "users.json"
 FALLBACK_ICONS = {"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️","netflix":"📺"}
 PRODUCTS = {item["id"]: dict(item, icon=FALLBACK_ICONS.get(item["id"],"▫️"), product=item.get("product",item["name"])) for item in CONFIG["products"]}
+
+def load_users():
+    try: return set(json.loads(USERS_FILE.read_text(encoding="utf-8")))
+    except Exception: return set()
+def save_user(chat_id):
+    users=load_users()
+    if chat_id not in users:
+        users.add(chat_id)
+        try: USERS_FILE.write_text(json.dumps(sorted(users)),encoding="utf-8")
+        except Exception as exc: print("Unable to save user:",exc)
+
 class TelegramAPI:
     def __init__(self, token): self.base_url=f"https://api.telegram.org/bot{token}/"
     def call(self, method, **data):
@@ -12,7 +25,7 @@ class TelegramAPI:
         try:
             with urllib.request.urlopen(req,timeout=40) as r: result=json.load(r)
         except Exception as exc:
-            print("Telegram API error:",type(exc).__name__); time.sleep(3); return None
+            print("Telegram API error:",type(exc).__name__); time.sleep(1); return None
         return result.get("result")
 def button(text,callback): return {"text":text,"callback_data":callback}
 def home_keyboard():
@@ -30,7 +43,7 @@ def send_message(api,chat_id,text,keyboard=None,entities=None):
     if entities is not None: data["entities"]=entities
     else: data["parse_mode"]="HTML"
     if keyboard: data["reply_markup"]=keyboard
-    api.call("sendMessage",**data)
+    return api.call("sendMessage",**data)
 def show_start(api,chat_id):
     send_message(api,chat_id,"👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.\nاضغط الزر بالأسفل للدخول إلى المتجر 👇",{"inline_keyboard":[[button("🚀 START | ابدأ","enter_store")]]})
 def show_home(api,chat_id):
@@ -51,9 +64,29 @@ def show_product(api,chat_id,product_id):
         send_message(api,chat_id,text,kb,entities); return
     price=f"{product['price']} {product.get('currency','ر.س')}" if product.get('price') is not None else "سيتم تحديده"
     send_message(api,chat_id,f"{product['icon']} <b>{product['name']}</b>\n\n📦 {product['product']}\n📝 {product['description']}\n\n💰 السعر: {price}",{"inline_keyboard":[[button("🛒 تفاصيل الطلب",f"buy:{product_id}")],[button("↩️ المنتجات","products")],[button("🏠 الرئيسية","home")]]})
+
+def broadcast_product(api,admin_id,args):
+    # /notify product_id added stock price
+    parts=args.split()
+    if len(parts)!=4:
+        send_message(api,admin_id,"⚙️ <b>صيغة الإرسال</b>\n\n<code>/notify youtube 10 25 15</code>\n\nالترتيب: معرف المنتج، الكمية المضافة، المخزون الحالي، السعر")
+        return
+    pid,added,stock,price=parts
+    p=PRODUCTS.get(pid)
+    if not p:
+        send_message(api,admin_id,"❌ معرف المنتج غير موجود.\n\nالمتاح: <code>"+" | ".join(PRODUCTS.keys())+"</code>"); return
+    text=f"{p['icon']} <b>{p['name']}</b>\n➕ تمت الإضافة: <b>{added}</b>\n📦 المخزون الحالي: <b>{stock}</b>\n💰 السعر: <b>{price} ر.س</b>"
+    kb={"inline_keyboard":[[button("🛒 شراء الآن",f"product:{pid}")]]}
+    users=load_users(); ok=0
+    for uid in users:
+        if send_message(api,uid,text,kb) is not None: ok+=1
+        time.sleep(0.05)
+    send_message(api,admin_id,f"✅ تم إرسال إشعار <b>{p['name']}</b> إلى {ok} مستخدم.")
+
 def handle_callback(api,q):
     api.call("answerCallbackQuery",callback_query_id=q["id"]); m=q.get("message",{})
-    if m.get("chat",{}).get("type")=="private": handle_action(api,m["chat"]["id"],q.get("data","home"))
+    if m.get("chat",{}).get("type")=="private":
+        cid=m["chat"]["id"]; save_user(cid); handle_action(api,cid,q.get("data","home"))
 def handle_action(api,chat_id,action):
     if action=="enter_store" or action=="home": show_home(api,chat_id)
     elif action=="start": show_start(api,chat_id)
@@ -64,7 +97,7 @@ def handle_action(api,chat_id,action):
     elif action.startswith("buy:"):
         pid=action.split(":",1)[1]; names={"chatgpt_private":"ChatGPT Plus — حساب خاص","chatgpt_email":"ChatGPT Plus — على إيميلك"}; p=PRODUCTS.get(pid); name=names.get(pid,p.get("name") if p else None)
         if name: send_message(api,chat_id,f"🛒 <b>طلب {name}</b>\n\nتم الوصول إلى صفحة الطلب.\nسيتم إضافة نظام الدفع لاحقاً.",{"inline_keyboard":[[button("↩️ رجوع","product:chatgpt" if pid.startswith("chatgpt_") else f"product:{pid}")]]})
-    elif action=="support": send_message(api,chat_id,"💬 <b>الدعم الفني</b>\n\nسيتم إضافة حساب الدعم هنا.",home_keyboard())
+    elif action=="support": send_message(api,chat_id,"💬 <b>الدعم الفني</b>\n\nلشحن النقاط والدعم: @SOQ_ID",home_keyboard())
     elif action=="wallet": send_message(api,chat_id,"👛 المحفظة\n\nالمحفظة غير مفعّلة حاليًا.",home_keyboard())
     elif action=="api": send_message(api,chat_id,"🔗 API\n\nسيتم إضافة إعدادات API لاحقاً.",home_keyboard())
     elif action=="warranty": send_message(api,chat_id,"🛡 الضمان\n\nسيتم إضافة سياسة الضمان هنا.",home_keyboard())
@@ -85,9 +118,11 @@ def main():
                 elif "message" in u:
                     m=u["message"]
                     if m.get("chat",{}).get("type")!="private": continue
-                    cid=m["chat"]["id"]; t=m.get("text","")
+                    cid=m["chat"]["id"]; t=m.get("text",""); save_user(cid)
                     ce=next((e for e in m.get("entities",[]) if e.get("type")=="custom_emoji"),None)
-                    if ce: send_message(api,cid,"Emoji ID: <code>"+str(ce.get("custom_emoji_id"))+"</code>")
+                    if cid==ADMIN_ID and t.startswith("/notify "): broadcast_product(api,cid,t.split(" ",1)[1])
+                    elif cid==ADMIN_ID and t=="/notify": broadcast_product(api,cid,"")
+                    elif ce: send_message(api,cid,"Emoji ID: <code>"+str(ce.get("custom_emoji_id"))+"</code>")
                     elif t.startswith("/start"): show_start(api,cid)
                     elif t.startswith("/products"): show_products(api,cid)
                     elif t in MENU_ACTIONS: handle_action(api,cid,MENU_ACTIONS[t])
