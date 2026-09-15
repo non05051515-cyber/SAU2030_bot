@@ -1,35 +1,35 @@
 {
   "bot_username": "SAU2030_bot",
   "support_username": "",
-  "custom_icons_enabled": false,
+  "custom_icons_enabled": true,
   "products": [
     {
       "id": "chatgpt",
       "name": "ChatGPT",
       "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة والمساعدة في المهام.",
       "color": "#10a37f",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5796185041717433060"
     },
     {
       "id": "youtube",
       "name": "YouTube",
       "description": "منصة لمشاهدة الفيديو ومتابعة القنوات وصنّاع المحتوى.",
       "color": "#ff0033",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5796637619601283518"
     },
     {
       "id": "canva",
       "name": "Canva",
       "description": "أداة لإنشاء التصاميم والمحتوى المرئي.",
       "color": "#00c4cc",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5796214303329620386"
     },
     {
       "id": "spotify",
       "name": "Spotify",
       "description": "خدمة للاستماع إلى الموسيقى والمحتوى الصوتي.",
       "color": "#1db954",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5796304385973686816"
     },
     {
       "id": "capcut",
