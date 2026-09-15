@@ -8,14 +8,14 @@
       "name": "ChatGPT",
       "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة والمساعدة في المهام.",
       "color": "#10a37f",
-      "custom_emoji_id": "5796185041717433060"
+      "custom_emoji_id": "5453962468478962129"
     },
     {
       "id": "youtube",
       "name": "YouTube",
       "description": "منصة لمشاهدة الفيديو ومتابعة القنوات وصنّاع المحتوى.",
       "color": "#ff0033",
-      "custom_emoji_id": "5796637619601283518"
+      "custom_emoji_id": "5330032308139343696"
     },
     {
       "id": "canva",
@@ -29,28 +29,28 @@
       "name": "Gemini",
       "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة وتحليل المحتوى.",
       "color": "#4285f4",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5312057964494874871"
     },
     {
       "id": "capcut",
       "name": "CapCut",
       "description": "أداة لتحرير الفيديو وإعداد المقاطع.",
       "color": "#d5d8e5",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5364339557712020484"
     },
     {
       "id": "claude",
       "name": "Claude",
       "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة وتحليل المحتوى.",
       "color": "#d97757",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "6174520215376763867"
     },
     {
       "id": "grok",
       "name": "Grok",
       "description": "مساعد ذكاء اصطناعي للمحادثة والإجابة عن الأسئلة.",
       "color": "#809dff",
-      "custom_emoji_id": ""
+      "custom_emoji_id": "5319288443153445517"
     }
   ]
 }
