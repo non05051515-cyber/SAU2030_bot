@@ -42,6 +42,20 @@ def send_message(api,chat_id,text,keyboard=None,entities=None):
     else:data["parse_mode"]="HTML"
     if keyboard:data["reply_markup"]=keyboard
     return api.call("sendMessage",**data)
+def send_product_card(api,cid,pid,p,caption,keyboard):
+    image=BASE/"assets"/f"{pid}.png"
+    if image.exists():
+        try:
+            boundary="----VEXAFormBoundary"
+            fields={"chat_id":str(cid),"caption":caption,"parse_mode":"HTML","reply_markup":json.dumps(keyboard,ensure_ascii=False)}
+            body=b""
+            for key,value in fields.items():body+=(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{key}\"\r\n\r\n{value}\r\n").encode("utf-8")
+            body+=(f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"{image.name}\"\r\nContent-Type: image/png\r\n\r\n").encode("utf-8")+image.read_bytes()+f"\r\n--{boundary}--\r\n".encode()
+            req=urllib.request.Request(api.base_url+"sendPhoto",body,{"Content-Type":f"multipart/form-data; boundary={boundary}"})
+            with urllib.request.urlopen(req,timeout=40) as r:json.load(r)
+            return
+        except Exception as exc:print("Product photo error:",type(exc).__name__)
+    send_message(api,cid,caption,keyboard)
 def show_start(api,cid):send_message(api,cid,"👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.\nاضغط الزر بالأسفل للدخول إلى المتجر 👇",{"inline_keyboard":[[button("🚀 START | ابدأ","enter_store")]]})
 def show_home(api,cid):
     send_message(api,cid,"👋 أهلاً بك في <b>VEXA STORE</b>\n\n🛍 متجر الخدمات الرقمية\nاختر القسم المطلوب من القائمة:\n\n<tg-emoji emoji-id=\"5440411975509096877\">💳</tg-emoji> <b>لشحن النقاط والدعم :</b> @SOQ_ID",home_keyboard());show_products(api,cid)
@@ -49,15 +63,15 @@ def show_products(api,cid):send_message(api,cid,"🛍 <b>المنتجات</b>\n\
 def show_product(api,cid,pid):
     p=PRODUCTS.get(pid)
     if not p:show_products(api,cid);return
+    price=f"{p['price']} {p.get('currency','ر.س')}" if p.get("price") is not None else "يُضاف لاحقاً"
     if pid=="chatgpt":
-        text="<tg-emoji emoji-id=\"5310259124817134249\">🤖</tg-emoji> <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\nاختر نوع الاشتراك المناسب لك:\n\n🔐 <b>بلس شهر — حساب خاص</b>\nاشتراك لمدة شهر بحساب مخصص لك مع بيانات دخول خاصة.\n\n📧 <b>بلس شهر — على إيميلك</b>\nاشتراك لمدة شهر يتم تفعيله على حسابك المرتبط بإيميلك.\n\n📅 المدة: شهر واحد"
-        kb={"inline_keyboard":[[button("🔐 بلس شهر • حساب خاص","chatgpt_private")],[button("📧 بلس شهر • على إيميلك","chatgpt_email")],[button("↩️ العودة إلى المنتجات","products")]]};send_message(api,cid,text,kb);return
+        text="<tg-emoji emoji-id=\"5310259124817134249\">🤖</tg-emoji> <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\n💵 السعر: <b>يُضاف لاحقاً</b>\n\n💦 <b>الوصف:</b>\nاختر نوع الاشتراك المناسب لك.\n\n🔐 بلس شهر — حساب خاص\n📧 بلس شهر — على إيميلك\n\n📅 المدة: شهر واحد"
+        kb={"inline_keyboard":[[button("🔐 بلس شهر • حساب خاص","chatgpt_private")],[button("📧 بلس شهر • على إيميلك","chatgpt_email")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
     if pid=="youtube":
-        text="▶️ YouTube Premium | يوتيوب بريميوم\n\nاستمتع بتجربة مشاهدة أفضل مع YouTube Premium.\n\n🚫 بدون إعلانات\n▶️ تشغيل الفيديوهات في الخلفية\n📥 تنزيل المقاطع للمشاهدة بدون إنترنت\n🎵 يشمل YouTube Music Premium\n🖥 يعمل على الجوال والكمبيوتر والتلفزيون\n\n⚡ التفعيل: فوري بعد الطلب\n📅 المدة: شهر واحد\n💵 السعر: 15 ر.س"
-        entities=[{"type":"custom_emoji","offset":0,"length":2,"custom_emoji_id":str(p.get("custom_emoji_id","5330032308139343696"))},{"type":"bold","offset":3,"length":36}]
-        send_message(api,cid,text,{"inline_keyboard":[[button("🛒 شراء الآن • 15 ر.س","buy:youtube")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]},entities);return
-    price=f"{p['price']} {p.get('currency','ر.س')}" if p.get("price") is not None else "سيتم تحديده"
-    send_message(api,cid,f"{p['icon']} <b>{p['name']}</b>\n\n📦 {p['product']}\n📝 {p['description']}\n\n💰 السعر: {price}",{"inline_keyboard":[[button("🛒 تفاصيل الطلب",f"buy:{pid}")],[button("↩️ المنتجات","products")],[button("🏠 الرئيسية","home")]]})
+        text=f"▶️ <b>YouTube Premium | يوتيوب بريميوم</b>\n💵 السعر: <b>{price}</b>\n\n💦 <b>الوصف:</b>\n{p['description']}\n\n⚡ التفعيل: فوري بعد الطلب\n📅 المدة: شهر واحد"
+        kb={"inline_keyboard":[[button("🛒 شراء الآن",f"buy:{pid}")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
+    text=f"{p['icon']} <b>{p['name']}</b>\n💵 السعر: <b>{price}</b>\n\n💦 <b>الوصف:</b>\n{p['description']}"
+    kb={"inline_keyboard":[[button("🛒 شراء الآن",f"buy:{pid}")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb)
 def order_name(pid):
     names={"chatgpt_private":"ChatGPT Plus — حساب خاص","chatgpt_email":"ChatGPT Plus — على إيميلك"};p=PRODUCTS.get(pid);return names.get(pid,p.get("name") if p else pid)
 def back_action(pid):return "product:chatgpt" if pid.startswith("chatgpt_") else f"product:{pid}"
