@@ -25,8 +25,10 @@ def products_keyboard():
     items=list(PRODUCTS.items()); rows=[]
     for i in range(0,len(items),3): rows.append([product_button(pid,p) for pid,p in items[i:i+3]])
     rows.append([button("🏠 الرئيسية","home")]); return {"inline_keyboard":rows}
-def send_message(api,chat_id,text,keyboard=None):
-    data={"chat_id":chat_id,"text":text,"parse_mode":"HTML"}
+def send_message(api,chat_id,text,keyboard=None,entities=None):
+    data={"chat_id":chat_id,"text":text}
+    if entities is not None: data["entities"]=entities
+    else: data["parse_mode"]="HTML"
     if keyboard: data["reply_markup"]=keyboard
     api.call("sendMessage",**data)
 def show_home(api,chat_id):
@@ -36,19 +38,23 @@ def show_product(api,chat_id,product_id):
     product=PRODUCTS.get(product_id)
     if not product: show_products(api,chat_id); return
     if product_id=="youtube":
-        youtube_icon=f'<tg-emoji emoji-id="{product.get("custom_emoji_id", "5330032308139343696")}">▶️</tg-emoji>'
-        text=(f"{youtube_icon} <b>YouTube Premium | يوتيوب بريميوم</b>\n\n"
+        text=("▶️ YouTube Premium | يوتيوب بريميوم\n\n"
               "استمتع بتجربة مشاهدة أفضل مع YouTube Premium.\n\n"
-              "🚫 <b>بدون إعلانات</b>\n"
+              "🚫 بدون إعلانات\n"
               "▶️ تشغيل الفيديوهات في الخلفية\n"
               "📥 تنزيل المقاطع للمشاهدة بدون إنترنت\n"
               "🎵 يشمل YouTube Music Premium\n"
               "🖥 يعمل على الجوال والكمبيوتر والتلفزيون\n\n"
-              "⚡ <b>التفعيل:</b> فوري بعد الطلب\n"
-              "📅 <b>المدة:</b> شهر واحد\n"
-              "💵 <b>السعر:</b> 15 ر.س")
+              "⚡ التفعيل: فوري بعد الطلب\n"
+              "📅 المدة: شهر واحد\n"
+              "💵 السعر: 15 ر.س")
+        # Telegram entity offsets/lengths are UTF-16 code units. ▶️ is 2 units.
+        entities=[
+            {"type":"custom_emoji","offset":0,"length":2,"custom_emoji_id":str(product.get("custom_emoji_id","5330032308139343696"))},
+            {"type":"bold","offset":3,"length":36}
+        ]
         kb={"inline_keyboard":[[button("🛒 شراء الآن • 15 ر.س","buy:youtube")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]}
-        send_message(api,chat_id,text,kb); return
+        send_message(api,chat_id,text,kb,entities); return
     price=f"{product['price']} {product.get('currency','ر.س')}" if product.get('price') is not None else "سيتم تحديده"
     send_message(api,chat_id,f"{product['icon']} <b>{product['name']}</b>\n\n📦 {product['product']}\n📝 {product['description']}\n\n💰 السعر: {price}",{"inline_keyboard":[[button("🛒 تفاصيل الطلب",f"buy:{product_id}")],[button("↩️ المنتجات","products")],[button("🏠 الرئيسية","home")]]})
 def handle_callback(api,q):
