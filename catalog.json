@@ -3,7 +3,7 @@
   "support_username": "",
   "custom_icons_enabled": true,
   "products": [
-    {"id":"chatgpt","name":"ChatGPT","description":"مساعد ذكاء اصطناعي للمحادثة والكتابة والمساعدة في المهام.","color":"#10a37f","custom_emoji_id":"5453962468478962129"},
+    {"id":"chatgpt","name":"ChatGPT","description":"مساعد ذكاء اصطناعي للمحادثة والكتابة والمساعدة في المهام.","color":"#10a37f","custom_emoji_id":"5310259124817134249"},
     {"id":"youtube","name":"YouTube","product":"YouTube Premium لمدة شهر","description":"استمتع بمشاهدة YouTube بدون إعلانات، وتشغيل الفيديوهات في الخلفية، وإمكانية تنزيل المحتوى للمشاهدة بلا إنترنت، بالإضافة إلى مزايا YouTube Music Premium.","price":15,"currency":"ر.س","color":"#ff0033","custom_emoji_id":"5330032308139343696"},
     {"id":"canva","name":"Canva","description":"أداة لإنشاء التصاميم والمحتوى المرئي.","color":"#00c4cc","custom_emoji_id":"5796214303329620386"},
     {"id":"gemini","name":"Gemini","description":"مساعد ذكاء اصطناعي للمحادثة والكتابة وتحليل المحتوى.","color":"#4285f4","custom_emoji_id":"5312057964494874871"},
