@@ -25,11 +25,11 @@
       "custom_emoji_id": "5796214303329620386"
     },
     {
-      "id": "spotify",
-      "name": "Spotify",
-      "description": "خدمة للاستماع إلى الموسيقى والمحتوى الصوتي.",
-      "color": "#1db954",
-      "custom_emoji_id": "5796304385973686816"
+      "id": "gemini",
+      "name": "Gemini",
+      "description": "مساعد ذكاء اصطناعي للمحادثة والكتابة وتحليل المحتوى.",
+      "color": "#4285f4",
+      "custom_emoji_id": ""
     },
     {
       "id": "capcut",
