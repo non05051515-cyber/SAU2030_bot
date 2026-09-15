@@ -36,17 +36,18 @@ def show_product(api,chat_id,product_id):
     product=PRODUCTS.get(product_id)
     if not product: show_products(api,chat_id); return
     if product_id=="youtube":
-        text=("▶️ <b>يوتيوب بريميوم لمدة شهر</b>\n\n"
+        youtube_icon=f'<tg-emoji emoji-id="{product.get("custom_emoji_id", "5330032308139343696")}">▶️</tg-emoji>'
+        text=(f"{youtube_icon} <b>YouTube Premium | يوتيوب بريميوم</b>\n\n"
               "استمتع بتجربة مشاهدة أفضل مع YouTube Premium.\n\n"
-              "🚫 مشاهدة بدون إعلانات\n"
-              "▶️ تشغيل في الخلفية\n"
+              "🚫 <b>بدون إعلانات</b>\n"
+              "▶️ تشغيل الفيديوهات في الخلفية\n"
               "📥 تنزيل المقاطع للمشاهدة بدون إنترنت\n"
               "🎵 يشمل YouTube Music Premium\n"
-              "🖥 على جميع الأجهزة (جوال - كمبيوتر - تلفزيون)\n\n"
+              "🖥 يعمل على الجوال والكمبيوتر والتلفزيون\n\n"
               "⚡ <b>التفعيل:</b> فوري بعد الطلب\n"
-              "💵 <b>السعر:</b> 15 ر.س\n"
-              "📅 <b>المدة:</b> شهر واحد")
-        kb={"inline_keyboard":[[button("🛒 شراء الآن - 15 ر.س","buy:youtube")],[button("💬 الدعم الفني","support"),button("ℹ️ معلومات إضافية","youtube_info")],[button("↩️ العودة إلى المنتجات","products")],[button("🏠 الرئيسية","home")]]}
+              "📅 <b>المدة:</b> شهر واحد\n"
+              "💵 <b>السعر:</b> 15 ر.س")
+        kb={"inline_keyboard":[[button("🛒 شراء الآن • 15 ر.س","buy:youtube")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]}
         send_message(api,chat_id,text,kb); return
     price=f"{product['price']} {product.get('currency','ر.س')}" if product.get('price') is not None else "سيتم تحديده"
     send_message(api,chat_id,f"{product['icon']} <b>{product['name']}</b>\n\n📦 {product['product']}\n📝 {product['description']}\n\n💰 السعر: {price}",{"inline_keyboard":[[button("🛒 تفاصيل الطلب",f"buy:{product_id}")],[button("↩️ المنتجات","products")],[button("🏠 الرئيسية","home")]]})
