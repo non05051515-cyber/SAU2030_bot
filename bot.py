@@ -34,7 +34,8 @@ def send_message(api,chat_id,text,keyboard=None,entities=None):
 def show_start(api,chat_id):
     send_message(api,chat_id,"👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.\nاضغط الزر بالأسفل للدخول إلى المتجر 👇",{"inline_keyboard":[[button("🚀 START | ابدأ","enter_store")]]})
 def show_home(api,chat_id):
-    send_message(api,chat_id,"👋 أهلاً بك في <b>VEXA STORE</b>\n\n🛍 متجر الخدمات الرقمية\nاختر القسم المطلوب من القائمة:",home_keyboard()); show_products(api,chat_id)
+    text="👋 أهلاً بك في <b>VEXA STORE</b>\n\n🛍 متجر الخدمات الرقمية\nاختر القسم المطلوب من القائمة:\n\n<tg-emoji emoji-id=\"5440411975509096877\">💳</tg-emoji> <b>لشحن النقاط والدعم :</b> @SOQ_ID"
+    send_message(api,chat_id,text,home_keyboard()); show_products(api,chat_id)
 def show_products(api,chat_id): send_message(api,chat_id,"🛍 <b>المنتجات</b>\n\nاختر الخدمة:",products_keyboard())
 def show_product(api,chat_id,product_id):
     product=PRODUCTS.get(product_id)
