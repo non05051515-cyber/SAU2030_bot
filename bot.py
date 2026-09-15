@@ -6,9 +6,14 @@ CONFIG=json.loads((BASE/"catalog.json").read_text(encoding="utf-8"))
 ADMIN_ID=8386371522
 USERS_FILE=Path("/data/users.json")
 PENDING_RECEIPTS={}
-FALLBACK_ICONS={"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️","netflix":"📺"}
+FALLBACK_ICONS={"chatgpt":"🤖","youtube":"▶️","canva":"🎨","gemini":"✨","spotify":"🎵","capcut":"🎬","claude":"✳️","grok":"✖️","netflix":"📺","iptv":"📡"}
 PRODUCTS={item["id"]:dict(item,icon=FALLBACK_ICONS.get(item["id"],"▫️"),product=item.get("product",item["name"])) for item in CONFIG["products"]}
-CLAUDE_NAMES={"claude_pro":"إعادة شحن Claude Pro الرسمية لمدة شهر","claude_api_500m":"Claude API — 500 مليون توكن","claude_api_100m":"Claude API — 100 مليون توكن","claude_api_50m":"Claude API — 50 مليون توكن","claude_api_10m":"Claude API — 10 ملايين توكن"}
+CLAUDE_NAMES={"claude_pro":"إعادة شحن Claude Pro الرسمية لمدة شهر","claude_api_500m":"Claude API — 500 مليون توكن — 6 أيام","claude_api_100m":"Claude API — 100 مليون توكن — 3 أيام","claude_api_50m":"Claude API — 50 مليون توكن — يومان","claude_api_10m":"Claude API — 10 ملايين توكن — يوم واحد"}
+CLAUDE_API_DETAILS={
+"claude_api_500m":("500 مليون توكن","6 أيام"),
+"claude_api_100m":("100 مليون توكن","3 أيام"),
+"claude_api_50m":("50 مليون توكن","يومين"),
+"claude_api_10m":("10 ملايين توكن","يوم واحد")}
 
 def load_users():
     try:return set(json.loads(USERS_FILE.read_text(encoding="utf-8")))
@@ -66,7 +71,7 @@ def show_product(api,cid,pid):
         text="<tg-emoji emoji-id=\"5310259124817134249\">🤖</tg-emoji> <b>ChatGPT Plus | شات جي بي تي بلس</b>\n\n💵 السعر: <b>يُضاف لاحقاً</b>\n\n💦 <b>الوصف:</b>\nاختر نوع الاشتراك المناسب لك.\n\n🔐 بلس شهر — حساب خاص\n📧 بلس شهر — على إيميلك\n\n📅 المدة: شهر واحد";kb={"inline_keyboard":[[button("🔐 بلس شهر • حساب خاص","chatgpt_private")],[button("📧 بلس شهر • على إيميلك","chatgpt_email")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
     if pid=="claude":
         text="<tg-emoji emoji-id=\"6174520215376763867\">✳️</tg-emoji> <b>Claude | كلود</b>\n\nاختر المنتج المطلوب 👇"
-        kb={"inline_keyboard":[[button("Claude Pro — إعادة شحن رسمية شهر","claude:claude_pro")],[button("Claude API — 500 مليون توكن","claude:claude_api_500m")],[button("Claude API — 100 مليون توكن","claude:claude_api_100m")],[button("Claude API — 50 مليون توكن","claude:claude_api_50m")],[button("Claude API — 10 ملايين توكن","claude:claude_api_10m")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
+        kb={"inline_keyboard":[[button("Claude Pro — إعادة شحن رسمية شهر","claude:claude_pro")],[button("Claude API — 500 مليون توكن — 6 أيام","claude:claude_api_500m")],[button("Claude API — 100 مليون توكن — 3 أيام","claude:claude_api_100m")],[button("Claude API — 50 مليون توكن — يومان","claude:claude_api_50m")],[button("Claude API — 10 ملايين توكن — يوم واحد","claude:claude_api_10m")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
     if pid=="youtube":
         text=f"▶️ <b>YouTube Premium | يوتيوب بريميوم</b>\n💵 السعر: <b>{price}</b>\n\n💦 <b>الوصف:</b>\n{p['description']}\n\n⚡ التفعيل: فوري بعد الطلب\n📅 المدة: شهر واحد";kb={"inline_keyboard":[[button("🛒 شراء الآن",f"buy:{pid}")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb);return
     text=f"{p['icon']} <b>{p['name']}</b>\n💵 السعر: <b>{price}</b>\n\n💦 <b>الوصف:</b>\n{p['description']}";kb={"inline_keyboard":[[button("🛒 شراء الآن",f"buy:{pid}")],[button("💬 الدعم الفني","support")],[button("↩️ العودة إلى المنتجات","products")]]};send_product_card(api,cid,pid,p,text,kb)
@@ -75,7 +80,9 @@ def show_claude_product(api,cid,pid):
     if not name:show_product(api,cid,"claude");return
     if pid=="claude_pro":
         text="🛍 <b>إعادة شحن رسمية لـ Claude Pro لمدة شهر (مع ضمان محدود)</b>\n📦 الكمية المتوفرة: <b>2 قطعة</b>\n\n💦 <b>الوصف:</b>\nهذا رمز تفعيل رسمي (CDK) لاشتراك Claude Pro لمدة شهر واحد على حساب المستخدم الشخصي.\nيمكن استخدامه لتجديد الاشتراك أو لتفعيله لأول مرة.\nلا يلزم وجود بطاقة ائتمان.\n\n❗️ يجب أن تكون على الخطة المجانية ولا توجد لديك أي فواتير غير مدفوعة. إذا كان لديك اشتراك نشط، فيرجى الانتظار حتى ينتهي الاشتراك قبل إعادة الشحن.\nيوجد ضمان لمدة 30 يومًا للاشتراك فقط، ولا يشمل هذا الضمان حظر الحسابات.\n\n⚠️ <b>هام: يرجى القراءة قبل الطلب</b>\nستؤدي الحالات التالية إلى فشل الدفع، وإذا فشل الاشتراك بسببها فلن يتم استرداد الأموال.\n\n❌ <b>الحالة 1: الاشتراك لم ينتهِ</b>\nإذا سبق إعادة الشحن عبر iOS أو Android أو بطاقة ائتمان، فلا تقدم طلبًا جديدًا قبل انتهاء الاشتراك. تحقق أولًا من سجل الفواتير وتأكد من عدم وجود اشتراك نشط.\n\n❌ <b>الحالة 2: رصيد مستحق أو استردادات</b>\nوجود رصيد مستحق أو استردادات قد يؤدي إلى استخدام مبلغ إعادة الشحن لسداد الرصيد بدل معالجة الاشتراك، ولن يتم استرداد الأموال.\n\n❌ <b>الحالة 3: معرف المؤسسة محظور</b>\nقد يعمل تسجيل الدخول بصورة طبيعية رغم وجود حظر صامت على معرف المؤسسة. في هذه الحالة لن تنجح إعادة الشحن ولن يتم استرداد الأموال.\n\n❗️ إذا انطبقت عليك أي حالة مما سبق وفشلت العملية بعد الطلب، فلن يتم استرداد الأموال. تأكد من حسابك بعناية قبل الدفع."
-    else:text=f"✳️ <b>{name}</b>\n\n💦 <b>الوصف:</b>\nرصيد Claude API حسب الباقة المحددة.\n\n💵 السعر: سيتم إضافته لاحقًا."
+    else:
+        tokens,duration=CLAUDE_API_DETAILS[pid]
+        text=f"✳️ <b>واجهة برمجة التطبيقات (API) الخاصة بـ Claude — {tokens}</b>\n\n💦 <b>الوصف:</b>\nواجهة برمجة التطبيقات (API) الخاصة بـ Claude — {tokens} لمدة {duration}.\nمتوافقة مع جميع الأدوات وبيئات التطوير المتكاملة (IDEs) مثل: 9router وClaude Dev وCursor وVS Code وغيرها.\n\n📅 مدة الصلاحية: <b>{duration}</b>"
     kb={"inline_keyboard":[[button("🛒 طلب المنتج",f"buy:{pid}")],[button("↩️ رجوع إلى Claude","product:claude")]]};send_message(api,cid,text,kb)
 def order_name(pid):
     names={"chatgpt_private":"ChatGPT Plus — حساب خاص","chatgpt_email":"ChatGPT Plus — على إيميلك",**CLAUDE_NAMES};p=PRODUCTS.get(pid);return names.get(pid,p.get("name") if p else pid)
