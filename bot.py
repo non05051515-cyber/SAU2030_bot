@@ -171,4 +171,8 @@ def main():
                 else:show_home(api,cid)
         except KeyboardInterrupt:break
         except Exception as exc:print("Error:",exc);time.sleep(3)
+from storefront import install
+install(globals())
+
 if __name__=="__main__":main()
+
