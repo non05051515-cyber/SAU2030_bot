@@ -5,33 +5,21 @@ BASE=Path(__file__).resolve().parent;CONFIG=json.loads((BASE/'catalog.json').rea
 USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={}
 ICONS={'chatgpt':'🤖','youtube':'▶️','canva':'🎨','gemini':'✨','capcut':'🎬','claude':'✳️','grok':'✖️','netflix':'📺','iptv':'📡'}
 PRODUCTS={x['id']:dict(x,icon=ICONS.get(x['id'],'▫️')) for x in CONFIG['products']}
-EN={
-'chatgpt':('ChatGPT','AI assistant for conversations, writing, and everyday tasks.'),
-'youtube':('YouTube','Enjoy YouTube without ads, background playback, offline downloads, and YouTube Music Premium benefits.'),
-'canva':('Canva','A design platform for creating graphics and visual content.'),
-'gemini':('Gemini','AI assistant for conversations, writing, and content analysis.'),
-'capcut':('CapCut','Video editing and content creation tool.'),
-'claude':('Claude','Choose the Claude product that suits you.'),
-'grok':('Grok','AI assistant for conversations and answering questions.'),
-'netflix':('NETFLIX','Netflix subscription for movies, series, and entertainment content.'),
-'iptv':('IPTV','IPTV subscriptions for watching content on supported devices.')}
-CAPCUT={
-'capcut_6m':('CapCut Pro — حساب فردي لمدة 6 أشهر','CapCut Pro — Individual Account for 6 Months','46.88','حساب فردي لمدة 6 أشهر.\nضمان لمدة 3 أشهر.\nحساب مستقر للغاية.','Individual account for 6 months.\n3-month warranty.\nHighly stable account.'),
-'capcut_1m_1600':('CapCut Pro — شهر + 1600 وحدة ائتمان','CapCut Pro — 1 Month + 1600 Credits','13.69','اشتراك CapCut Pro لمدة شهر مع 1600 وحدة ائتمان.\nضمان كامل.','CapCut Pro for one month with 1600 credits.\nFull warranty.'),
-'capcut_1m':('CapCut Pro — شهر واحد','CapCut Pro — 1 Month','11.21','حساب Pro خاص لمدة 30 يومًا.\nيمكن استخدامه على جهازين كحد أقصى، مع ضمان كامل.\nيتم تسجيل الدخول أولًا إلى تطبيق الهاتف، ثم تطبيق سطح المكتب عبر QR.','Private Pro account for 30 days.\nCan be used on up to 2 devices with full warranty.\nSign in on the mobile app first, then the desktop app using QR.'),
-'capcut_7d':('CapCut Pro — 7 أيام','CapCut Pro — 7 Days','6.38','حساب CapCut لمدة 7 أيام.\nيمكن استخدامه على جهازين كحد أقصى، مع ضمان كامل.\nتتوفر طلبات مسبقة.','CapCut account for 7 days.\nCan be used on up to 2 devices with full warranty.\nPre-orders are available.')}
+EN={'chatgpt':('ChatGPT','AI assistant for conversations, writing, and everyday tasks.'),'youtube':('YouTube','Enjoy YouTube without ads, background playback, offline downloads, and YouTube Music Premium benefits.'),'canva':('Canva','A design platform for creating graphics and visual content.'),'gemini':('Gemini','AI assistant for conversations, writing, and content analysis.'),'capcut':('CapCut','Video editing and content creation tool.'),'claude':('Claude','Choose the Claude product that suits you.'),'grok':('Grok','AI assistant for conversations and answering questions.'),'netflix':('NETFLIX','Netflix subscription for movies, series, and entertainment content.'),'iptv':('IPTV','IPTV subscriptions for watching content on supported devices.')}
+CAPCUT={'capcut_6m':('CapCut Pro — حساب فردي لمدة 6 أشهر','CapCut Pro — Individual Account for 6 Months','46.88','حساب فردي لمدة 6 أشهر.\nضمان لمدة 3 أشهر.\nحساب مستقر للغاية.','Individual account for 6 months.\n3-month warranty.\nHighly stable account.'),'capcut_1m_1600':('CapCut Pro — شهر + 1600 وحدة ائتمان','CapCut Pro — 1 Month + 1600 Credits','13.69','اشتراك CapCut Pro لمدة شهر مع 1600 وحدة ائتمان.\nضمان كامل.','CapCut Pro for one month with 1600 credits.\nFull warranty.'),'capcut_1m':('CapCut Pro — شهر واحد','CapCut Pro — 1 Month','11.21','حساب Pro خاص لمدة 30 يومًا.\nيمكن استخدامه على جهازين كحد أقصى، مع ضمان كامل.\nيتم تسجيل الدخول أولًا إلى تطبيق الهاتف، ثم تطبيق سطح المكتب عبر QR.','Private Pro account for 30 days.\nCan be used on up to 2 devices with full warranty.\nSign in on the mobile app first, then the desktop app using QR.'),'capcut_7d':('CapCut Pro — 7 أيام','CapCut Pro — 7 Days','6.38','حساب CapCut لمدة 7 أيام.\nيمكن استخدامه على جهازين كحد أقصى، مع ضمان كامل.\nتتوفر طلبات مسبقة.','CapCut account for 7 days.\nCan be used on up to 2 devices with full warranty.\nPre-orders are available.')}
 CLAUDE={'claude_pro':('إعادة شحن Claude Pro الرسمية لمدة شهر','Official Claude Pro Recharge — 1 Month'),'claude_api_500m':('Claude API — 500 مليون توكن — 6 أيام','Claude API — 500M Tokens — 6 Days'),'claude_api_100m':('Claude API — 100 مليون توكن — 3 أيام','Claude API — 100M Tokens — 3 Days'),'claude_api_50m':('Claude API — 50 مليون توكن — يومان','Claude API — 50M Tokens — 2 Days'),'claude_api_10m':('Claude API — 10 ملايين توكن — يوم واحد','Claude API — 10M Tokens — 1 Day')}
 def jload(p,d):
  try:return json.loads(p.read_text(encoding='utf-8'))
  except:return d
+LANGS=jload(LANG_FILE,{})
 def save_user(cid):
  u=set(jload(USERS_FILE,[]));u.add(cid)
  try:USERS_FILE.write_text(json.dumps(sorted(u)),encoding='utf-8')
  except:pass
-def lang(cid):return jload(LANG_FILE,{}).get(str(cid),'ar')
+def lang(cid):return LANGS.get(str(cid),'ar')
 def set_lang(cid,v):
- d=jload(LANG_FILE,{});d[str(cid)]=v
- try:LANG_FILE.write_text(json.dumps(d),encoding='utf-8')
+ LANGS[str(cid)]=v
+ try:LANG_FILE.write_text(json.dumps(LANGS),encoding='utf-8')
  except:pass
 def tr(cid,a,e):return e if lang(cid)=='en' else a
 def btn(t,c):return {'text':t,'callback_data':c}
@@ -106,7 +94,8 @@ def handle_receipt(a,m):
  if not m.get('photo'):send(a,c,tr(c,'📸 فضلاً أرسل صورة إثبات الدفع.','📸 Please send a photo of the payment receipt.'));return True
  u=m.get('from',{});send(a,ADMIN_ID,f"🧾 <b>إثبات دفع جديد</b>\n🛒 {order_name(c,x['product'])}\n👤 {'@'+u['username'] if u.get('username') else 'بدون معرف'}\n🆔 <code>{c}</code>");a.call('forwardMessage',chat_id=ADMIN_ID,from_chat_id=c,message_id=m['message_id']);PENDING_RECEIPTS.pop(c,None);send(a,c,tr(c,'✅ تم استلام إثبات الدفع وإرساله للإدارة.','✅ Payment proof received and sent to the administration.'),keyboard(c));return True
 def action(a,c,x):
- if x.startswith('lang:'):set_lang(c,x.split(':')[1]);show_home(a,c)
+ if x.startswith('lang:'):
+  set_lang(c,x.split(':',1)[1]);show_home(a,c)
  elif x in ('home','enter_store'):show_home(a,c)
  elif x=='start':show_start(a,c)
  elif x=='products':show_products(a,c)
