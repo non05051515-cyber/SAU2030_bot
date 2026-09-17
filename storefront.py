@@ -43,6 +43,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
     return conn
 
 
@@ -528,6 +529,7 @@ def wallet_amounts(api, cid):
         rows.append(row)
     text = tr(cid, 'اختر مبلغ شحن المحفظة — جميع المبالغ معروضة بالريال والدولار:',
               'Choose a wallet top-up amount — all amounts are shown in SAR and USD:')
+    rows.append([btn(tr(cid, '✏️ مبلغ اختياري', '✏️ Custom amount'), 'topupcustom')])
     send(api, cid, text, kb(rows + [nav(cid, 'wallet')]))
 
 
@@ -733,6 +735,20 @@ def receipt(api, message):
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
+    with db() as conn:
+        custom = conn.execute('SELECT 1 FROM custom_topup_state WHERE cid=?', (cid,)).fetchone()
+    if custom:
+        raw = (message.get('text') or '').strip().replace(',', '.')
+        try: value = Decimal(raw).quantize(Decimal('0.01'))
+        except Exception:
+            send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط، مثال: 75', 'Send the amount as a number only, e.g. 75'))
+            return True
+        if value <= 0 or value > 5000:
+            send(api, cid, tr(cid, 'اختر مبلغًا أكبر من 0 وحتى 5000 ريال.', 'Choose an amount above 0 and up to 5000 SAR.'))
+            return True
+        with db() as conn: conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        wallet_method(api, cid, str(value))
+        return True
     menu_actions = G.get('MENU_ACTIONS', G.get('MENU', {}))
     if message.get('text', '').startswith('/') or message.get('text') in menu_actions:
         with db() as conn:
@@ -858,6 +874,9 @@ def action(api, cid, value):
         wallet_amounts(api, cid) if arg == 'topup' else wallet(api, cid)
     elif prefix == 'topup':
         wallet_method(api, cid, arg)
+    elif prefix == 'topupcustom':
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO custom_topup_state(cid) VALUES (?)', (cid,))
+        send(api, cid, tr(cid, '✏️ أرسل الآن مبلغ الشحن الذي تريده بالريال السعودي.\nمثال: <b>75</b>', '✏️ Send the custom top-up amount in SAR.\nExample: <b>75</b>'), kb([nav(cid, 'wallet:topup')]))
     elif prefix == 'topupcrypto':
         wallet_crypto(api, cid, arg)
     elif prefix == 'topupbybit':
