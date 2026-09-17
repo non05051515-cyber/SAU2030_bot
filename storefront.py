@@ -1,6 +1,8 @@
 """Bilingual catalogue extension; preserves the existing bot/admin entry points."""
 import html
 import json
+
+BROADCAST_PENDING = set()
 import os
 import sqlite3
 import time
@@ -238,6 +240,7 @@ def admin_panel(api, cid):
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
 
@@ -680,6 +683,31 @@ def receipt(api, message):
     cid = message['chat']['id']
     if handle_admin_icon(api, message):
         return True
+    if cid == G.get('ADMIN_ID') and cid in BROADCAST_PENDING:
+        if message.get('text', '').startswith('/'):
+            BROADCAST_PENDING.discard(cid)
+            return False
+        try:
+            users = [int(x) for x in json.loads(USERS_PATH.read_text(encoding='utf-8'))]
+        except Exception:
+            users = []
+        ok = failed = 0
+        for user_id in users:
+            if user_id == cid:
+                continue
+            try:
+                result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
+                                  message_id=message['message_id'])
+                if result:
+                    ok += 1
+                else:
+                    failed += 1
+            except Exception:
+                failed += 1
+        BROADCAST_PENDING.discard(cid)
+        send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
+             kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
+        return True
     menu_actions = G.get('MENU_ACTIONS', G.get('MENU', {}))
     if message.get('text', '').startswith('/') or message.get('text') in menu_actions:
         with db() as conn:
@@ -768,6 +796,13 @@ def action(api, cid, value):
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
+        elif arg == 'broadcast' and cid == G['ADMIN_ID']:
+            BROADCAST_PENDING.add(cid)
+            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
+                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
+            BROADCAST_PENDING.discard(cid)
+            admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
