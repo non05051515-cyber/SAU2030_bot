@@ -41,6 +41,8 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS category_icons (pid TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
+    conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     return conn
 
 
@@ -99,12 +101,35 @@ def nav(cid, parent='products'):
 def menu(cid=0):
     rows = [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '💬 الدعم', '💬 Support')}],
                          [{'text': tr(cid, '👛 المحفظة', '👛 Wallet')}, {'text': '🔗 API'}, {'text': tr(cid, '🛡 الضمان', '🛡 Warranty')}],
-                         [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}]]
+                         [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}],
+                         [{'text': tr(cid, '💎 الإحالات', '💎 Referrals')}]]
     if cid == G.get('ADMIN_ID'):
         rows.append([{'text': '🧾 لوحة الطلبات'}])
     return {'keyboard': rows,
             'resize_keyboard': True, 'is_persistent': True,
             'input_field_placeholder': tr(cid, 'اختر من القائمة', 'Choose from the menu')}
+
+
+
+
+def register_referral(invitee, referrer):
+    if not referrer or invitee == referrer:
+        return
+    try: referrer = int(referrer)
+    except Exception: return
+    with db() as conn:
+        conn.execute('INSERT OR IGNORE INTO referrals(invitee,referrer,joined_at) VALUES (?,?,?)', (invitee, referrer, now_saudi()))
+
+
+def referral_page(api, cid):
+    with db() as conn:
+        visits = conn.execute('SELECT COUNT(*) FROM referrals WHERE referrer=?', (cid,)).fetchone()[0]
+        active = conn.execute('SELECT COUNT(*) FROM referrals WHERE referrer=? AND active=1', (cid,)).fetchone()[0]
+        rp = Decimal(str(conn.execute('SELECT COALESCE(SUM(CAST(amount_usd AS REAL)),0) FROM referral_rewards WHERE referrer=? AND kind="active"', (cid,)).fetchone()[0] or 0))
+        pp = Decimal(str(conn.execute('SELECT COALESCE(SUM(CAST(amount_usd AS REAL)),0) FROM referral_rewards WHERE referrer=? AND kind="purchase"', (cid,)).fetchone()[0] or 0))
+    pending=max(visits-active,0); total=rp+pp; link=f'https://t.me/SAU2030_bot?start=ref_{cid}'
+    text=f'💎 <b>نظام الإحالات</b>\n\n━━━━━━━━━━━━━━\n📊 <b>إحصائياتك</b>\n━━━━━━━━━━━━━━\n\n👥 الزيارات: {visits}\n⏳ معلق: {pending}\n✅ نشط: {active}\n❌ غادر: 0\n\n━━━━━━━━━━━━━━\n💰 <b>أرباحك</b>\n━━━━━━━━━━━━━━\n\n🎯 من الإحالات: ${rp:.2f}\n🛍 من المشتريات: ${pp:.2f}\n💎 المجموع: ${total:.2f}\n\n━━━━━━━━━━━━━━\n🔗 <b>رابطك:</b>\n<code>{link}</code>\n\n━━━━━━━━━━━━━━\n🎁 <b>طريقتان للربح:</b>\n\n🔥 كل 10 إحالة نشطة = $2.00\n💸 شراء صديق &gt; $10 = $0.50'
+    send(api,cid,text,kb([[btn('↩️ رجوع','home')]]))
 
 
 def amount(pid, currency='SAR', source_price=None):
@@ -783,6 +808,8 @@ def action(api, cid, value):
         start(api, cid)
     elif prefix == 'products':
         products(api, cid)
+    elif prefix == 'referrals':
+        referral_page(api, cid)
     elif prefix == 'product':
         log_activity(cid, 'category', arg)
         category(api, cid, arg)
