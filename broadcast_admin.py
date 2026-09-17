@@ -18,7 +18,10 @@ def install(namespace):
     admin_id = namespace['ADMIN_ID']
     old_action = namespace['action']
     old_receipt = namespace['handle_receipt']
-    sg = old_action.__globals__
+    # Always use storefront helpers/state. The wrapped action can belong to an
+    # extension module, which made admin:broadcast fall through previously.
+    import storefront as store
+    sg = store.__dict__
 
     def admin_panel(api, cid):
         if cid != admin_id:
