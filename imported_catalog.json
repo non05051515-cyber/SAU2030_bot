@@ -16,9 +16,9 @@
       },
       "source_usd": "99.99",
       "source_stock": 10,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt.jpg"
     },
     {
       "id": "pd_02",
@@ -32,10 +32,10 @@
         "en": "This is an official CDK for ChatGPT subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️ You must be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\nPlease use the redemption link shown after ordering."
       },
       "source_usd": "18.99",
-      "source_stock": 3,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 2,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt.jpg"
     },
     {
       "id": "pd_03",
@@ -49,10 +49,10 @@
         "en": "This is an official CDK for ChatGPT GO subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️ You must be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\nPlease use the redemption link shown after ordering."
       },
       "source_usd": "5.85",
-      "source_stock": 2,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 5,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt.jpg"
     },
     {
       "id": "pd_04",
@@ -66,8 +66,8 @@
         "en": "The account will have the following format:\nEmail | ChatGPT  Password | 2Fa Code\nGet 2fa code at 2fa.live\n\nNO WARRANTY \n1-Hour Warranty: Incorrect Password / 2FA Code Error.\nRequire customers to change password, 2FA and email immediately"
       },
       "source_usd": "6",
-      "source_stock": 4,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 0,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
       "image": null
     },
@@ -84,9 +84,9 @@
       },
       "source_usd": "19.7",
       "source_stock": 1,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null,
+      "image": "assets/pandora/chatgpt_api.jpg",
       "review_required": {
         "ar": "عنوان المورد يذكر 6 أيام، والوصف يذكر 3 أيام و100 مليون توكن بدل 500 مليون. يلزم تأكيد التفاصيل قبل الطلب.",
         "en": "Supplier title says 6 days, but description says 3 days and 100M instead of 500M tokens. Details must be confirmed before ordering."
@@ -104,10 +104,10 @@
         "en": "🗝️ API CODEX - 100M Token - 3d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 3 Days"
       },
       "source_usd": "4.8",
-      "source_stock": 8,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 6,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt_api.jpg"
     },
     {
       "id": "pd_07",
@@ -121,10 +121,10 @@
         "en": "🗝️ API CODEX - 50M Token - 2d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 2Days"
       },
       "source_usd": "2.9",
-      "source_stock": 16,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 12,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt_api.jpg"
     },
     {
       "id": "pd_08",
@@ -138,10 +138,10 @@
         "en": "🗝️ API CODEX - 10M Token - 1d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 1 Day"
       },
       "source_usd": "1.2",
-      "source_stock": 80,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 63,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/chatgpt_api.jpg"
     },
     {
       "id": "pd_09",
@@ -155,8 +155,8 @@
         "en": "This is an official CDK for Claude pro subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️  You MUST be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\n⚠️ Important: Please Read Before Ordering · Must Read · Must Read\n\nThe following situations will result in failed payments. Please read carefully and verify before placing your order!\nIf your subscription fails to process due to the following reasons, refunds will not be issued!\n❌ Situation 1: [Subscription Not Expired] Cannot Recharge\nFor example, if you previously recharged via iOS / Android / Credit Card, do not place a new order if your subscription is not yet expired.\nPlease first confirm in your billing history: Only place an order if you do not have an active subscription!\ni.e if your Android subscription is not yet expired, you cannot recharge.\n❌ Situation 2: [Outstanding Balance] or [Refunds] in your Billing History\nAn outstanding balance or refunds in your account will cause the recharged funds to be used to offset the balance, resulting in the subscription not being processed and no refunds will be issued!\n❌ Situation 3: [Organization ID Silently Banned] Cannot Recharge\nSome accounts may appear to be able to log in normally, but the organization ID has actually been banned.\nThis is a case of silent banning, which means recharging will not be successful, and refunds will not be issued!\nIn this case, recharging will not be successful, and refunds will not be issued!\n❗️ If any of the above situations apply, and your payment fails after placing the order, refunds will not be issued. Please be sure to check carefully before making a payment! ❗️"
       },
       "source_usd": "20.5",
-      "source_stock": 1,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 0,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
       "image": null
     },
@@ -173,9 +173,9 @@
       },
       "source_usd": "19.6",
       "source_stock": 1,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null,
+      "image": "assets/pandora/claude_api.jpg",
       "review_required": {
         "ar": "عنوان المورد يذكر 6 أيام، والوصف يذكر 3 أيام. يلزم تأكيد التفاصيل قبل الطلب.",
         "en": "Supplier title says 6 days, but description says 3 days. Details must be confirmed before ordering."
@@ -193,10 +193,10 @@
         "en": "API CLAUDE - 100M  Token - 3 days\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 3 Days"
       },
       "source_usd": "5.42",
-      "source_stock": 7,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 5,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/claude_api.jpg"
     },
     {
       "id": "pd_12",
@@ -210,10 +210,10 @@
         "en": "API CLAUDE - 50M Token - 2 days\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 2 Days"
       },
       "source_usd": "2.88",
-      "source_stock": 14,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 11,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/claude_api.jpg"
     },
     {
       "id": "pd_13",
@@ -227,10 +227,10 @@
         "en": "API CLAUDE - 10M Token - 1 day\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 1 Day"
       },
       "source_usd": "1.2",
-      "source_stock": 74,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 58,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/pandora/claude_api.jpg"
     },
     {
       "id": "pd_14",
@@ -244,8 +244,8 @@
         "en": "6 Months Individual Account\n3M Warranty \nVery very stable account."
       },
       "source_usd": "11",
-      "source_stock": 12,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 19,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [
         {
           "min_quantity": 5,
@@ -266,8 +266,8 @@
         "en": "CAPCUT PRO 1Month 1,600 CREDITS\nFull Warranty"
       },
       "source_usd": "2.15",
-      "source_stock": 15,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 10,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [],
       "image": null
     },
@@ -282,15 +282,10 @@
         "ar": "حساب Pro Team خاص لمدة 30 يومًا كاملة.\nجهازان كحد أقصى مع ضمان كامل.\nحساب ثابت لمدة 30 يومًا، دون تجديد كل 7 أيام.\nسجّل الدخول أولًا إلى تطبيق الجوال، ثم إلى تطبيق الكمبيوتر عبر رمز QR؛ لا تستخدم نسخة الويب.",
         "en": "-Full 30 days private Pro Team account .\n-Maximum 2 devices , with full warranty .\n-Stable Account full 30 days (no 7days renew ).\n-Login to mobile App first next to laptop (desktop App no web) via QR code ."
       },
-      "source_usd": "1.55",
-      "source_stock": 91,
-      "source_checked_at": "2026-09-16T00:01:00Z",
-      "promotions": [
-        {
-          "min_quantity": 5,
-          "source_usd": "1.5"
-        }
-      ],
+      "source_usd": "1.49",
+      "source_stock": 116,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
       "image": null
     },
     {
@@ -305,8 +300,8 @@
         "en": "Capcut 7d accounts\nMaximum 2 devices , with full warranty  \nPreorders are active"
       },
       "source_usd": "0.2",
-      "source_stock": 0,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 19,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [
         {
           "min_quantity": 10,
@@ -401,16 +396,11 @@
         "ar": "خطة لمدة 18 شهرًا.\nتشمل مساحة سحابية 5 تيرابايت.\nيمكن إضافة 5 مستخدمين. لا تحتاج بطاقة.\nبلا ضمان للاشتراك.\nبحسب المورد: تعمل في أي دولة دون تحقق، واشتراك Gemini AI Pro أصلي يُفعّل على بريد Gmail الخاص بك، وحساب عائلي كامل وليس دعوة.\nالمورد يذكر أيضًا ضمان احتفاظ لمدة 12 ساعة (12h hold warranty).\nلطلب الاستبدال، أرسل للدعم رقم الطلب والرابط؛ لا يعالج المورد الاستبدال دونهما.",
         "en": "18 Months Plan\n5TB cloud storage included\nYou can add 5 users\nNo card required\nNon Warranty\nWorks in any country, no verification required\n100% genuine Gemini AI Pro subscription activated on your own Gmail\nFull family account, not an invite\n⚠️  12h  hold warranty\nIn case of any replacement, please DM Support with order ID and Link,  without this replacements won't be processed."
       },
-      "source_usd": "0.39",
-      "source_stock": 691,
-      "source_checked_at": "2026-09-16T00:01:00Z",
-      "promotions": [
-        {
-          "min_quantity": 100,
-          "source_usd": "0.37"
-        }
-      ],
-      "image": null
+      "source_usd": "1.30",
+      "source_stock": 13,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/gemini.jpg"
     },
     {
       "id": "pd_23",
@@ -424,15 +414,15 @@
         "en": "Get access to a Canva Education panel with space for up to 500 members, valid for 3 years. Easily invite and manage users from one panel.\n\n✔ Valid for 3 years\n✔ Up to 500 seats\n✔ Easy member management\n✔ Access to premium Canva features\n⚠️ NO WARRANTY — LOGIN WARRANTY ONLY"
       },
       "source_usd": "5.49",
-      "source_stock": 23,
-      "source_checked_at": "2026-09-16T00:01:00Z",
+      "source_stock": 22,
+      "source_checked_at": "2026-09-16T22:21:00Z",
       "promotions": [
         {
           "min_quantity": 5,
           "source_usd": "4.99"
         }
       ],
-      "image": null
+      "image": "assets/pandora/canva.jpg"
     }
   ]
 }

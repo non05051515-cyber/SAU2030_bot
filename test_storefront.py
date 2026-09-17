@@ -28,7 +28,7 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(s.amount('pd_04','USD'),Decimal('7.50'))
         self.assertEqual(s.amount('pd_04','SAR'),Decimal('28.13'))
         self.assertEqual(s.amount('pd_02','SAR'),Decimal('76.84'))
-        self.assertEqual(s.amount('pd_22','SAR'),Decimal('7.09'))
+        self.assertEqual(s.amount('pd_22','SAR'),Decimal('10.50'))
         self.assertEqual(s.amount('pd_23','USD','4.99'),Decimal('6.49'))
         self.assertEqual(s.amount('youtube','USD'),Decimal('4.00'))
         self.assertIsNone(s.amount('netflix'))
@@ -55,25 +55,26 @@ class StoreTests(unittest.TestCase):
         with self.s.db() as conn:
             self.assertEqual(conn.execute('SELECT lang,currency FROM preferences WHERE cid=55').fetchone(),('en','USD'))
     def test_blocked_items_and_old_callbacks(self):
-        for pid in ('pd_05','pd_10','pd_17','claude_api_500m','unknown'):
+        for pid in ('pd_05','pd_10','pd_04','claude_api_500m','unknown'):
             self.assertFalse(self.s.can_order(pid))
             self.api.calls=[]
             self.s.action(self.api,7,'paybank:'+pid)
             self.assertNotIn('PAYMENT_BANK_IBAN',str(self.api.calls))
             self.assertFalse(any('receipt:' in str(d) for _,d in self.api.calls))
         self.s.action(self.api,7,'claude:claude_pro')
-        self.assertIn('pd_09',str(self.api.calls[-1]))
+        self.assertIn('Claude Pro',str(self.api.calls))
+        self.assertIn('product:claude',str(self.api.calls[-1]))
     def test_receipt_cancel_and_success(self):
-        self.s.receipt_request(self.api,7,'pd_04','bank')
-        self.s.action(self.api,7,'cancel:pd_04')
+        self.s.receipt_request(self.api,7,'pd_02','bank')
+        self.s.action(self.api,7,'cancel:pd_02')
         self.assertFalse(self.s.receipt(self.api,{'chat':{'id':7},'photo':[{}],'message_id':1}))
-        self.s.receipt_request(self.api,7,'pd_04','bank')
+        self.s.receipt_request(self.api,7,'pd_02','bank')
         self.api.calls=[]
         self.assertTrue(self.s.receipt(self.api,{'chat':{'id':7},'photo':[{}],'message_id':1,'from':{'username':'test'}}))
         forwards=[d for m,d in self.api.calls if m=='forwardMessage']
         self.assertEqual(len(forwards),1)
         self.assertEqual(forwards[0]['chat_id'],8386371522)
-        self.assertIn('28.13 SAR / 7.50 USD',str(self.api.calls))
+        self.assertIn('76.84 SAR / 20.49 USD',str(self.api.calls))
     def test_preserve_categories_icons_and_admin(self):
         self.assertEqual(len(self.bot.PRODUCTS),9)
         self.assertEqual(self.bot.PRODUCTS['gemini']['custom_emoji_id'],'5312057964494874871')
