@@ -398,12 +398,13 @@ def start(api, cid):
 
 
 def home(api, cid):
-    send(api, cid, tr(cid, '👋 أهلاً بك في <b>VEXA STORE</b>\n\nاختر القسم المطلوب.\n\n',
-                     '👋 Welcome to <b>VEXA STORE</b>\n\nChoose a category.\n\n') +
-         '<tg-emoji emoji-id="5440411975509096877">💳</tg-emoji> ' +
-         tr(cid, 'لشحن النقاط والدعم: ', 'Top-ups and support: ') + SUPPORT, menu(cid))
-    products(api, cid)
-
+    balance_sar = wallet_balance(cid)
+    balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    with db() as conn:
+        purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
+    text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
+    rows = [[btn(tr(cid,'🛒 المنتجات','🛒 Products'),'products',style='primary'), btn(tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',style='success')], [btn(tr(cid,'💎 الإحالات','💎 Referrals'),'referrals'), btn(tr(cid,'👤 حسابي','👤 My account'),'wallet')], [btn(tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',style='danger'), btn(tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support')], [btn(tr(cid,'💱 العملة','💱 Currency'),'settings:currency'), btn('🌐 Language / اللغة','settings:lang')]]
+    send(api, cid, text, kb(rows))
 
 def products(api, cid):
     buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items()]
