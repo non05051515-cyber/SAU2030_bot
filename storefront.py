@@ -381,4 +381,8 @@ def install(namespace):
                          '🛡 الضمان': 'warranty', '🛡 Warranty': 'warranty',
                          '🌐 اللغة': 'settings:lang', '🌐 Language': 'settings:lang',
                          '🌐 اللغة / Language': 'settings:lang', '💱 العملة / Currency': 'settings:currency'})
+    # Accept reply buttons sent by older versions where the icon followed the label.
+    menu_actions.update({'ابدأ 🚀': 'start', 'المنتجات 🛍': 'products', 'الدعم 💬': 'support',
+                         'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
+                         'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
