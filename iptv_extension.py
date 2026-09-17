@@ -149,6 +149,31 @@ def action(api, cid, value):
     if value.startswith('iptvact:'):
         device = value.split(':', 1)[1]
         ar, en = DEVICE_LABELS.get(device, ('طريقة التفعيل', 'Activation Method'))
+        if device == 'ios':
+            text = s.tr(cid,
+                '<b>عبر أجهزة Apple — آيفون / آيباد</b>\n\n'
+                '1- حمّل تطبيق Var Player من App Store من الزر بالأسفل.\n'
+                '2- اختر <b>كود ✏️</b>.\n'
+                '3- اكتب الرقم: <code>55555</code>\n\n'
+                '<b>بعد الدخول:</b>\n'
+                '1- ضع اسمك.\n'
+                '2- أدخل اليوزر.\n'
+                '3- أدخل الباسوورد.\n\n'
+                'اليوزر والباسوورد يتم تسليمك البيانات بعد الدفع.',
+                '<b>Apple Devices — iPhone / iPad</b>\n\n'
+                '1- Download Var Player from the App Store using the button below.\n'
+                '2- Choose <b>Code ✏️</b>.\n'
+                '3- Enter: <code>55555</code>\n\n'
+                '<b>After entering:</b>\n'
+                '1- Enter your name.\n'
+                '2- Enter the username.\n'
+                '3- Enter the password.\n\n'
+                'The username and password are provided after payment.')
+            return s.send(api, cid, text, s.kb([
+                [{'text': s.tr(cid, '📲 تحميل Var Player', '📲 Download Var Player'),
+                  'url': 'https://apps.apple.com/tr/app/var-player-unlock-your-world/'}],
+                [s.btn(s.tr(cid, '↩️ رجوع لطرق التفعيل', '↩️ Back to Activation Methods'), 'iptvactivation')]
+            ]))
         return s.send(api, cid,
                       s.tr(cid, f'<b>{ar}</b>\n\nسيتم إضافة شرح التفعيل هنا.',
                            f'<b>{en}</b>\n\nActivation instructions will be added here.'),
