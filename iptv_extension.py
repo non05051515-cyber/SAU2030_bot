@@ -149,6 +149,23 @@ def action(api, cid, value):
     if value.startswith('iptvact:'):
         device = value.split(':', 1)[1]
         ar, en = DEVICE_LABELS.get(device, ('طريقة التفعيل', 'Activation Method'))
+        if device == 'android':
+            text = s.tr(cid,
+                '<b>▶️ أجهزة أندرويد — تطبيق Next+</b>\n\n'
+                'يعمل بطريقة سهلة باستخدام رقم الخادم.\n\n'
+                '<b>طريقة الإعداد:</b>\n'
+                '1️⃣ حمّل تطبيق <b>Next+</b> على جهاز الأندرويد.\n'
+                '2️⃣ افتح التطبيق.\n'
+                '3️⃣ أدخل بيانات الاشتراك.\n'
+                '4️⃣ أدخل رقم الخادم: <code>55555</code>\n\n'
+                '• اسم المستخدم يتم تسليمه بعد الدفع.\n'
+                '• كلمة المرور يتم تسليمها بعد الدفع.\n\n'
+                '✅ بعد إدخال البيانات ورقم الخادم راح يشتغل الاشتراك بإذن الله.',
+                '<b>▶️ Android Devices — Next+</b>\n\n'
+                'Install Next+, open the app, enter your subscription details, then enter Server ID <code>55555</code>.\n'
+                'The username and password are provided after payment.')
+            return s.send(api, cid, text,
+                          s.kb([[s.btn(s.tr(cid, '↩️ رجوع لطرق التفعيل', '↩️ Back to Activation Methods'), 'iptvactivation')]]))
         if device == 'tv':
             text = s.tr(cid,
                 '<b>📺 شاشات Samsung و LG — تطبيق 0Player</b>\n\n'
