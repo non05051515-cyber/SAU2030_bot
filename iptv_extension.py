@@ -149,6 +149,33 @@ def action(api, cid, value):
     if value.startswith('iptvact:'):
         device = value.split(':', 1)[1]
         ar, en = DEVICE_LABELS.get(device, ('طريقة التفعيل', 'Activation Method'))
+        if device == 'tv':
+            text = s.tr(cid,
+                '<b>📺 شاشات Samsung و LG — تطبيق 0Player</b>\n\n'
+                'يعمل بطريقة سهلة وقريبة من نظام آبل، ويعتمد على رقم الخادم (Server ID).\n\n'
+                '<b>طريقة الإعداد:</b>\n'
+                '1️⃣ حمّل تطبيق <b>0Player</b> من المتجر الرسمي في الشاشة.\n'
+                '2️⃣ افتح التطبيق واختر: <b>إضافة قائمة بالرمز</b>.\n'
+                '3️⃣ اختر: <b>قوائم التشغيل عبر QR رمز</b>.\n'
+                '4️⃣ ثم اختر: <b>Portal Code</b>.\n'
+                '5️⃣ عبّئ البيانات كالتالي:\n'
+                '• الخانة الأولى: أي اسم تريده.\n'
+                '• الخانة الثانية (الخادم): <code>92929480</code>\n'
+                '• الخانة الثالثة: اسم المستخدم.\n'
+                '• الخانة الرابعة: كلمة المرور.\n\n'
+                '✅ وبعدها راح يشتغل الاشتراك مباشرة.\n\n'
+                '<b>📌 ملاحظة مهمة:</b>\n'
+                '• يدعم شاشات LG من موديل 2016 إلى 2026.\n'
+                '• يدعم شاشات Samsung من موديل 2022 إلى 2026.\n\n'
+                'وشاشات أندرويد (متجر أندرويد): يتم تحميل تطبيق Downloader، وبيتم إرسال كود تحميل التطبيق بعد الدفع.\n\n'
+                'أي شخص يحتاج مساعدة في الإعداد، يمكنكم التواصل معنا مباشرة.',
+                '<b>📺 Samsung & LG TVs — 0Player</b>\n\n'
+                'Install 0Player from the TV official store, choose Add List by Code, QR playlists, then Portal Code.\n'
+                'Enter any name, Server ID <code>92929480</code>, username, and password.\n\n'
+                'LG: models 2016–2026. Samsung: models 2022–2026.\n'
+                'For Android TVs, install Downloader; the download code is provided after payment.')
+            return s.send(api, cid, text,
+                          s.kb([[s.btn(s.tr(cid, '↩️ رجوع لطرق التفعيل', '↩️ Back to Activation Methods'), 'iptvactivation')]]))
         if device == 'computer':
             text = s.tr(cid,
                 '<b>💻 لمستخدمي نظام ويندوز 🎉</b>\n\n'
