@@ -73,17 +73,40 @@ def category(api, cid, pid):
     s.send(api, cid, '<b>IPTV</b>\n\n' + s.tr(cid, 'اختر المنتج:', 'Choose a product:'), s.kb(rows))
 
 
+def activation_menu(api, cid):
+    rows = [
+        [s.btn(s.tr(cid, '📺 شاشة', '📺 TV'), 'iptvact:tv'),
+         s.btn(s.tr(cid, ' آيفون / آيباد', ' iPhone / iPad'), 'iptvact:ios')],
+        [s.btn(s.tr(cid, '💻 كمبيوتر / لابتوب', '💻 Computer / Laptop'), 'iptvact:computer'),
+         s.btn(s.tr(cid, '▶️ أندرويد', '▶️ Android'), 'iptvact:android')],
+        [s.btn(s.tr(cid, '↩️ رجوع', '↩️ Back'), 'product:iptv')]
+    ]
+    return s.send(api, cid,
+                  s.tr(cid, '📺 <b>طريقة التشغيل</b>\n\n👇 اختر نوع جهازك لعرض الشرح:',
+                       '📺 <b>Activation Method</b>\n\n👇 Choose your device to view the instructions:'),
+                  s.kb(rows))
+
+
 def action(api, cid, value):
     if value == 'iptvactivation':
+        return activation_menu(api, cid)
+    if value.startswith('iptvact:'):
+        device = value.split(':', 1)[1]
+        labels = {
+            'tv': ('📺 شاشة', '📺 TV'),
+            'ios': (' آيفون / آيباد', ' iPhone / iPad'),
+            'computer': ('💻 كمبيوتر / لابتوب', '💻 Computer / Laptop'),
+            'android': ('▶️ أندرويد', '▶️ Android'),
+        }
+        ar, en = labels.get(device, ('طريقة التفعيل', 'Activation Method'))
         return s.send(api, cid,
-                      s.tr(cid, '🛠 <b>طرق التفعيل</b>\n\nسيتم إضافة طرق التفعيل هنا.',
-                           '🛠 <b>Activation Methods</b>\n\nActivation instructions will be added here.'),
-                      s.kb([s.nav(cid, 'product:iptv')]))
+                      s.tr(cid, f'<b>{ar}</b>\n\nسيتم إضافة شرح التفعيل هنا.',
+                           f'<b>{en}</b>\n\nActivation instructions will be added here.'),
+                      s.kb([[s.btn(s.tr(cid, '↩️ رجوع لطرق التفعيل', '↩️ Back to Activation Methods'), 'iptvactivation')]]))
     return _original_action(api, cid, value)
 
 
 def broadcast_new_products(api):
-    # These manually-added IPTV options should not trigger an unsolicited catalogue broadcast.
     with s.db() as conn:
         conn.executemany('INSERT OR IGNORE INTO announcements(pid,announced_at) VALUES (?,?)',
                          [(pid, s.now_saudi()) for pid in IPTV_IDS])
