@@ -1,40 +1,22 @@
-"""IPTV catalogue additions only."""
+"""IPTV catalogue additions and activation-menu icon management."""
 from decimal import Decimal, ROUND_HALF_UP
 import storefront as s
 
 IPTV_IDS = ('iptv_1m', 'iptv_3m', 'iptv_6m', 'iptv_1y')
+DEVICE_LABELS = {
+    'tv': ('شاشة', 'TV'),
+    'ios': ('آيفون / آيباد', 'iPhone / iPad'),
+    'computer': ('كمبيوتر / لابتوب', 'Computer / Laptop'),
+    'android': ('أندرويد', 'Android'),
+}
+DEVICE_ICON_KEYS = {key: 'iptvact_' + key for key in DEVICE_LABELS}
 
 IPTV_VARIANTS = [
-    {
-        'id': 'iptv_1m', 'category': 'iptv',
-        'name': {'ar': 'IPTV — شهر', 'en': 'IPTV — 1 Month'},
-        'description': {'ar': 'اشتراك IPTV لمدة شهر.', 'en': 'IPTV subscription for 1 month.'},
-        'fixed_sar': '5', 'source_usd': '0', 'source_stock': 5,
-        'source_checked_at': '2026-09-18', 'promotions': [], 'image': None,
-    },
-    {
-        'id': 'iptv_3m', 'category': 'iptv',
-        'name': {'ar': 'IPTV — 3 أشهر', 'en': 'IPTV — 3 Months'},
-        'description': {'ar': 'اشتراك IPTV لمدة 3 أشهر.', 'en': 'IPTV subscription for 3 months.'},
-        'fixed_sar': '10', 'source_usd': '0', 'source_stock': 3,
-        'source_checked_at': '2026-09-18', 'promotions': [], 'image': None,
-    },
-    {
-        'id': 'iptv_6m', 'category': 'iptv',
-        'name': {'ar': 'IPTV — 6 أشهر', 'en': 'IPTV — 6 Months'},
-        'description': {'ar': 'اشتراك IPTV لمدة 6 أشهر.', 'en': 'IPTV subscription for 6 months.'},
-        'fixed_sar': '15', 'source_usd': '0', 'source_stock': 5,
-        'source_checked_at': '2026-09-18', 'promotions': [], 'image': None,
-    },
-    {
-        'id': 'iptv_1y', 'category': 'iptv',
-        'name': {'ar': 'IPTV — سنة', 'en': 'IPTV — 1 Year'},
-        'description': {'ar': 'اشتراك IPTV لمدة سنة.', 'en': 'IPTV subscription for 1 year.'},
-        'fixed_sar': '25', 'source_usd': '0', 'source_stock': 2,
-        'source_checked_at': '2026-09-18', 'promotions': [], 'image': None,
-    },
+    {'id':'iptv_1m','category':'iptv','name':{'ar':'IPTV — شهر','en':'IPTV — 1 Month'},'description':{'ar':'اشتراك IPTV لمدة شهر.','en':'IPTV subscription for 1 month.'},'fixed_sar':'5','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':None},
+    {'id':'iptv_3m','category':'iptv','name':{'ar':'IPTV — 3 أشهر','en':'IPTV — 3 Months'},'description':{'ar':'اشتراك IPTV لمدة 3 أشهر.','en':'IPTV subscription for 3 months.'},'fixed_sar':'10','source_usd':'0','source_stock':3,'source_checked_at':'2026-09-18','promotions':[],'image':None},
+    {'id':'iptv_6m','category':'iptv','name':{'ar':'IPTV — 6 أشهر','en':'IPTV — 6 Months'},'description':{'ar':'اشتراك IPTV لمدة 6 أشهر.','en':'IPTV subscription for 6 months.'},'fixed_sar':'15','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':None},
+    {'id':'iptv_1y','category':'iptv','name':{'ar':'IPTV — سنة','en':'IPTV — 1 Year'},'description':{'ar':'اشتراك IPTV لمدة سنة.','en':'IPTV subscription for 1 year.'},'fixed_sar':'25','source_usd':'0','source_stock':2,'source_checked_at':'2026-09-18','promotions':[],'image':None},
 ]
-
 for variant in IPTV_VARIANTS:
     s.VARIANTS[variant['id']] = variant
 
@@ -42,6 +24,15 @@ _original_amount = s.amount
 _original_category = s.category
 _original_action = s.action
 _original_broadcast = s.broadcast_new_products
+_original_admin_icons = s.admin_icons
+_original_begin_icon_setup = s.begin_icon_setup
+_original_handle_admin_icon = s.handle_admin_icon
+
+
+def saved_icon(key):
+    with s.db() as conn:
+        row = conn.execute('SELECT custom_emoji_id FROM category_icons WHERE pid=?', (key,)).fetchone()
+    return row[0] if row else None
 
 
 def amount(pid, currency='SAR', source_price=None):
@@ -74,11 +65,12 @@ def category(api, cid, pid):
 
 
 def activation_menu(api, cid):
+    def device_btn(key):
+        ar, en = DEVICE_LABELS[key]
+        return s.btn(s.tr(cid, ar, en), 'iptvact:' + key, saved_icon(DEVICE_ICON_KEYS[key]))
     rows = [
-        [s.btn(s.tr(cid, '📺 شاشة', '📺 TV'), 'iptvact:tv'),
-         s.btn(s.tr(cid, ' آيفون / آيباد', ' iPhone / iPad'), 'iptvact:ios')],
-        [s.btn(s.tr(cid, '💻 كمبيوتر / لابتوب', '💻 Computer / Laptop'), 'iptvact:computer'),
-         s.btn(s.tr(cid, '▶️ أندرويد', '▶️ Android'), 'iptvact:android')],
+        [device_btn('tv'), device_btn('ios')],
+        [device_btn('computer'), device_btn('android')],
         [s.btn(s.tr(cid, '↩️ رجوع', '↩️ Back'), 'product:iptv')]
     ]
     return s.send(api, cid,
@@ -87,18 +79,76 @@ def activation_menu(api, cid):
                   s.kb(rows))
 
 
+def iptv_icon_menu(api, cid):
+    if cid != s.G['ADMIN_ID']:
+        return s.home(api, cid)
+    rows = []
+    for key in ('tv', 'ios', 'computer', 'android'):
+        ar, en = DEVICE_LABELS[key]
+        icon = saved_icon(DEVICE_ICON_KEYS[key])
+        mark = '✅ ' if icon else ''
+        rows.append([s.btn(mark + s.tr(cid, ar, en), 'seticon:' + DEVICE_ICON_KEYS[key], icon)])
+    rows.append([s.btn('↩️ رجوع للأقسام', 'admin:icons')])
+    return s.send(api, cid, '📺 <b>أيقونات طرق تفعيل IPTV</b>\n\nاختر الزر ثم أرسل الأيقونة المتحركة.', s.kb(rows))
+
+
+def admin_icons(api, cid):
+    if cid != s.G['ADMIN_ID']:
+        return s.home(api, cid)
+    buttons = []
+    for pid, product in s.G['PRODUCTS'].items():
+        mark = '✅ ' if product.get('custom_emoji_id') else ''
+        callback = 'admin:iptvicons' if pid == 'iptv' else 'seticon:' + pid
+        buttons.append(s.btn(mark + product['name'], callback, product.get('custom_emoji_id')))
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    s.send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم. عند اختيار IPTV ستظهر أزرار طرق التفعيل داخله.',
+           s.kb(rows + [[s.btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def begin_icon_setup(api, cid, pid):
+    if pid not in DEVICE_ICON_KEYS.values():
+        return _original_begin_icon_setup(api, cid, pid)
+    if cid != s.G['ADMIN_ID']:
+        return s.home(api, cid)
+    device = next(key for key, value in DEVICE_ICON_KEYS.items() if value == pid)
+    ar, en = DEVICE_LABELS[device]
+    with s.db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'iptv_icon', pid))
+    s.send(api, cid, s.tr(cid, f'أرسل الآن الأيقونة المتحركة لزر <b>{s.esc(ar)}</b>.',
+                          f'Send the animated icon for <b>{s.esc(en)}</b>.'),
+           s.kb([[s.btn('❌ إلغاء', 'cancelicon')]]))
+
+
+def handle_admin_icon(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != s.G.get('ADMIN_ID'):
+        return False
+    with s.db() as conn:
+        state = conn.execute('SELECT action,value FROM admin_state WHERE cid=?', (cid,)).fetchone()
+    if not state or state[0] != 'iptv_icon':
+        return _original_handle_admin_icon(api, message)
+    entities = list(message.get('entities', [])) + list(message.get('caption_entities', []))
+    emoji = next((e.get('custom_emoji_id') for e in entities if e.get('type') == 'custom_emoji' and e.get('custom_emoji_id')), None)
+    if not emoji:
+        s.send(api, cid, 'لم أجد أيقونة مخصصة. أرسل الأيقونة المتحركة نفسها.', s.kb([[s.btn('❌ إلغاء', 'cancelicon')]]))
+        return True
+    key = state[1]
+    with s.db() as conn:
+        conn.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)', (key, str(emoji)))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    s.G['CONFIG']['custom_icons_enabled'] = True
+    s.send(api, cid, '✅ تم حفظ الأيقونة المتحركة.', s.kb([[s.btn('📺 أيقونة أخرى', 'admin:iptvicons')], [s.btn('👁 معاينة طرق التفعيل', 'iptvactivation')]]))
+    return True
+
+
 def action(api, cid, value):
     if value == 'iptvactivation':
         return activation_menu(api, cid)
+    if value == 'admin:iptvicons':
+        return iptv_icon_menu(api, cid)
     if value.startswith('iptvact:'):
         device = value.split(':', 1)[1]
-        labels = {
-            'tv': ('📺 شاشة', '📺 TV'),
-            'ios': (' آيفون / آيباد', ' iPhone / iPad'),
-            'computer': ('💻 كمبيوتر / لابتوب', '💻 Computer / Laptop'),
-            'android': ('▶️ أندرويد', '▶️ Android'),
-        }
-        ar, en = labels.get(device, ('طريقة التفعيل', 'Activation Method'))
+        ar, en = DEVICE_LABELS.get(device, ('طريقة التفعيل', 'Activation Method'))
         return s.send(api, cid,
                       s.tr(cid, f'<b>{ar}</b>\n\nسيتم إضافة شرح التفعيل هنا.',
                            f'<b>{en}</b>\n\nActivation instructions will be added here.'),
@@ -116,4 +166,7 @@ def broadcast_new_products(api):
 s.amount = amount
 s.category = category
 s.action = action
+s.admin_icons = admin_icons
+s.begin_icon_setup = begin_icon_setup
+s.handle_admin_icon = handle_admin_icon
 s.broadcast_new_products = broadcast_new_products
