@@ -1,0 +1,428 @@
+{
+  "source_bot": "Pandora_Digital_bot",
+  "markup_usd": "1.50",
+  "sar_per_usd": "3.75",
+  "variants": [
+    {
+      "id": "pd_01",
+      "category": "chatgpt",
+      "name": {
+        "ar": "ChatGPT Pro X5 — تجديد رسمي شهر",
+        "en": "ChatGPT PRO X5 1 Month official recharge (Sub-Warranty)"
+      },
+      "description": {
+        "ar": "رمز تفعيل رسمي (CDK) لاشتراك ChatGPT Pro X5 لمدة شهر على حساب العميل الشخصي.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة. لا يلزم وجود بطاقة ائتمان.\nيجب أن يكون الحساب على الخطة المجانية وألا توجد فواتير غير مدفوعة. إذا كان لديك اشتراك نشط، انتظر انتهاءه قبل التجديد.\nضمان 30 يومًا للاشتراك فقط؛ حظر الحساب غير مشمول.\nاستخدم رابط الاسترداد الذي يظهر بعد الطلب.",
+        "en": "This is an official CDK for ChatGPT subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️ You must be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\nPlease use the redemption link shown after ordering."
+      },
+      "source_usd": "99.99",
+      "source_stock": 10,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt.jpg"
+    },
+    {
+      "id": "pd_02",
+      "category": "chatgpt",
+      "name": {
+        "ar": "ChatGPT Plus — تجديد رسمي شهر",
+        "en": "ChatGPT Plus1 Month official recharge (Sub-Warranty)"
+      },
+      "description": {
+        "ar": "رمز تفعيل رسمي (CDK) لاشتراك ChatGPT Plus لمدة شهر على حساب العميل الشخصي.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة. لا يلزم وجود بطاقة ائتمان.\nيجب أن يكون الحساب على الخطة المجانية وألا توجد فواتير غير مدفوعة. إذا كان لديك اشتراك نشط، انتظر انتهاءه قبل التجديد.\nضمان 30 يومًا للاشتراك فقط؛ حظر الحساب غير مشمول.\nاستخدم رابط الاسترداد الذي يظهر بعد الطلب.",
+        "en": "This is an official CDK for ChatGPT subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️ You must be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\nPlease use the redemption link shown after ordering."
+      },
+      "source_usd": "18.99",
+      "source_stock": 2,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt.jpg"
+    },
+    {
+      "id": "pd_03",
+      "category": "chatgpt",
+      "name": {
+        "ar": "ChatGPT Go — رمز تفعيل شهر",
+        "en": "CDK ChatGPT Go (Sub-Warranty)"
+      },
+      "description": {
+        "ar": "رمز تفعيل رسمي (CDK) لاشتراك ChatGPT Go لمدة شهر على حساب العميل الشخصي.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة. لا يلزم وجود بطاقة ائتمان.\nيجب أن يكون الحساب على الخطة المجانية وألا توجد فواتير غير مدفوعة. إذا كان لديك اشتراك نشط، انتظر انتهاءه قبل التجديد.\nضمان 30 يومًا للاشتراك فقط؛ حظر الحساب غير مشمول.\nاستخدم رابط الاسترداد الذي يظهر بعد الطلب.",
+        "en": "This is an official CDK for ChatGPT GO subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️ You must be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\nPlease use the redemption link shown after ordering."
+      },
+      "source_usd": "5.85",
+      "source_stock": 5,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt.jpg"
+    },
+    {
+      "id": "pd_04",
+      "category": "chatgpt",
+      "name": {
+        "ar": "ChatGPT Plus — حساب Apple Pay شهر",
+        "en": "ChatGPT  PLUS APPLE PAY 1M NW"
+      },
+      "description": {
+        "ar": "صيغة الحساب: البريد الإلكتروني | كلمة مرور ChatGPT | رمز المصادقة الثنائية.\nالحصول على رمز المصادقة عبر 2fa.live.\nبلا ضمان للاشتراك. ضمان ساعة واحدة فقط لكلمة المرور غير الصحيحة أو خطأ رمز المصادقة.\nيطلب المورد من العميل تغيير كلمة المرور والمصادقة الثنائية والبريد الإلكتروني فورًا.",
+        "en": "The account will have the following format:\nEmail | ChatGPT  Password | 2Fa Code\nGet 2fa code at 2fa.live\n\nNO WARRANTY \n1-Hour Warranty: Incorrect Password / 2FA Code Error.\nRequire customers to change password, 2FA and email immediately"
+      },
+      "source_usd": "6",
+      "source_stock": 0,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": null
+    },
+    {
+      "id": "pd_05",
+      "category": "chatgpt",
+      "name": {
+        "ar": "GPT API CODEX — 500 مليون توكن — 6 أيام",
+        "en": "GPT API 500M tokens CODEX  · 6D"
+      },
+      "description": {
+        "ar": "واجهة API لـCODEX — 100 مليون توكن — 3 أيام.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وCodex وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: 3 أيام.",
+        "en": "API CODEX - 100M Token - 3d\nCompatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\nValidity: 3 Days"
+      },
+      "source_usd": "19.7",
+      "source_stock": 1,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt_api.jpg",
+      "review_required": {
+        "ar": "عنوان المورد يذكر 6 أيام، والوصف يذكر 3 أيام و100 مليون توكن بدل 500 مليون. يلزم تأكيد التفاصيل قبل الطلب.",
+        "en": "Supplier title says 6 days, but description says 3 days and 100M instead of 500M tokens. Details must be confirmed before ordering."
+      }
+    },
+    {
+      "id": "pd_06",
+      "category": "chatgpt",
+      "name": {
+        "ar": "GPT API CODEX — 100 مليون توكن — 3 أيام",
+        "en": "GPT API 100M tokens CODEX  · 3D"
+      },
+      "description": {
+        "ar": "واجهة API لـCODEX — 100 مليون توكن — 3 أيام.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وCodex وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: 3 أيام.",
+        "en": "🗝️ API CODEX - 100M Token - 3d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 3 Days"
+      },
+      "source_usd": "4.8",
+      "source_stock": 6,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt_api.jpg"
+    },
+    {
+      "id": "pd_07",
+      "category": "chatgpt",
+      "name": {
+        "ar": "GPT API CODEX — 50 مليون توكن — يومان",
+        "en": "GPT API 50M tokens CODEX  · 2D"
+      },
+      "description": {
+        "ar": "واجهة API لـCODEX — 50 مليون توكن — يومين.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وCodex وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: يومين.",
+        "en": "🗝️ API CODEX - 50M Token - 2d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 2Days"
+      },
+      "source_usd": "2.9",
+      "source_stock": 12,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt_api.jpg"
+    },
+    {
+      "id": "pd_08",
+      "category": "chatgpt",
+      "name": {
+        "ar": "GPT API CODEX — 10 ملايين توكن — يوم",
+        "en": "GPT API 10M tokens CODEX  · 1D"
+      },
+      "description": {
+        "ar": "واجهة API لـCODEX — 10 مليون توكن — يوم واحد.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وCodex وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: يوم واحد.",
+        "en": "🗝️ API CODEX - 10M Token - 1d\n⚡️ Compatible with all tools & IDEs: 9router, Codex, Cursor, VS Code, etc.\n⏳ Validity: 1 Day"
+      },
+      "source_usd": "1.2",
+      "source_stock": 63,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/chatgpt_api.jpg"
+    },
+    {
+      "id": "pd_09",
+      "category": "claude",
+      "name": {
+        "ar": "Claude Pro — تجديد رسمي شهر",
+        "en": "Claude Pro 1 Month official recharge (Sub-Warranty)"
+      },
+      "description": {
+        "ar": "رمز تفعيل رسمي (CDK) لاشتراك Claude Pro لمدة شهر على حساب العميل الشخصي.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة. لا يلزم وجود بطاقة ائتمان.\nيجب أن يكون الحساب على الخطة المجانية وألا توجد فواتير غير مدفوعة. إذا كان لديك اشتراك نشط، انتظر انتهاءه قبل التجديد.\nضمان 30 يومًا للاشتراك فقط؛ حظر الحساب غير مشمول.\n\nهام: اقرأ وتحقق قبل الطلب. لا يُرد المبلغ إذا فشل التجديد لأي سبب من الحالات التالية:\n1. الاشتراك السابق لم ينتهِ: إذا فُعّل عبر iOS أو Android أو بطاقة ائتمان، تحقق من سجل الفواتير وعدم وجود اشتراك نشط.\n2. وجود رصيد مستحق أو عمليات استرداد في سجل الفواتير: قد يذهب مبلغ التجديد لسداد الرصيد بدل تفعيل الاشتراك، ولا يُرد المبلغ.\n3. حظر صامت لمعرف المؤسسة: قد يعمل تسجيل الدخول بصورة طبيعية رغم حظر المؤسسة. يفشل التجديد في هذه الحالة ولا يُرد المبلغ.\nإذا انطبقت إحدى هذه الحالات وفشل الدفع بعد الطلب، لا يُرد المبلغ. تحقق بعناية قبل الدفع.",
+        "en": "This is an official CDK for Claude pro subscription (1 month) on client's personal account. \nIt can be used for renewal or first-time activation. \nNo credit card required.\n❗️❗️❗️ ⚠️  You MUST be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge.\n30 Days warranty for the subscription only, account bans are not under warranty.\n⚠️ Important: Please Read Before Ordering · Must Read · Must Read\n\nThe following situations will result in failed payments. Please read carefully and verify before placing your order!\nIf your subscription fails to process due to the following reasons, refunds will not be issued!\n❌ Situation 1: [Subscription Not Expired] Cannot Recharge\nFor example, if you previously recharged via iOS / Android / Credit Card, do not place a new order if your subscription is not yet expired.\nPlease first confirm in your billing history: Only place an order if you do not have an active subscription!\ni.e if your Android subscription is not yet expired, you cannot recharge.\n❌ Situation 2: [Outstanding Balance] or [Refunds] in your Billing History\nAn outstanding balance or refunds in your account will cause the recharged funds to be used to offset the balance, resulting in the subscription not being processed and no refunds will be issued!\n❌ Situation 3: [Organization ID Silently Banned] Cannot Recharge\nSome accounts may appear to be able to log in normally, but the organization ID has actually been banned.\nThis is a case of silent banning, which means recharging will not be successful, and refunds will not be issued!\nIn this case, recharging will not be successful, and refunds will not be issued!\n❗️ If any of the above situations apply, and your payment fails after placing the order, refunds will not be issued. Please be sure to check carefully before making a payment! ❗️"
+      },
+      "source_usd": "20.5",
+      "source_stock": 0,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": null
+    },
+    {
+      "id": "pd_10",
+      "category": "claude",
+      "name": {
+        "ar": "Claude API — 500 مليون توكن — 6 أيام",
+        "en": "Claude API 500M tokens · 6D"
+      },
+      "description": {
+        "ar": "واجهة API لـClaude — 500 مليون توكن — 6 أيام.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وClaude Dev وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: 3 أيام.",
+        "en": "API CLAUDE - 500M  Token - 6 days\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 3 Days"
+      },
+      "source_usd": "19.6",
+      "source_stock": 1,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/claude_api.jpg",
+      "review_required": {
+        "ar": "عنوان المورد يذكر 6 أيام، والوصف يذكر 3 أيام. يلزم تأكيد التفاصيل قبل الطلب.",
+        "en": "Supplier title says 6 days, but description says 3 days. Details must be confirmed before ordering."
+      }
+    },
+    {
+      "id": "pd_11",
+      "category": "claude",
+      "name": {
+        "ar": "Claude API — 100 مليون توكن — 3 أيام",
+        "en": "Claude  API 100M tokens · 3D"
+      },
+      "description": {
+        "ar": "واجهة API لـClaude — 100 مليون توكن — 3 أيام.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وClaude Dev وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: 3 أيام.",
+        "en": "API CLAUDE - 100M  Token - 3 days\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 3 Days"
+      },
+      "source_usd": "5.42",
+      "source_stock": 5,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/claude_api.jpg"
+    },
+    {
+      "id": "pd_12",
+      "category": "claude",
+      "name": {
+        "ar": "Claude API — 50 مليون توكن — يومان",
+        "en": "Claude API 50M tokens · 2D"
+      },
+      "description": {
+        "ar": "واجهة API لـClaude — 50 مليون توكن — يومين.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وClaude Dev وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: يومين.",
+        "en": "API CLAUDE - 50M Token - 2 days\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 2 Days"
+      },
+      "source_usd": "2.88",
+      "source_stock": 11,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/claude_api.jpg"
+    },
+    {
+      "id": "pd_13",
+      "category": "claude",
+      "name": {
+        "ar": "Claude API — 10 ملايين توكن — يوم",
+        "en": "Claude  API 10M tokens · 1D FW"
+      },
+      "description": {
+        "ar": "واجهة API لـClaude — 10 مليون توكن — يوم واحد.\nمتوافقة مع الأدوات وبيئات التطوير مثل: 9router وClaude Dev وCursor وVS Code وغيرها.\nالصلاحية الواردة في وصف المورد: يوم واحد.",
+        "en": "API CLAUDE - 10M Token - 1 day\nCompatible with all tools & IDEs: 9router, Claude Dev, Cursor, VS Code, etc.\nValidity: 1 Day"
+      },
+      "source_usd": "1.2",
+      "source_stock": 58,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/claude_api.jpg"
+    },
+    {
+      "id": "pd_14",
+      "category": "capcut",
+      "name": {
+        "ar": "CapCut Pro — حساب فردي 6 أشهر",
+        "en": "CAPCUT PRO 6 M INDIVIDUAL"
+      },
+      "description": {
+        "ar": "حساب فردي لمدة 6 أشهر.\nضمان 3 أشهر.\nيصف المورد الحساب بأنه مستقر جدًا.",
+        "en": "6 Months Individual Account\n3M Warranty \nVery very stable account."
+      },
+      "source_usd": "11",
+      "source_stock": 19,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [
+        {
+          "min_quantity": 5,
+          "source_usd": "10.5"
+        }
+      ],
+      "image": null
+    },
+    {
+      "id": "pd_15",
+      "category": "capcut",
+      "name": {
+        "ar": "CapCut Pro — شهر و1600 رصيد",
+        "en": "CAPCUT PRO 1M 1600 CREDITS"
+      },
+      "description": {
+        "ar": "CapCut Pro لمدة شهر مع 1600 رصيد.\nضمان كامل.",
+        "en": "CAPCUT PRO 1Month 1,600 CREDITS\nFull Warranty"
+      },
+      "source_usd": "2.15",
+      "source_stock": 10,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": null
+    },
+    {
+      "id": "pd_16",
+      "category": "capcut",
+      "name": {
+        "ar": "CapCut Pro — شهر بضمان كامل",
+        "en": "Capcut Pro 1 Month FW"
+      },
+      "description": {
+        "ar": "حساب Pro Team خاص لمدة 30 يومًا كاملة.\nجهازان كحد أقصى مع ضمان كامل.\nحساب ثابت لمدة 30 يومًا، دون تجديد كل 7 أيام.\nسجّل الدخول أولًا إلى تطبيق الجوال، ثم إلى تطبيق الكمبيوتر عبر رمز QR؛ لا تستخدم نسخة الويب.",
+        "en": "-Full 30 days private Pro Team account .\n-Maximum 2 devices , with full warranty .\n-Stable Account full 30 days (no 7days renew ).\n-Login to mobile App first next to laptop (desktop App no web) via QR code ."
+      },
+      "source_usd": "1.49",
+      "source_stock": 116,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": null
+    },
+    {
+      "id": "pd_17",
+      "category": "capcut",
+      "name": {
+        "ar": "CapCut — 7 أيام بضمان كامل",
+        "en": "Capcut 7D FW"
+      },
+      "description": {
+        "ar": "حساب CapCut لمدة 7 أيام.\nجهازان كحد أقصى، مع ضمان كامل.\nيتيح المورد طلبات مسبقة عند نفاد المخزون، ويسلّمها حسب ترتيب الدفع عند عودة التوفر. الطلب المسبق غير مفعّل في متجرنا.",
+        "en": "Capcut 7d accounts\nMaximum 2 devices , with full warranty  \nPreorders are active"
+      },
+      "source_usd": "0.2",
+      "source_stock": 19,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [
+        {
+          "min_quantity": 10,
+          "source_usd": "0.18"
+        },
+        {
+          "min_quantity": 20,
+          "source_usd": "0.16"
+        }
+      ],
+      "image": null
+    },
+    {
+      "id": "pd_18",
+      "category": "grok",
+      "name": {
+        "ar": "SuperGrok — رمز iOS رسمي 3 أشهر",
+        "en": "SuperGrok 3-months official IOS CDK"
+      },
+      "description": {
+        "ar": "اشتراك SuperGrok لمدة 3 أشهر.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة.\nالسعر الأصلي المذكور لدى المورد: 90 دولار.\n\nالتسليم يدوي: تواصل مع الدعم قبل الطلب للتحقق من التوفر.\nإذا كان بالحساب اشتراك نشط، لا يمكن لرمز SuperGrok تمديده أو إعادة ضبطه.\nيجب أن يكون الحساب على الخطة المجانية دون فواتير غير مدفوعة. انتظر انتهاء الاشتراك النشط قبل التجديد.",
+        "en": "SuperGrok subscription for 3 months.\nIt can be used for renewal or first-time activation. \n90$ original price.\n\nManual delivery Please DM me before placing an order for this, to check if I'm online or not.\nNote: If your account currently has an active subscription, SuperGrok CDK cannot extend or reset the current active subscription.\n❗️❗️❗️ ⚠️  You MUST be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge."
+      },
+      "source_usd": "55",
+      "source_stock": 25,
+      "source_checked_at": "2026-09-16T00:01:00Z",
+      "promotions": [],
+      "image": null,
+      "manual_delivery": true
+    },
+    {
+      "id": "pd_19",
+      "category": "grok",
+      "name": {
+        "ar": "Grok وX Premium+ — رمز تفعيل شهر",
+        "en": "Grok and X Premium+ 1 Month CDK"
+      },
+      "description": {
+        "ar": "اشتراك X Premium+ الرسمي لمدة شهر مع شارة توثيق والوصول إلى SuperGrok.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة.\nالسعر الأصلي المذكور لدى المورد: 40 دولار.\n\nالتسليم يدوي: تواصل مع الدعم قبل الطلب للتحقق من التوفر.\nإذا كان بالحساب اشتراك نشط، لا يمكن لرمز SuperGrok تمديده أو إعادة ضبطه.\nيجب أن يكون الحساب على الخطة المجانية دون فواتير غير مدفوعة. انتظر انتهاء الاشتراك النشط قبل التجديد.",
+        "en": "1 Month of X premium+ official subscription with verification badge and includes SuperGrok access\nIt can be used for renewal or first-time activation. \n40$ original price.\n\nManual delivery Please DM me before placing an order for this, to check if I'm online or not.\nNote: If your account currently has an active subscription, SuperGrok CDK cannot extend or reset the current active subscription.\n❗️❗️❗️ ⚠️  You MUST be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge."
+      },
+      "source_usd": "28.99",
+      "source_stock": 20,
+      "source_checked_at": "2026-09-16T00:01:00Z",
+      "promotions": [],
+      "image": null,
+      "manual_delivery": true
+    },
+    {
+      "id": "pd_20",
+      "category": "grok",
+      "name": {
+        "ar": "SuperGrok Heavy — رمز تفعيل شهر",
+        "en": "Grok Super Heavy 1 Month CDK"
+      },
+      "description": {
+        "ar": "اشتراك SuperGrok HEAVY لمدة شهر.\nيمكن استخدامه للتجديد أو التفعيل لأول مرة.\nالسعر الأصلي المذكور لدى المورد: 300 دولار.\n\nالتسليم يدوي: تواصل مع الدعم قبل الطلب للتحقق من التوفر.\nإذا كان بالحساب اشتراك نشط، لا يمكن لرمز SuperGrok تمديده أو إعادة ضبطه.\nيجب أن يكون الحساب على الخطة المجانية دون فواتير غير مدفوعة. انتظر انتهاء الاشتراك النشط قبل التجديد.",
+        "en": "SuperGrok HEAVY subscription 1 month.\nIt can be used for renewal or first-time activation. \n300$ original price.\n\nManual delivery Please DM me before placing an order for this, to check if I'm online or not.\nNote: If your account currently has an active subscription, SuperGrok CDK cannot extend or reset the current active subscription.\n❗️❗️❗️ ⚠️  You MUST be on free tier and do not have any unpaid bills, if you have active subscription, please wait for it to end before recharge."
+      },
+      "source_usd": "149",
+      "source_stock": 20,
+      "source_checked_at": "2026-09-16T00:01:00Z",
+      "promotions": [],
+      "image": null,
+      "manual_delivery": true
+    },
+    {
+      "id": "pd_21",
+      "category": "grok",
+      "name": {
+        "ar": "SuperGrok — حساب 7 أيام",
+        "en": "Grok — Super Grok 7 Days"
+      },
+      "description": {
+        "ar": "حساب SuperGrok لمدة 7 أيام، مع ضمان 5 أيام.",
+        "en": "SuperGrok Account 7 Day  5D warranty"
+      },
+      "source_usd": "4",
+      "source_stock": 16,
+      "source_checked_at": "2026-09-16T00:01:00Z",
+      "promotions": [],
+      "image": null
+    },
+    {
+      "id": "pd_22",
+      "category": "gemini",
+      "name": {
+        "ar": "Gemini — رابط اشتراك 18 شهرًا",
+        "en": "Gemini Links 18M"
+      },
+      "description": {
+        "ar": "خطة لمدة 18 شهرًا.\nتشمل مساحة سحابية 5 تيرابايت.\nيمكن إضافة 5 مستخدمين. لا تحتاج بطاقة.\nبلا ضمان للاشتراك.\nبحسب المورد: تعمل في أي دولة دون تحقق، واشتراك Gemini AI Pro أصلي يُفعّل على بريد Gmail الخاص بك، وحساب عائلي كامل وليس دعوة.\nالمورد يذكر أيضًا ضمان احتفاظ لمدة 12 ساعة (12h hold warranty).\nلطلب الاستبدال، أرسل للدعم رقم الطلب والرابط؛ لا يعالج المورد الاستبدال دونهما.",
+        "en": "18 Months Plan\n5TB cloud storage included\nYou can add 5 users\nNo card required\nNon Warranty\nWorks in any country, no verification required\n100% genuine Gemini AI Pro subscription activated on your own Gmail\nFull family account, not an invite\n⚠️  12h  hold warranty\nIn case of any replacement, please DM Support with order ID and Link,  without this replacements won't be processed."
+      },
+      "source_usd": "1.30",
+      "source_stock": 13,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [],
+      "image": "assets/pandora/gemini.jpg"
+    },
+    {
+      "id": "pd_23",
+      "category": "canva",
+      "name": {
+        "ar": "Canva Education Pro — لوحة إدارة 500 مقعد",
+        "en": "Canva Edu  Pro Admin Panel 500 seats"
+      },
+      "description": {
+        "ar": "لوحة Canva Education تسع حتى 500 عضو، صالحة لمدة 3 سنوات. يمكنك دعوة المستخدمين وإدارتهم من لوحة واحدة.\n✓ صلاحية 3 سنوات.\n✓ حتى 500 مقعد.\n✓ إدارة سهلة للأعضاء.\n✓ الوصول إلى مزايا Canva المدفوعة.\nبلا ضمان — ضمان تسجيل الدخول فقط.",
+        "en": "Get access to a Canva Education panel with space for up to 500 members, valid for 3 years. Easily invite and manage users from one panel.\n\n✔ Valid for 3 years\n✔ Up to 500 seats\n✔ Easy member management\n✔ Access to premium Canva features\n⚠️ NO WARRANTY — LOGIN WARRANTY ONLY"
+      },
+      "source_usd": "5.49",
+      "source_stock": 22,
+      "source_checked_at": "2026-09-16T22:21:00Z",
+      "promotions": [
+        {
+          "min_quantity": 5,
+          "source_usd": "4.99"
+        }
+      ],
+      "image": "assets/pandora/canva.jpg"
+    }
+  ]
+}
