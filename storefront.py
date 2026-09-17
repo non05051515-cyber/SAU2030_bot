@@ -58,10 +58,12 @@ def esc(value):
     return html.escape(str(value))
 
 
-def btn(text, action, icon=None):
+def btn(text, action, icon=None, style=None):
     result = {'text': text, 'callback_data': action}
     if icon and G['CONFIG'].get('custom_icons_enabled'):
         result['icon_custom_emoji_id'] = str(icon)
+    if style:
+        result['style'] = style
     return result
 
 
@@ -252,8 +254,10 @@ def category(api, cid, pid):
     if choices:
         rows = []
         for v in choices:
-            status = '⏸ ' if v.get('review_required') else ('🚫 ' if v['source_stock'] == 0 else '')
-            rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']), 'item:' + v['id'], p.get('custom_emoji_id'))])
+            sold_out = v['source_stock'] == 0
+            status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
+            rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
+                             'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
