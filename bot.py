@@ -117,7 +117,13 @@ MENU={'🚀 ابدأ':'start','🚀 Start':'start','🛍 المنتجات':'prod
 def main():
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
- a=API(t);offset=0;print('Bot running...')
+ a=API(t)
+ # Show Telegram's native command-menu button beside the message field.
+ a.call('setMyCommands',commands=[
+  {'command':'start','description':'Start | بدء'},
+  {'command':'products','description':'Products | المنتجات'}])
+ a.call('setChatMenuButton',menu_button={'type':'commands'})
+ offset=0;print('Bot running...')
  while True:
   try:
    for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
