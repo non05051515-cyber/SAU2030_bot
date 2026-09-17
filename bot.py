@@ -118,7 +118,7 @@ def main():
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
  a=API(t)
- a.call('setMyCommands',commands=[{'command':'start','description':'Start | بدء'},{'command':'products','description':'Products | المنتجات'}])
+ a.call('setMyCommands',commands=[{'command':'start','description':'Start | ابدأ'},{'command':'products','description':'Products | المنتجات'},{'command':'currency','description':'Currency | العملة'},{'command':'language','description':'Language | اللغة'}])
  a.call('setChatMenuButton',menu_button={'type':'commands'})
  if 'broadcast_new_products' in globals():broadcast_new_products(a)
  offset=0;print('Bot running...')
@@ -136,6 +136,8 @@ def main():
     if handle_receipt(a,m):continue
     if txt.startswith('/start'):show_start(a,c)
     elif txt.startswith('/products'):show_products(a,c)
+    elif txt.startswith('/currency'):action(a,c,'settings:currency')
+    elif txt.startswith('/language'):action(a,c,'settings:lang')
     elif txt in MENU:action(a,c,MENU[txt])
     else:show_home(a,c)
   except KeyboardInterrupt:break
