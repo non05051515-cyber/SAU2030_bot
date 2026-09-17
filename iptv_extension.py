@@ -64,6 +64,29 @@ def category(api, cid, pid):
     s.send(api, cid, '<b>IPTV</b>\n\n' + s.tr(cid, 'اختر المنتج:', 'Choose a product:'), s.kb(rows))
 
 
+def iptv_item(api, cid, pid):
+    variant = s.VARIANTS.get(pid)
+    if not variant or pid not in IPTV_IDS:
+        return s.item(api, cid, pid)
+    sar = s.wallet_balance(cid).quantize(Decimal('0.01'))
+    usd = (sar / s.RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    text = (
+        '<b>' + s.esc(s.name(pid, cid)) + '</b>\n\n'
+        + s.tr(cid, '👛 رصيدك الموجود في المتجر:', '👛 Your store balance:') + '\n'
+        + f'<b>{sar:.2f} {s.tr(cid, "ر.س", "SAR")} / {usd:.2f} USD</b>\n\n'
+        + s.tr(cid, '💰 سعر الباقة:', '💰 Package price:') + '\n'
+        + '<b>' + s.price(cid, pid) + '</b>\n\n'
+        + s.tr(cid, '➕ للشحن تواصل مع حسابنا الأساسي: ', '➕ For top-up, contact our main account: ')
+        + s.SUPPORT
+    )
+    rows = []
+    if variant['source_stock'] > 0:
+        rows.append([s.btn(s.tr(cid, '🛒 طلب الباقة', '🛒 Order package'), 'buy:' + pid)])
+    rows.append([s.btn(s.tr(cid, '💬 تواصل للشحن', '💬 Contact for top-up'), 'support')])
+    rows.append(s.nav(cid, 'product:iptv'))
+    return s.send(api, cid, text, s.kb(rows))
+
+
 def activation_menu(api, cid):
     def device_btn(key):
         ar, en = DEVICE_LABELS[key]
@@ -144,6 +167,8 @@ def handle_admin_icon(api, message):
 def action(api, cid, value):
     if value == 'iptvactivation':
         return activation_menu(api, cid)
+    if value.startswith('item:') and value.split(':', 1)[1] in IPTV_IDS:
+        return iptv_item(api, cid, value.split(':', 1)[1])
     if value == 'admin:iptvicons':
         return iptv_icon_menu(api, cid)
     if value.startswith('iptvact:'):
