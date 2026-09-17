@@ -423,6 +423,23 @@
         }
       ],
       "image": "assets/pandora/canva.jpg"
+    },
+    {
+      "id": "pd_24",
+      "category": "netflix",
+      "name": {
+        "ar": "Netflix Premium 4K — شهر واحد",
+        "en": "Netflix Premium 4K — 1 Month"
+      },
+      "description": {
+        "ar": "اشتراك Netflix Premium بجودة 4K لمدة شهر واحد مع ضمان كامل.\nصيغة بيانات الحساب: اسم المستخدم | كلمة المرور | الملف الشخصي | رمز التعريف.",
+        "en": "Netflix Premium 4K subscription for one month with full warranty.\nAccount format: username | password | profile | PIN."
+      },
+      "source_usd": "3.45",
+      "source_stock": 2,
+      "source_checked_at": "2026-09-17T19:34:00Z",
+      "promotions": [],
+      "image": "assets/pandora/netflix-premium-4k.png"
     }
   ]
 }

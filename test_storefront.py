@@ -80,7 +80,7 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(self.bot.PRODUCTS['gemini']['custom_emoji_id'],'5312057964494874871')
         self.assertNotIn('spotify',self.bot.PRODUCTS)
         self.assertTrue(callable(self.bot.broadcast_product))
-        self.assertEqual(len(self.s.VARIANTS),23)
+        self.assertEqual(len(self.s.VARIANTS),24)
     def test_unconfigured_payments(self):
         with patch.dict(os.environ,{},clear=True):
             self.s.payment(self.api,7,'pd_04','bank')
