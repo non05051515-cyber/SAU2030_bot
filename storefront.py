@@ -37,6 +37,8 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS category_icons (pid TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
     return conn
 
 
@@ -216,6 +218,16 @@ def customer_link(cid):
     return f'<a href="tg://user?id={cid}">{cid}</a>'
 
 
+def apply_icon_overrides():
+    with db() as conn:
+        rows = conn.execute('SELECT pid,custom_emoji_id FROM category_icons').fetchall()
+    for pid, emoji_id in rows:
+        if pid in G.get('PRODUCTS', {}):
+            G['PRODUCTS'][pid]['custom_emoji_id'] = emoji_id
+    if rows:
+        G['CONFIG']['custom_icons_enabled'] = True
+
+
 def admin_panel(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
@@ -226,6 +238,7 @@ def admin_panel(api, cid):
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
 
 
@@ -255,6 +268,53 @@ def admin_activity(api, cid):
         label = 'فتح المنتج' if action_name == 'item' else 'فتح القسم'
         parts.append(f'\n{label}: <b>{esc(name(pid, cid))}</b>\nالعميل: {customer_link(user_id)} • {esc(created)}')
     send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_icons(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    buttons = []
+    for pid, product in G['PRODUCTS'].items():
+        mark = '✅ ' if product.get('custom_emoji_id') else ''
+        buttons.append(btn(mark + product['name'], 'seticon:' + pid, product.get('custom_emoji_id')))
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم، ثم أرسل الأيقونة للبوت في رسالة منفصلة.',
+         kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def begin_icon_setup(api, cid, pid):
+    if cid != G['ADMIN_ID'] or pid not in G['PRODUCTS']:
+        return home(api, cid)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'icon', pid))
+    send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بقسم <b>{esc(G["PRODUCTS"][pid]["name"])}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
+         kb([[btn('❌ إلغاء', 'cancelicon')]]))
+
+
+def handle_admin_icon(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        state = conn.execute('SELECT action,value FROM admin_state WHERE cid=?', (cid,)).fetchone()
+    if not state or state[0] != 'icon':
+        return False
+    entities = list(message.get('entities', [])) + list(message.get('caption_entities', []))
+    emoji = next((entity.get('custom_emoji_id') for entity in entities
+                  if entity.get('type') == 'custom_emoji' and entity.get('custom_emoji_id')), None)
+    if not emoji:
+        send(api, cid, 'لم أجد أيقونة مخصصة. أرسل الأيقونة المتحركة نفسها، وليس صورة أو ملصقًا.',
+             kb([[btn('❌ إلغاء', 'cancelicon')]]))
+        return True
+    pid = state[1]
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)', (pid, str(emoji)))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    G['PRODUCTS'][pid]['custom_emoji_id'] = str(emoji)
+    G['CONFIG']['custom_icons_enabled'] = True
+    send(api, cid, f'✅ تم حفظ الأيقونة لقسم <b>{esc(G["PRODUCTS"][pid]["name"])}</b>.',
+         kb([[btn('➕ إضافة أيقونة أخرى', 'admin:icons')], [btn('🛍 معاينة المنتجات', 'products')]]))
+    return True
 
 
 def broadcast_new_products(api):
@@ -618,6 +678,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_icon(api, message):
+        return True
     menu_actions = G.get('MENU_ACTIONS', G.get('MENU', {}))
     if message.get('text', '').startswith('/') or message.get('text') in menu_actions:
         with db() as conn:
@@ -705,7 +767,15 @@ def action(api, cid, value):
     elif prefix == 'admin':
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
+        elif arg == 'icons': admin_icons(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'seticon':
+        begin_icon_setup(api, cid, arg)
+    elif prefix == 'cancelicon':
+        if cid == G['ADMIN_ID']:
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_icons(api, cid)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -771,6 +841,7 @@ def action(api, cid, value):
 def install(namespace):
     global G
     G = namespace
+    apply_icon_overrides()
     namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
                       'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
