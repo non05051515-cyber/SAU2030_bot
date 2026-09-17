@@ -3,6 +3,7 @@ import html
 import json
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 import urllib.parse
 import urllib.request
 import uuid
@@ -31,6 +32,8 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS wallets (cid INTEGER PRIMARY KEY, balance_sar TEXT NOT NULL DEFAULT "0")')
     conn.execute('CREATE TABLE IF NOT EXISTS wallet_topups (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, amount_sar TEXT NOT NULL, method TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS crypto_orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, amount_usd TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
     return conn
 
 
@@ -87,9 +90,12 @@ def nav(cid, parent='products'):
 
 
 def menu(cid=0):
-    return {'keyboard': [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '💬 الدعم', '💬 Support')}],
+    rows = [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '💬 الدعم', '💬 Support')}],
                          [{'text': tr(cid, '👛 المحفظة', '👛 Wallet')}, {'text': '🔗 API'}, {'text': tr(cid, '🛡 الضمان', '🛡 Warranty')}],
-                         [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}]],
+                         [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}]]
+    if cid == G.get('ADMIN_ID'):
+        rows.append([{'text': '🧾 لوحة الطلبات'}])
+    return {'keyboard': rows,
             'resize_keyboard': True, 'is_persistent': True,
             'input_field_placeholder': tr(cid, 'اختر من القائمة', 'Choose from the menu')}
 
@@ -180,6 +186,72 @@ def crypto_paid(invoice_id):
     result = crypto_call('getInvoices', invoice_ids=str(invoice_id))
     items = result.get('items', []) if isinstance(result, dict) else []
     return bool(items and items[0].get('status') == 'paid')
+
+
+def now_saudi():
+    return datetime.now(timezone(timedelta(hours=3))).strftime('%Y-%m-%d %H:%M')
+
+
+def log_activity(cid, action_name, pid):
+    if cid == G.get('ADMIN_ID'):
+        return
+    with db() as conn:
+        conn.execute('INSERT INTO activity(cid,action,pid,created_at) VALUES (?,?,?,?)',
+                     (cid, action_name, pid, now_saudi()))
+        conn.execute('DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT 500)')
+
+
+def add_order(cid, pid, method, status):
+    order_id = uuid.uuid4().hex[:10].upper()
+    with db() as conn:
+        conn.execute('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)',
+                     (order_id, cid, pid, method, str(amount(pid, 'USD')), str(amount(pid, 'SAR')), status, now_saudi()))
+    return order_id
+
+
+def customer_link(cid):
+    return f'<a href="tg://user?id={cid}">{cid}</a>'
+
+
+def admin_panel(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
+        review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
+        activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
+    text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
+    send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
+                             [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('🏠 الرئيسية', 'home')]]))
+
+
+def admin_orders(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        rows = conn.execute('SELECT id,cid,pid,method,usd,sar,status,created_at FROM orders ORDER BY rowid DESC LIMIT 15').fetchall()
+    if not rows:
+        return send(api, cid, '📦 لا توجد طلبات مسجلة حتى الآن.', kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
+    status_names = {'paid': '✅ مدفوع', 'review': '⏳ مراجعة', 'rejected': '❌ مرفوض'}
+    parts = ['📦 <b>آخر الطلبات</b>']
+    for oid, user_id, pid, method, usd, sar, status, created in rows:
+        parts.append(f'\n<b>#{esc(oid)}</b> • {status_names.get(status, esc(status))}\n{esc(name(pid, cid))}\n{esc(sar)} SAR / {esc(usd)} USD • {esc(method)}\nالعميل: {customer_link(user_id)} • {esc(created)}')
+    send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_activity(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        rows = conn.execute('SELECT cid,action,pid,created_at FROM activity ORDER BY id DESC LIMIT 20').fetchall()
+    if not rows:
+        return send(api, cid, '👀 لا يوجد نشاط مسجل حتى الآن.', kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
+    parts = ['👀 <b>آخر اختيارات العملاء</b>']
+    for user_id, action_name, pid, created in rows:
+        label = 'فتح المنتج' if action_name == 'item' else 'فتح القسم'
+        parts.append(f'\n{label}: <b>{esc(name(pid, cid))}</b>\nالعميل: {customer_link(user_id)} • {esc(created)}')
+    send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def name(pid, cid=0):
@@ -454,7 +526,8 @@ def pay_with_wallet(api, cid, pid):
              f'\n\n{tr(cid, "المطلوب", "Required")}: {cost:.2f} SAR\n{tr(cid, "الرصيد", "Balance")}: {wallet_balance(cid):.2f} SAR',
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
-    send(api, G['ADMIN_ID'], '🛒 <b>طلب مدفوع من المحفظة</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
+    order_id = add_order(cid, pid, 'wallet', 'paid')
+    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -488,7 +561,8 @@ def check_crypto_order(api, cid, order_id):
     with db() as conn:
         changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
     if changed:
-        send(api, G['ADMIN_ID'], '💠 <b>طلب Crypto Pay مدفوع</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
+        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid')
+        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
@@ -543,6 +617,7 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
+    add_order(cid, pid, method, 'review')
     with db() as conn:
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
     send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
@@ -578,11 +653,18 @@ def action(api, cid, value):
     elif prefix == 'products':
         products(api, cid)
     elif prefix == 'product':
+        log_activity(cid, 'category', arg)
         category(api, cid, arg)
     elif prefix in ('item', 'claude'):
+        log_activity(cid, 'item', arg)
         item(api, cid, arg)
     elif value in LEGACY:
+        log_activity(cid, 'item', LEGACY[value])
         item(api, cid, LEGACY[value])
+    elif prefix == 'admin':
+        if arg == 'orders': admin_orders(api, cid)
+        elif arg == 'activity': admin_activity(api, cid)
+        else: admin_panel(api, cid)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -657,7 +739,8 @@ def install(namespace):
                          '👛 المحفظة': 'wallet', '👛 Wallet': 'wallet', '🔗 API': 'api',
                          '🛡 الضمان': 'warranty', '🛡 Warranty': 'warranty',
                          '🌐 اللغة': 'settings:lang', '🌐 Language': 'settings:lang',
-                         '🌐 اللغة / Language': 'settings:lang', '💱 العملة / Currency': 'settings:currency'})
+                         '🌐 اللغة / Language': 'settings:lang', '💱 العملة / Currency': 'settings:currency',
+                         '🧾 لوحة الطلبات': 'admin'})
     # Accept reply buttons sent by older versions where the icon followed the label.
     menu_actions.update({'ابدأ 🚀': 'start', 'المنتجات 🛍': 'products', 'الدعم 💬': 'support',
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
