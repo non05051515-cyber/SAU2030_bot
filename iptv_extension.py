@@ -149,6 +149,23 @@ def action(api, cid, value):
     if value.startswith('iptvact:'):
         device = value.split(':', 1)[1]
         ar, en = DEVICE_LABELS.get(device, ('طريقة التفعيل', 'Activation Method'))
+        if device == 'computer':
+            text = s.tr(cid,
+                '<b>💻 لمستخدمي نظام ويندوز 🎉</b>\n\n'
+                'بإمكانكم استخدامه الآن على أجهزة الكمبيوتر واللابتوب.\n\n'
+                '📥 حمّل تطبيق <b>Next+</b> للويندوز من الزر بالأسفل.\n\n'
+                '🔢 <b>رقم الخادم / السيرفر:</b> <code>55555</code>\n\n'
+                'كل اللي عليك تحميل التطبيق، ثم إدخال بيانات الاشتراك ورقم الخادم، وبإذن الله يشتغل معك بشكل طبيعي. 🌹',
+                '<b>💻 Windows Users 🎉</b>\n\n'
+                'You can use the service on Windows computers and laptops.\n\n'
+                '📥 Download <b>Next+</b> for Windows using the button below.\n\n'
+                '🔢 <b>Server number:</b> <code>55555</code>\n\n'
+                'Download the app, then enter your subscription details and the server number.')
+            return s.send(api, cid, text, s.kb([
+                [{'text': s.tr(cid, '📥 تحميل Next+ للويندوز', '📥 Download Next+ for Windows'),
+                  'url': 'https://apks.splayer.in/windows/next.exe'}],
+                [s.btn(s.tr(cid, '↩️ رجوع لطرق التفعيل', '↩️ Back to Activation Methods'), 'iptvactivation')]
+            ]))
         if device == 'ios':
             text = s.tr(cid,
                 '<b>عبر أجهزة Apple — آيفون / آيباد</b>\n\n'
