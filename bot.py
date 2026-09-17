@@ -113,7 +113,7 @@ def action(a,c,x):
  elif x=='wallet':send(a,c,tr(c,'👛 المحفظة غير مفعّلة حاليًا.','👛 Wallet is currently unavailable.'),keyboard(c))
  elif x=='api':send(a,c,tr(c,'🔗 سيتم إضافة إعدادات API لاحقاً.','🔗 API settings will be added later.'),keyboard(c))
  elif x=='warranty':send(a,c,tr(c,'🛡 سيتم إضافة سياسة الضمان هنا.','🛡 Warranty policy will be added here.'),keyboard(c))
-MENU={'🚀 ابدأ':'start','🚀 Start':'start','🛍 المنتجات':'products','🛍 Products':'products','💬 الدعم':'support','💬 Support':'support','👛 المحفظة':'wallet','👛 Wallet':'wallet','🔗 API':'api','🛡 الضمان':'warranty','🛡 Warranty':'warranty','🌐 اللغة':'language','🌐 Language':'language'}
+MENU={'💎 الإحالات':'referrals','💎 Referrals':'referrals','🚀 ابدأ':'start','🚀 Start':'start','🛍 المنتجات':'products','🛍 Products':'products','💬 الدعم':'support','💬 Support':'support','👛 المحفظة':'wallet','👛 Wallet':'wallet','🔗 API':'api','🛡 الضمان':'warranty','🛡 Warranty':'warranty','🌐 اللغة':'language','🌐 Language':'language'}
 def main():
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
@@ -134,7 +134,10 @@ def main():
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
     if handle_receipt(a,m):continue
-    if txt.startswith('/start'):show_start(a,c)
+    if txt.startswith('/start'):
+     parts=txt.split(maxsplit=1)
+     if len(parts)>1 and parts[1].startswith('ref_') and 'register_referral' in globals():register_referral(c,parts[1][4:])
+     show_start(a,c)
     elif txt.startswith('/products'):show_products(a,c)
     elif txt.startswith('/currency'):action(a,c,'settings:currency')
     elif txt.startswith('/language'):action(a,c,'settings:lang')
