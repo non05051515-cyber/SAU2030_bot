@@ -123,6 +123,7 @@ def main():
   {'command':'start','description':'Start | بدء'},
   {'command':'products','description':'Products | المنتجات'}])
  a.call('setChatMenuButton',menu_button={'type':'commands'})
+ if 'broadcast_new_products' in globals():broadcast_new_products(a)
  offset=0;print('Bot running...')
  while True:
   try:

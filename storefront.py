@@ -3,6 +3,7 @@ import html
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import urllib.request
@@ -17,6 +18,7 @@ RATE = Decimal(CATALOG['sar_per_usd'])
 MARKUP = Decimal(CATALOG['markup_usd'])
 DB_PATH = Path(os.getenv('STORE_STATE_PATH', '/data/storefront.sqlite3'))
 LEGACY_LANG_PATH = Path('/data/languages.json')
+USERS_PATH = Path(os.getenv('STORE_USERS_PATH', '/data/users.json'))
 LEGACY = {'chatgpt_email': 'pd_02', 'chatgpt_private': 'pd_04',
           'claude_pro': 'pd_09', 'claude_api_500m': 'pd_10',
           'claude_api_100m': 'pd_11', 'claude_api_50m': 'pd_12', 'claude_api_10m': 'pd_13'}
@@ -34,6 +36,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS crypto_orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, amount_usd TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
     return conn
 
 
@@ -252,6 +255,44 @@ def admin_activity(api, cid):
         label = 'فتح المنتج' if action_name == 'item' else 'فتح القسم'
         parts.append(f'\n{label}: <b>{esc(name(pid, cid))}</b>\nالعميل: {customer_link(user_id)} • {esc(created)}')
     send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def broadcast_new_products(api):
+    """Broadcast each newly-added catalogue item once, across deploys."""
+    with db() as conn:
+        known = {row[0] for row in conn.execute('SELECT pid FROM announcements').fetchall()}
+        if not known:
+            # First migration: treat the existing catalogue as the baseline, except
+            # items explicitly flagged for their first announcement.
+            baseline = [pid for pid, variant in VARIANTS.items() if not variant.get('announce')]
+            conn.executemany('INSERT OR IGNORE INTO announcements(pid,announced_at) VALUES (?,?)',
+                             [(pid, now_saudi()) for pid in baseline])
+            known.update(baseline)
+    pending = [variant for pid, variant in VARIANTS.items() if pid not in known]
+    if not pending:
+        return
+    try:
+        users = [int(cid) for cid in json.loads(USERS_PATH.read_text(encoding='utf-8'))]
+    except Exception:
+        users = []
+    for variant in pending:
+        pid = variant['id']
+        for cid in users:
+            language = prefs(cid)[0]
+            title = variant['name'][language]
+            description = variant['description'][language]
+            stock = variant.get('source_stock', 0)
+            text = tr(cid, '🔥 <b>منتج جديد في VEXA STORE</b>', '🔥 <b>New product at VEXA STORE</b>')
+            text += f'\n\n<b>{esc(title)}</b>\n➕ {tr(cid, "تمت الإضافة", "Added")}: {stock}\n📦 {tr(cid, "الكمية الحالية", "Current stock")}: {stock}'
+            text += f'\n💵 {tr(cid, "السعر", "Price")}: {price(cid, pid, "SAR")} / {price(cid, pid, "USD")}\n\n{esc(description)}'
+            rows = [[btn(tr(cid, '🛒 اشترِ الآن', '🛒 Buy now'), 'item:' + pid, style='success')]] if stock > 0 else []
+            try:
+                send(api, cid, text, kb(rows) if rows else None)
+                time.sleep(0.04)
+            except Exception:
+                pass
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO announcements(pid,announced_at) VALUES (?,?)', (pid, now_saudi()))
 
 
 def name(pid, cid=0):
@@ -732,7 +773,8 @@ def install(namespace):
     G = namespace
     namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
-                      'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu})
+                      'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
+                      'broadcast_new_products': broadcast_new_products})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
                          '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
