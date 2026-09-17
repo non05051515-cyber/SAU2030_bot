@@ -739,14 +739,17 @@ def receipt(api, message):
     with db() as conn:
         custom = conn.execute('SELECT 1 FROM custom_topup_state WHERE cid=?', (cid,)).fetchone()
     if custom:
-        raw = (message.get('text') or '').strip().replace(',', '.').replace('
+        raw = (message.get('text') or '').strip().replace(',', '.').replace('$', '')
+        try:
+            usd_value = Decimal(raw).quantize(Decimal('0.01'))
         except Exception:
-            send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط، مثال: 75', 'Send the amount as a number only, e.g. 75'))
+            send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط، مثال: 20', 'Send the amount as a number only, e.g. 20'))
             return True
         if usd_value <= 0 or usd_value > Decimal('1333'):
             send(api, cid, tr(cid, 'اختر مبلغًا أكبر من $0 وحتى $1333.', 'Choose an amount above $0 and up to $1333.'))
             return True
-        with db() as conn: conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        with db() as conn:
+            conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
         value = (usd_value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         wallet_method(api, cid, str(value))
         return True
