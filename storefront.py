@@ -314,9 +314,16 @@ def wallet(api, cid):
 
 
 def wallet_amounts(api, cid):
-    rows = [[btn(f'{value} {tr(cid, "ر.س", "SAR")}', f'topup:{value}') for value in pair]
-            for pair in ((20, 50), (100, 200))]
-    send(api, cid, tr(cid, 'اختر مبلغ شحن المحفظة:', 'Choose a wallet top-up amount:'), kb(rows + [nav(cid, 'wallet')]))
+    rows = []
+    for pair in ((20, 50), (100, 200)):
+        row = []
+        for value in pair:
+            usd = (Decimal(value) / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            row.append(btn(f'{value} {tr(cid, "ر.س", "SAR")} / {usd:.2f} USD', f'topup:{value}'))
+        rows.append(row)
+    text = tr(cid, 'اختر مبلغ شحن المحفظة — جميع المبالغ معروضة بالريال والدولار:',
+              'Choose a wallet top-up amount — all amounts are shown in SAR and USD:')
+    send(api, cid, text, kb(rows + [nav(cid, 'wallet')]))
 
 
 def wallet_method(api, cid, value):
