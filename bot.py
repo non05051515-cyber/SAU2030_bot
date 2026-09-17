@@ -118,10 +118,7 @@ def main():
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
  a=API(t)
- # Show Telegram's native command-menu button beside the message field.
- a.call('setMyCommands',commands=[
-  {'command':'start','description':'Start | بدء'},
-  {'command':'products','description':'Products | المنتجات'}])
+ a.call('setMyCommands',commands=[{'command':'start','description':'Start | بدء'},{'command':'products','description':'Products | المنتجات'}])
  a.call('setChatMenuButton',menu_button={'type':'commands'})
  if 'broadcast_new_products' in globals():broadcast_new_products(a)
  offset=0;print('Bot running...')
@@ -145,5 +142,12 @@ def main():
   except Exception as e:print('Error:',e);time.sleep(3)
 from storefront import install
 install(globals())
+
+# Load optional store extensions here too, so they work even when the host
+# starts bot.py directly instead of using runner.py.
+import iptv_extension
+import broadcast_admin
+iptv_extension.s.install(globals())
+broadcast_admin.install(globals())
 
 if __name__=='__main__':main()
