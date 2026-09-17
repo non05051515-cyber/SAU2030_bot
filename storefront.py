@@ -739,7 +739,216 @@ def receipt(api, message):
     with db() as conn:
         custom = conn.execute('SELECT 1 FROM custom_topup_state WHERE cid=?', (cid,)).fetchone()
     if custom:
-        raw = (message.get('text') or '').strip().replace(',', '.').replace('$', '')
+        if (message.get('text') or '').startswith('/'):
+            with db() as conn:
+                conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+            return False
+        raw = (message.get('text') or '').strip().replace(',', '.').replace('
+        try:
+            usd_value = Decimal(raw).quantize(Decimal('0.01'))
+        except Exception:
+            send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط، مثال: 20', 'Send the amount as a number only, e.g. 20'))
+            return True
+        if usd_value <= 0 or usd_value > Decimal('1333'):
+            send(api, cid, tr(cid, 'اختر مبلغًا أكبر من $0 وحتى $1333.', 'Choose an amount above $0 and up to $1333.'))
+            return True
+        with db() as conn:
+            conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        value = (usd_value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        wallet_method(api, cid, str(value))
+        return True
+    menu_actions = G.get('MENU_ACTIONS', G.get('MENU', {}))
+    if message.get('text', '').startswith('/') or message.get('text') in menu_actions:
+        with db() as conn:
+            conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+            conn.execute('UPDATE wallet_topups SET status="cancelled" WHERE cid=? AND status="receipt_pending"', (cid,))
+        return False
+    with db() as conn:
+        topup = conn.execute('SELECT id,amount_sar,method FROM wallet_topups WHERE cid=? AND status="receipt_pending" ORDER BY rowid DESC LIMIT 1', (cid,)).fetchone()
+    if topup:
+        topup_id, topup_sar, topup_method = topup
+        if not message.get('photo'):
+            send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع.', '📸 Send the payment receipt image.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'canceltopup:' + topup_id)]]))
+            return True
+        user = message.get('from', {})
+        username = '@' + user['username'] if user.get('username') else str(cid)
+        sent = send(api, G['ADMIN_ID'], f'👛 <b>طلب شحن محفظة</b>\n\nالمبلغ: {esc(topup_sar)} SAR\nالطريقة: {esc(topup_method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>',
+                    kb([[btn('✅ اعتماد الشحن', 'approvetopup:' + topup_id)], [btn('❌ رفض', 'rejecttopup:' + topup_id)]]))
+        forwarded = api.call('forwardMessage', chat_id=G['ADMIN_ID'], from_chat_id=cid, message_id=message['message_id']) if sent else None
+        if not forwarded:
+            send(api, cid, tr(cid, 'تعذر إرسال الإثبات. حاول مرة أخرى.', 'Could not send the receipt. Try again.'))
+            return True
+        with db() as conn:
+            conn.execute('UPDATE wallet_topups SET status="review" WHERE id=? AND status="receipt_pending"', (topup_id,))
+        send(api, cid, tr(cid, '✅ وصل إثبات شحن المحفظة للإدارة للمراجعة.', '✅ Wallet top-up receipt sent for review.'), menu(cid))
+        return True
+    with db() as conn:
+        pending = conn.execute('SELECT pid,method,usd,sar FROM receipts WHERE cid=?', (cid,)).fetchone()
+    if not pending:
+        return False
+    if not message.get('photo'):
+        send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع، أو اضغط إلغاء.', '📸 Send a receipt photo, or tap Cancel.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pending[0])]]))
+        return True
+    pid, method, usd, sar = pending
+    user = message.get('from', {})
+    username = '@' + user['username'] if user.get('username') else str(cid)
+    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: 1\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
+    forwarded = api.call('forwardMessage', chat_id=G['ADMIN_ID'], from_chat_id=cid, message_id=message['message_id']) if result else None
+    if not forwarded:
+        send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
+        return True
+    add_order(cid, pid, method, 'review')
+    with db() as conn:
+        conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+    send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
+    return True
+
+
+def review_topup(api, actor, topup_id, approve):
+    if actor != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        row = conn.execute('SELECT cid,amount_sar,status FROM wallet_topups WHERE id=?', (topup_id,)).fetchone()
+        if not row or row[2] != 'review':
+            return send(api, actor, 'تمت معالجة طلب الشحن مسبقًا.')
+        status = 'credited' if approve else 'rejected'
+        conn.execute('UPDATE wallet_topups SET status=? WHERE id=? AND status="review"', (status, topup_id))
+    cid, value, _ = row
+    if approve:
+        balance = wallet_credit(cid, value)
+        send(api, cid, f'✅ تم اعتماد شحن المحفظة بمبلغ {esc(value)} SAR.\nالرصيد الحالي: {balance:.2f} SAR', menu(cid))
+        send(api, actor, f'✅ تم شحن محفظة العميل <code>{cid}</code> بمبلغ {esc(value)} SAR.')
+    else:
+        send(api, cid, tr(cid, '❌ لم تتم الموافقة على إثبات شحن المحفظة. تواصل مع الدعم.', '❌ Your wallet top-up receipt was not approved. Contact support.'), menu(cid))
+        send(api, actor, '❌ تم رفض طلب شحن المحفظة.')
+
+
+def action(api, cid, value):
+    prefix, _, arg = value.partition(':')
+    arg = LEGACY.get(arg, arg)
+    if prefix in ('home', 'enter_store'):
+        home(api, cid)
+    elif prefix == 'start':
+        start(api, cid)
+    elif prefix == 'products':
+        products(api, cid)
+    elif prefix == 'referrals':
+        referral_page(api, cid)
+    elif prefix == 'product':
+        log_activity(cid, 'category', arg)
+        category(api, cid, arg)
+    elif prefix in ('item', 'claude'):
+        log_activity(cid, 'item', arg)
+        item(api, cid, arg)
+    elif value in LEGACY:
+        log_activity(cid, 'item', LEGACY[value])
+        item(api, cid, LEGACY[value])
+    elif prefix == 'admin':
+        if arg == 'orders': admin_orders(api, cid)
+        elif arg == 'activity': admin_activity(api, cid)
+        elif arg == 'icons': admin_icons(api, cid)
+        elif arg == 'broadcast' and cid == G['ADMIN_ID']:
+            BROADCAST_PENDING.add(cid)
+            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
+                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
+            BROADCAST_PENDING.discard(cid)
+            admin_panel(api, cid)
+        else: admin_panel(api, cid)
+    elif prefix == 'seticon':
+        begin_icon_setup(api, cid, arg)
+    elif prefix == 'cancelicon':
+        if cid == G['ADMIN_ID']:
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_icons(api, cid)
+    elif prefix == 'settings':
+        settings(api, cid, arg)
+    elif prefix in ('setlang', 'setcurrency'):
+        if (prefix == 'setlang' and arg not in ('ar', 'en')) or (prefix == 'setcurrency' and arg not in ('SAR', 'USD')):
+            return
+        with db() as conn:
+            conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
+            column = 'lang' if prefix == 'setlang' else 'currency'
+            conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (arg, cid))
+        home(api, cid)
+    elif prefix in ('buy', 'cancel'):
+        with db() as conn:
+            conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+        if prefix == 'buy': payments(api, cid, arg)
+        elif arg in VARIANTS: item(api, cid, arg)
+        else: category(api, cid, arg)
+    elif prefix == 'wallet':
+        wallet_amounts(api, cid) if arg == 'topup' else wallet(api, cid)
+    elif prefix == 'topup':
+        wallet_method(api, cid, arg)
+    elif prefix == 'topupcustom':
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO custom_topup_state(cid) VALUES (?)', (cid,))
+        send(api, cid, tr(cid, '✏️ أرسل الآن مبلغ الشحن الذي تريده بالدولار.\nمثال: <b>$20</b>', '✏️ Send the custom top-up amount in USD.\nExample: <b>$20</b>'), kb([nav(cid, 'wallet:topup')]))
+    elif prefix == 'topupcrypto':
+        wallet_crypto(api, cid, arg)
+    elif prefix == 'topupbybit':
+        wallet_bybit(api, cid, arg)
+    elif prefix == 'topupsend':
+        method, _, topup_id = arg.partition(':'); wallet_bybit_details(api, cid, method, topup_id)
+    elif prefix == 'topupreceipt':
+        with db() as conn:
+            changed = conn.execute('UPDATE wallet_topups SET status="receipt_pending" WHERE id=? AND cid=? AND status="pending"', (arg, cid)).rowcount
+        if changed:
+            send(api, cid, tr(cid, '📸 أرسل الآن صورة إثبات تحويل Bybit.', '📸 Send the Bybit payment receipt image now.'))
+        else:
+            wallet(api, cid)
+    elif prefix == 'canceltopup':
+        with db() as conn:
+            conn.execute('UPDATE wallet_topups SET status="cancelled" WHERE id=? AND cid=? AND status IN ("pending","receipt_pending")', (arg, cid))
+        wallet(api, cid)
+    elif prefix == 'checktopup':
+        check_wallet_crypto(api, cid, arg)
+    elif prefix in ('approvetopup', 'rejecttopup'):
+        review_topup(api, cid, arg, prefix == 'approvetopup')
+    elif prefix == 'paywallet':
+        pay_with_wallet(api, cid, arg)
+    elif prefix == 'paycrypto':
+        pay_with_crypto(api, cid, arg)
+    elif prefix == 'checkorder':
+        check_crypto_order(api, cid, arg)
+    elif prefix in ('paybybit', 'bybitid', 'trc20', 'bep20'):
+        payment(api, cid, arg, {'paybybit': 'bybit'}.get(prefix, prefix))
+    elif prefix == 'receipt':
+        method, _, pid = arg.partition(':')
+        receipt_request(api, cid, LEGACY.get(pid, pid), method)
+    elif prefix == 'support':
+        send(api, cid, tr(cid, '💬 لشحن النقاط والدعم: ', '💬 Top-ups and support: ') + SUPPORT, menu(cid))
+    elif prefix == 'api':
+        send(api, cid, tr(cid, '🔗 إعدادات API المتجر غير مفعّلة حاليًا.', '🔗 Store API settings are not active yet.'), menu(cid))
+    elif prefix == 'warranty':
+        send(api, cid, tr(cid, '🛡 تختلف شروط الضمان حسب المنتج. راجع وصفه قبل الطلب. للاستفسار: ', '🛡 Warranty terms vary by product. Read its description before ordering. Questions: ') + SUPPORT, menu(cid))
+    else:
+        products(api, cid)
+
+
+def install(namespace):
+    global G
+    G = namespace
+    apply_icon_overrides()
+    namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
+                      'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
+                      'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
+                      'broadcast_new_products': broadcast_new_products})
+    menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
+    menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
+                         '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
+                         '👛 المحفظة': 'wallet', '👛 Wallet': 'wallet', '🔗 API': 'api',
+                         '🛡 الضمان': 'warranty', '🛡 Warranty': 'warranty',
+                         '🌐 اللغة': 'settings:lang', '🌐 Language': 'settings:lang',
+                         '🌐 اللغة / Language': 'settings:lang', '💱 العملة / Currency': 'settings:currency',
+                         '🧾 لوحة الطلبات': 'admin'})
+    # Accept reply buttons sent by older versions where the icon followed the label.
+    menu_actions.update({'ابدأ 🚀': 'start', 'المنتجات 🛍': 'products', 'الدعم 💬': 'support',
+                         'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
+                         'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
+    namespace['MENU'] = menu_actions
+, '')
         try:
             usd_value = Decimal(raw).quantize(Decimal('0.01'))
         except Exception:
