@@ -317,10 +317,10 @@ def admin_icons(api, cid):
     buttons = []
     for pid, product in G['PRODUCTS'].items():
         mark = '✅ ' if product.get('custom_emoji_id') else ''
-        buttons.append(btn(mark + product['name'], 'seticon:' + pid, product.get('custom_emoji_id')))
+        buttons.append(btn(product['name'], 'seticon:' + pid, product.get('custom_emoji_id')))
     for key, label in UI_ICON_LABELS.items():
         icon = ui_icon(key)
-        buttons.append(btn(('✅ ' if icon else '') + label, 'seticon:' + key, icon))
+        buttons.append(btn(label, 'seticon:' + key, icon))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم، ثم أرسل الأيقونة للبوت في رسالة منفصلة.',
          kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
