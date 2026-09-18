@@ -37,6 +37,10 @@ def saved_icon(key):
 
 def amount(pid, currency='SAR', source_price=None):
     pid = s.LEGACY.get(pid, pid)
+    with s.db() as conn:
+        override = conn.execute('SELECT 1 FROM product_prices WHERE pid=?', (pid,)).fetchone()
+    if override:
+        return _original_amount(pid, currency, source_price)
     variant = s.VARIANTS.get(pid)
     if variant and variant.get('fixed_sar') is not None:
         sar = Decimal(str(variant['fixed_sar']))

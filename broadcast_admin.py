@@ -27,7 +27,10 @@ def install(namespace):
     def admin_panel(api, cid):
         if cid != admin_id:
             return namespace['show_home'](api, cid)
+        PENDING.discard(cid)
+        AUTO_AD_STATE.pop(cid, None)
         with sg['db']() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
             activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
@@ -38,6 +41,7 @@ def install(namespace):
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
+            [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
@@ -45,6 +49,9 @@ def install(namespace):
         ]))
 
     def action(api, cid, value):
+        if cid == admin_id and (value == 'admin:prices' or value.startswith(('pricecat:', 'pricepick:', 'priceedit:'))):
+            PENDING.discard(cid)
+            AUTO_AD_STATE.pop(cid, None)
         if cid == admin_id and value == 'admin:autoad':
             AUTO_AD_STATE[cid] = {'step':'target'}
             return sg['send'](api,cid,'📣 <b>الإعلان التلقائي</b>\n\nأرسل معرف القروب مثل <code>@groupname</code> أو رقم القروب <code>-100...</code>.\nيجب أن يكون البوت داخل القروب. ',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('❌ إلغاء','admin:autoad_cancel')]]))
