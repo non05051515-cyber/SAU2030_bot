@@ -46,6 +46,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
+    conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
     return conn
 
 
@@ -379,6 +380,103 @@ def handle_admin_price(api, message):
     return True
 
 
+
+def admin_products_page(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        rows = conn.execute('SELECT pid,name,price_sar,available FROM admin_products ORDER BY rowid DESC').fetchall()
+    buttons = [[btn(('✅ ' if available else '🔴 ') + product_name + ' • ' + str(product_price) + ' SAR', 'myproduct:' + pid)] for pid, product_name, product_price, available in rows]
+    if not buttons:
+        text = '📦 <b>منتجاتي</b>\\n\\nلا توجد منتجات أضفتها من لوحة الإدارة حتى الآن.'
+    else:
+        text = '📦 <b>منتجاتي</b>\\n\\nاختر منتجًا لإدارته:'
+    send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def begin_add_product(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    BROADCAST_PENDING.discard(cid)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'add_product_name', '{}'))
+    send(api, cid, '➕ <b>إضافة منتج جديد</b>\\n\\n1/4 أرسل <b>اسم المنتج</b>.', kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
+
+
+def handle_admin_product(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        state = conn.execute('SELECT action,value FROM admin_state WHERE cid=?', (cid,)).fetchone()
+    if not state or not state[0].startswith('add_product_'):
+        return False
+    raw = (message.get('text') or '').strip()
+    if not raw:
+        send(api, cid, 'أرسل نصًا للمتابعة.')
+        return True
+    action_name, payload_raw = state
+    try: payload = json.loads(payload_raw or '{}')
+    except Exception: payload = {}
+    if action_name == 'add_product_name':
+        payload['name'] = raw[:100]
+        next_action, prompt = 'add_product_desc', '2/4 أرسل <b>وصف المنتج</b>.'
+    elif action_name == 'add_product_desc':
+        payload['description'] = raw[:1500]
+        next_action, prompt = 'add_product_price', '3/4 أرسل <b>السعر بالريال السعودي</b>. مثال: <code>19.99</code>'
+    elif action_name == 'add_product_price':
+        normalized = raw.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
+        try:
+            value = Decimal(normalized).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if value <= 0: raise ValueError()
+        except Exception:
+            send(api, cid, 'السعر غير صحيح. أرسل رقمًا مثل <code>19.99</code>.')
+            return True
+        payload['price'] = str(value)
+        next_action, prompt = 'add_product_confirm', ('4/4 راجع المنتج:\\n\\n<b>' + esc(payload['name']) + '</b>\\n'
+            + esc(payload.get('description','')) + '\\n\\n💵 <b>' + esc(payload['price']) + ' SAR</b>\\n\\nأرسل <b>نعم</b> للحفظ أو <b>لا</b> للإلغاء.')
+    else:
+        if raw.lower() not in ('نعم', 'yes', 'y'):
+            with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_products_page(api, cid); return True
+        pid = 'custom_' + uuid.uuid4().hex[:10]
+        with db() as conn:
+            conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at) VALUES (?,?,?,?,1,?)',
+                         (pid, payload['name'], payload.get('description',''), payload['price'], now_saudi()))
+            conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        send(api, cid, '✅ تم إضافة المنتج إلى منتجاتك.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('➕ إضافة منتج آخر', 'admin:addproduct')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        return True
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, next_action, json.dumps(payload, ensure_ascii=False)))
+    send(api, cid, prompt, kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
+    return True
+
+
+def admin_product_detail(api, cid, pid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        row = conn.execute('SELECT name,description,price_sar,available FROM admin_products WHERE pid=?', (pid,)).fetchone()
+    if not row:
+        return admin_products_page(api, cid)
+    product_name, description, product_price, available = row
+    text = '📦 <b>' + esc(product_name) + '</b>\\n\\n' + esc(description) + '\\n\\n💵 ' + esc(product_price) + ' SAR\\nالحالة: ' + ('✅ متوفر' if available else '🔴 غير متوفر')
+    send(api, cid, text, kb([[btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)], [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')], [btn('↩️ منتجاتي', 'admin:myproducts')]]))
+
+
+def toggle_admin_product(api, cid, pid):
+    if cid != G['ADMIN_ID']: return
+    with db() as conn:
+        conn.execute('UPDATE admin_products SET available=CASE available WHEN 1 THEN 0 ELSE 1 END WHERE pid=?', (pid,))
+    admin_product_detail(api, cid, pid)
+
+
+def delete_admin_product(api, cid, pid):
+    if cid != G['ADMIN_ID']: return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_products WHERE pid=?', (pid,))
+    send(api, cid, '🗑 تم حذف المنتج.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
 def admin_panel(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
@@ -390,6 +488,7 @@ def admin_panel(api, cid):
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
@@ -1035,6 +1134,11 @@ def action(api, cid, value):
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'stock': admin_stock(api, cid)
+        elif arg == 'addproduct': begin_add_product(api, cid)
+        elif arg == 'myproducts': admin_products_page(api, cid)
+        elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
+            with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_panel(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.add(cid)
             send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
@@ -1043,6 +1147,12 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'myproduct':
+        admin_product_detail(api, cid, arg)
+    elif prefix == 'myproducttoggle':
+        toggle_admin_product(api, cid, arg)
+    elif prefix == 'myproductdelete':
+        delete_admin_product(api, cid, arg)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
     elif prefix == 'stockpick':
@@ -1137,7 +1247,8 @@ def install(namespace):
     namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
                       'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
-                      'broadcast_new_products': broadcast_new_products})
+                      'broadcast_new_products': broadcast_new_products,
+                      'handle_admin_product': handle_admin_product})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
                          '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
