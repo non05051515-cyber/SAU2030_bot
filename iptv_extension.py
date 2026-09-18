@@ -128,8 +128,17 @@ def admin_icons(api, cid):
         mark = '✅ ' if product.get('custom_emoji_id') else ''
         callback = 'admin:iptvicons' if pid == 'iptv' else 'seticon:' + pid
         buttons.append(s.btn(product['name'], callback, product.get('custom_emoji_id')))
-    # Also expose the global storefront/interface buttons here. This extension
-    # owns the active admin_icons handler at runtime.
+    # Include categories/products created from the admin product manager.
+    # This extension owns the active admin_icons handler at runtime, so these
+    # must be added here too (not only in storefront.admin_icons).
+    with s.db() as conn:
+        custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        custom_products = conn.execute('SELECT pid,name FROM admin_products ORDER BY rowid').fetchall()
+    for key, label in custom_categories:
+        buttons.append(s.btn('📁 ' + label, 'seticon:' + key, s.ui_icon(key)))
+    for key, label in custom_products:
+        buttons.append(s.btn('📦 ' + label, 'seticon:' + key, s.ui_icon(key)))
+    # Also expose the global storefront/interface buttons here.
     for key, label in s.UI_ICON_LABELS.items():
         icon = s.ui_icon(key)
         buttons.append(s.btn(label, 'seticon:' + key, icon))
