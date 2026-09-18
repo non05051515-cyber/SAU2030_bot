@@ -45,6 +45,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
     return conn
 
 
@@ -278,6 +279,50 @@ def apply_icon_overrides():
         G['CONFIG']['custom_icons_enabled'] = True
 
 
+
+def in_stock(pid):
+    pid = LEGACY.get(pid, pid)
+    with db() as conn:
+        row = conn.execute('SELECT available FROM product_availability WHERE pid=?', (pid,)).fetchone()
+    if row is not None:
+        return bool(row[0])
+    if pid in VARIANTS:
+        return VARIANTS[pid].get('source_stock', 0) > 0
+    return pid in G['PRODUCTS']
+
+
+def admin_stock(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    if category_id is None:
+        rows = [[btn(p['name'], 'stockcat:' + pid)] for pid, p in G['PRODUCTS'].items()]
+    else:
+        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
+        if not ids and category_id in G['PRODUCTS']:
+            ids = [category_id]
+        rows = [[btn(('✅ ' if in_stock(pid) else '🔴 ') + name(pid, cid), 'stockpick:' + pid,
+                     style=None if in_stock(pid) else 'danger')] for pid in ids]
+    send(api, cid, '📦 <b>تعديل توفر المنتج</b>\nاختر القسم ثم المنتج:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def stock_editor(api, cid, pid, value=None):
+    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS']):
+        return
+    saved = value in ('0', '1')
+    if saved:
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO product_availability VALUES (?,?)', (pid, int(value)))
+    status = '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية'
+    text = ('✅ تم حفظ الحالة\n\n' if saved else '') + '<b>' + esc(name(pid, cid)) + '</b>\n\n' + status
+    if VARIANTS.get(pid, {}).get('review_required'):
+        text += '\n⚠️ المنتج قيد المراجعة؛ تغيير التوفر لا يلغي إيقاف الطلب للمراجعة.'
+    send(api, cid, text, kb([[btn('✅ متوفر', 'stockset:1:' + pid, style='success'),
+                              btn('🔴 نفدت الكمية', 'stockset:0:' + pid, style='danger')],
+                             [btn('↩️ منتج آخر', 'admin:stock')], [btn('لوحة الإدارة', 'admin')]]))
+
+
 def admin_prices(api, cid, category_id=None):
     if cid != G['ADMIN_ID']:
         return
@@ -346,6 +391,7 @@ def admin_panel(api, cid):
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
+                             [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
@@ -545,7 +591,7 @@ def grok_cards(api, cid, choices):
         available = can_order(pid)
         if v.get('review_required'):
             status = tr(cid, '⏸ قيد المراجعة — الطلب غير متاح', '⏸ Under review — ordering unavailable')
-        elif v['source_stock'] == 0:
+        elif not in_stock(pid):
             status = tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
         else:
             status = tr(cid, '✅ متوفر لدى المورد — يُؤكد قبل الطلب', '✅ Supplier stock — confirm before ordering')
@@ -595,7 +641,7 @@ def category(api, cid, pid):
     if choices:
         rows = []
         for v in choices:
-            sold_out = v['source_stock'] == 0
+            sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
             rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
                              'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
@@ -604,8 +650,8 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = p['description'] if prefs(cid)[0] == 'ar' else english.get(pid, p['name'])
-    text = p['name'] + '\n\n' + price(cid, pid) + '\n\n' + description
-    rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if amount(pid) is not None else []
+    text = p['name'] + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
+    rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', p['name'], text, kb(rows))
 
@@ -618,7 +664,7 @@ def item(api, cid, pid):
         return
     lang = prefs(cid)[0]
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
-    if v['source_stock'] == 0:
+    if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
     text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + v['description'][lang]
     if v.get('promotions'):
@@ -628,7 +674,7 @@ def item(api, cid, pid):
     if v.get('review_required'):
         text += '\n\n⚠️ ' + v['review_required'][lang]
     rows = []
-    if v['source_stock'] > 0 and not v.get('review_required'):
+    if can_order(pid):
         rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
     card(api, cid, v.get('image'), name(pid, cid), text, kb(rows))
@@ -637,8 +683,8 @@ def item(api, cid, pid):
 def can_order(pid):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
-        return VARIANTS[pid]['source_stock'] > 0 and not VARIANTS[pid].get('review_required')
-    return pid in G['PRODUCTS'] and amount(pid) is not None
+        return in_stock(pid) and not VARIANTS[pid].get('review_required')
+    return pid in G['PRODUCTS'] and in_stock(pid) and amount(pid) is not None
 
 
 def back(pid):
@@ -988,6 +1034,7 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.add(cid)
             send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
@@ -996,6 +1043,14 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'stockcat':
+        admin_stock(api, cid, arg)
+    elif prefix == 'stockpick':
+        stock_editor(api, cid, arg)
+    elif prefix == 'stockset':
+        value, _, pid = arg.partition(':')
+        if value in ('0', '1'):
+            stock_editor(api, cid, pid, value)
     elif prefix == 'pricecat':
         admin_prices(api, cid, arg)
     elif prefix == 'pricepick':

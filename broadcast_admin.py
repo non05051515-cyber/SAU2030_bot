@@ -41,6 +41,7 @@ def install(namespace):
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
+            [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
@@ -49,7 +50,7 @@ def install(namespace):
         ]))
 
     def action(api, cid, value):
-        if cid == admin_id and (value == 'admin:prices' or value.startswith(('pricecat:', 'pricepick:', 'priceedit:'))):
+        if cid == admin_id and (value in ('admin:prices', 'admin:stock') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
         if cid == admin_id and value == 'admin:autoad':

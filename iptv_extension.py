@@ -58,7 +58,7 @@ def category(api, cid, pid):
     rows = []
     for variant_id in IPTV_IDS:
         variant = s.VARIANTS[variant_id]
-        sold_out = variant['source_stock'] == 0
+        sold_out = not s.in_stock(variant_id)
         status = s.tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else ''
         rows.append([s.btn(status + s.name(variant_id, cid) + ' | ' + s.price(cid, variant_id),
                            'item:' + variant_id, product.get('custom_emoji_id'),
@@ -80,11 +80,12 @@ def iptv_item(api, cid, pid):
         + f'<b>{sar:.2f} {s.tr(cid, "ر.س", "SAR")} / {usd:.2f} USD</b>\n\n'
         + s.tr(cid, '💰 سعر الباقة:', '💰 Package price:') + '\n'
         + '<b>' + s.price(cid, pid) + '</b>\n\n'
+        + s.tr(cid, '✅ متوفر' if s.in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if s.in_stock(pid) else '🔴 Out of stock') + '\n\n'
         + s.tr(cid, '➕ للشحن تواصل مع حسابنا الأساسي: ', '➕ For top-up, contact our main account: ')
         + s.SUPPORT
     )
     rows = []
-    if variant['source_stock'] > 0:
+    if s.can_order(pid):
         rows.append([s.btn(s.tr(cid, '🛒 طلب الباقة', '🛒 Order package'), 'buy:' + pid)])
     rows.append([s.btn(s.tr(cid, '💬 تواصل للشحن', '💬 Contact for top-up'), 'support')])
     rows.append(s.nav(cid, 'product:iptv'))
