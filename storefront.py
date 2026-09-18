@@ -1446,18 +1446,7 @@ def install(namespace):
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
                          'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
- + esc(price_usd) + '</b>'
-                if kind == 'stock':
-                    text += '\n📦 ' + esc(str(stock)) + ' available'
-            else:
-                text = heading + '\n\n<b>' + esc(name(pid, user_id)) + '</b>\n\n💵 ' + price(user_id, pid, 'USD')
-            send(api, user_id, text, kb([[btn('Buy Now 🛒', 'item:' + pid, style='success')]]))
-            time.sleep(0.04)
-        except Exception:
-            pass
 
-
-def broadcast_new_products(api):
     """Broadcast each newly-added catalogue item once, across deploys."""
     with db() as conn:
         known = {row[0] for row in conn.execute('SELECT pid FROM announcements').fetchall()}
