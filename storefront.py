@@ -47,6 +47,14 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
+    cols = {row[1] for row in conn.execute('PRAGMA table_info(admin_products)').fetchall()}
+    if 'category_id' not in cols:
+        conn.execute('ALTER TABLE admin_products ADD COLUMN category_id TEXT')
+    if 'price_usd' not in cols:
+        conn.execute('ALTER TABLE admin_products ADD COLUMN price_usd TEXT')
+    if 'stock' not in cols:
+        conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
     return conn
 
 
@@ -144,6 +152,11 @@ def amount(pid, currency='SAR', source_price=None):
         value = Decimal(override[0])
         if currency != override[1]:
             value = value * RATE if currency == 'SAR' else value / RATE
+        return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    cp = custom_product(pid)
+    if cp and cp[3] is not None:
+        usd = Decimal(str(cp[3]))
+        value = usd * RATE if currency == 'SAR' else usd
         return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     if pid in VARIANTS:
         usd = Decimal(str(source_price if source_price is not None else VARIANTS[pid]['source_usd'])) + MARKUP
@@ -289,6 +302,9 @@ def in_stock(pid):
         return bool(row[0])
     if pid in VARIANTS:
         return VARIANTS[pid].get('source_stock', 0) > 0
+    cp = custom_product(pid)
+    if cp:
+        return bool(cp[4]) and int(cp[6] or 0) > 0
     return pid in G['PRODUCTS']
 
 
@@ -385,13 +401,22 @@ def admin_products_page(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     with db() as conn:
-        rows = conn.execute('SELECT pid,name,price_sar,available FROM admin_products ORDER BY rowid DESC').fetchall()
-    buttons = [[btn(('✅ ' if available else '🔴 ') + product_name + ' • ' + str(product_price) + ' SAR', 'myproduct:' + pid)] for pid, product_name, product_price, available in rows]
-    if not buttons:
-        text = '📦 <b>منتجاتي</b>\\n\\nلا توجد منتجات أضفتها من لوحة الإدارة حتى الآن.'
-    else:
-        text = '📦 <b>منتجاتي</b>\\n\\nاختر منتجًا لإدارته:'
-    send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid DESC').fetchall()
+    buttons = [[btn('📁 ' + category_name, 'mycategory:' + category_id)] for category_id, category_name in categories]
+    text = '📦 <b>منتجاتي</b>\n\nاختر قسمًا لإدارة منتجاته:' if buttons else '📦 <b>منتجاتي</b>\n\nلا توجد أقسام مضافة حتى الآن.'
+    send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_category_detail(api, cid, category_id):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    cat = custom_category(category_id)
+    if not cat:
+        return admin_products_page(api, cid)
+    with db() as conn:
+        rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
+    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • $' + str(price_usd), 'myproduct:' + pid)] for pid, product_name, price_usd, available, stock in rows]
+    send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
 
 def begin_add_product(api, cid):
@@ -399,8 +424,8 @@ def begin_add_product(api, cid):
         return home(api, cid)
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'add_product_name', '{}'))
-    send(api, cid, '➕ <b>إضافة منتج جديد</b>\\n\\n1/4 أرسل <b>اسم المنتج</b>.', kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'add_product_category', '{}'))
+    send(api, cid, '➕ <b>إضافة قسم ومنتجات</b>\n\n1️⃣ أرسل <b>اسم القسم</b> الذي سيظهر للعملاء.\nمثال: <code>ChatGPT</code>', kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
 def handle_admin_product(api, message):
@@ -416,36 +441,89 @@ def handle_admin_product(api, message):
         send(api, cid, 'أرسل نصًا للمتابعة.')
         return True
     action_name, payload_raw = state
-    try: payload = json.loads(payload_raw or '{}')
-    except Exception: payload = {}
-    if action_name == 'add_product_name':
-        payload['name'] = raw[:100]
-        next_action, prompt = 'add_product_desc', '2/4 أرسل <b>وصف المنتج</b>.'
+    try:
+        payload = json.loads(payload_raw or '{}')
+    except Exception:
+        payload = {}
+
+    if action_name == 'add_product_category':
+        payload = {'category_name': raw[:80], 'products': [], 'index': 0}
+        next_action = 'add_product_count'
+        prompt = '2️⃣ كم <b>عدد المنتجات</b> التي تريد إضافتها داخل قسم <b>' + esc(payload['category_name']) + '</b>؟\nمثال: <code>4</code>'
+    elif action_name == 'add_product_count':
+        normalized = raw.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+        try:
+            count = int(normalized)
+            if count < 1 or count > 50:
+                raise ValueError()
+        except Exception:
+            send(api, cid, 'أرسل عددًا من <b>1 إلى 50</b>.')
+            return True
+        payload['count'] = count
+        payload['index'] = 0
+        next_action = 'add_product_name'
+        prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + '</b>.'
+    elif action_name == 'add_product_name':
+        payload['current'] = {'name': raw[:100]}
+        next_action = 'add_product_desc'
+        prompt = '📝 أرسل <b>وصف المنتج</b> لـ <b>' + esc(payload['current']['name']) + '</b>.'
     elif action_name == 'add_product_desc':
-        payload['description'] = raw[:1500]
-        next_action, prompt = 'add_product_price', '3/4 أرسل <b>السعر بالريال السعودي</b>. مثال: <code>19.99</code>'
+        payload['current']['description'] = raw[:1500]
+        next_action = 'add_product_price'
+        prompt = '💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
     elif action_name == 'add_product_price':
-        normalized = raw.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
+        normalized = raw.replace('$','').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
         try:
             value = Decimal(normalized).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            if value <= 0: raise ValueError()
+            if value <= 0:
+                raise ValueError()
         except Exception:
-            send(api, cid, 'السعر غير صحيح. أرسل رقمًا مثل <code>19.99</code>.')
+            send(api, cid, 'السعر غير صحيح. أرسل رقمًا بالدولار مثل <code>5.36</code>.')
             return True
-        payload['price'] = str(value)
-        next_action, prompt = 'add_product_confirm', ('4/4 راجع المنتج:\\n\\n<b>' + esc(payload['name']) + '</b>\\n'
-            + esc(payload.get('description','')) + '\\n\\n💵 <b>' + esc(payload['price']) + ' SAR</b>\\n\\nأرسل <b>نعم</b> للحفظ أو <b>لا</b> للإلغاء.')
+        payload['current']['price_usd'] = str(value)
+        next_action = 'add_product_stock'
+        prompt = '📦 كم <b>الكمية المتوفرة</b> من هذا المنتج؟\nمثال: <code>10</code>'
+    elif action_name == 'add_product_stock':
+        normalized = raw.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+        try:
+            stock = int(normalized)
+            if stock < 0 or stock > 1000000:
+                raise ValueError()
+        except Exception:
+            send(api, cid, 'أرسل كمية صحيحة مثل <code>10</code>.')
+            return True
+        payload['current']['stock'] = stock
+        payload['products'].append(payload.pop('current'))
+        payload['index'] = int(payload.get('index', 0)) + 1
+        if payload['index'] < int(payload['count']):
+            next_action = 'add_product_name'
+            prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + '</b>.'
+        else:
+            lines = ['✅ <b>راجع القسم قبل الحفظ</b>', '', '📁 ' + esc(payload['category_name'])]
+            for i, product in enumerate(payload['products'], 1):
+                lines.append(str(i) + '. <b>' + esc(product['name']) + '</b> — $' + esc(product['price_usd']) + ' — الكمية: ' + str(product['stock']))
+            lines += ['', 'أرسل <b>نعم</b> لحفظ القسم والمنتجات أو <b>لا</b> للإلغاء.']
+            next_action = 'add_product_confirm'
+            prompt = '\n'.join(lines)
     else:
         if raw.lower() not in ('نعم', 'yes', 'y'):
-            with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-            admin_products_page(api, cid); return True
-        pid = 'custom_' + uuid.uuid4().hex[:10]
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_products_page(api, cid)
+            return True
+        category_id = 'cat_' + uuid.uuid4().hex[:10]
         with db() as conn:
-            conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at) VALUES (?,?,?,?,1,?)',
-                         (pid, payload['name'], payload.get('description',''), payload['price'], now_saudi()))
+            conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
+            for product in payload['products']:
+                pid = 'custom_' + uuid.uuid4().hex[:10]
+                usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                sar = (usd * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
+                             (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-        send(api, cid, '✅ تم إضافة المنتج إلى منتجاتك.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('➕ إضافة منتج آخر', 'admin:addproduct')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        send(api, cid, '✅ تم إضافة القسم وكل المنتجات، وأصبحت ظاهرة للعملاء داخل قائمة المنتجات.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('➕ إضافة قسم آخر', 'admin:addproduct')], [btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
+
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, next_action, json.dumps(payload, ensure_ascii=False)))
     send(api, cid, prompt, kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
@@ -455,27 +533,34 @@ def handle_admin_product(api, message):
 def admin_product_detail(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
-    with db() as conn:
-        row = conn.execute('SELECT name,description,price_sar,available FROM admin_products WHERE pid=?', (pid,)).fetchone()
-    if not row:
+    cp = custom_product(pid)
+    if not cp:
         return admin_products_page(api, cid)
-    product_name, description, product_price, available = row
-    text = '📦 <b>' + esc(product_name) + '</b>\\n\\n' + esc(description) + '\\n\\n💵 ' + esc(product_price) + ' SAR\\nالحالة: ' + ('✅ متوفر' if available else '🔴 غير متوفر')
-    send(api, cid, text, kb([[btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)], [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')], [btn('↩️ منتجاتي', 'admin:myproducts')]]))
+    _, product_name, description, price_usd, available, category_id, stock = cp
+    text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 $' + esc(price_usd) + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
+    send(api, cid, text, kb([[btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)], [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')], [btn('↩️ القسم', 'mycategory:' + category_id)]]))
 
 
 def toggle_admin_product(api, cid, pid):
-    if cid != G['ADMIN_ID']: return
+    if cid != G['ADMIN_ID']:
+        return
     with db() as conn:
         conn.execute('UPDATE admin_products SET available=CASE available WHEN 1 THEN 0 ELSE 1 END WHERE pid=?', (pid,))
     admin_product_detail(api, cid, pid)
 
 
 def delete_admin_product(api, cid, pid):
-    if cid != G['ADMIN_ID']: return
+    if cid != G['ADMIN_ID']:
+        return
+    cp = custom_product(pid)
+    category_id = cp[5] if cp else None
     with db() as conn:
         conn.execute('DELETE FROM admin_products WHERE pid=?', (pid,))
-    send(api, cid, '🗑 تم حذف المنتج.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+    if category_id:
+        admin_category_detail(api, cid, category_id)
+    else:
+        admin_products_page(api, cid)
+
 
 def admin_panel(api, cid):
     if cid != G['ADMIN_ID']:
@@ -615,10 +700,23 @@ def broadcast_new_products(api):
             conn.execute('INSERT OR REPLACE INTO announcements(pid,announced_at) VALUES (?,?)', (pid, now_saudi()))
 
 
+def custom_category(category_id):
+    with db() as conn:
+        return conn.execute('SELECT cid,name FROM admin_categories WHERE cid=?', (category_id,)).fetchone()
+
+
+def custom_product(pid):
+    with db() as conn:
+        return conn.execute('SELECT pid,name,description,price_usd,available,category_id,stock FROM admin_products WHERE pid=?', (pid,)).fetchone()
+
+
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
         return VARIANTS[pid]['name'][prefs(cid)[0]]
+    cp = custom_product(pid)
+    if cp:
+        return cp[1]
     return G['PRODUCTS'].get(pid, {}).get('name', pid)
 
 
@@ -641,6 +739,9 @@ def home(api, cid):
 
 def products(api, cid):
     buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items()]
+    with db() as conn:
+        custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+    buttons += [btn(category_name, 'product:' + category_id) for category_id, category_name in custom_categories]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -732,7 +833,18 @@ def grok_cards(api, cid, choices):
 def category(api, cid, pid):
     p = G['PRODUCTS'].get(pid)
     if not p:
-        products(api, cid)
+        custom_cat = custom_category(pid)
+        if not custom_cat:
+            products(api, cid)
+            return
+        with db() as conn:
+            choices = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (pid,)).fetchall()
+        rows = []
+        for product_id, product_name, price_usd, available, stock in choices:
+            sold_out = not available or int(stock or 0) <= 0
+            label = ('🔴 نفد | ' if sold_out else '') + product_name + ' | ' + price(cid, product_id)
+            rows.append([btn(label, 'item:' + product_id, style='danger' if sold_out else None)])
+        send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid]
     if pid == 'grok' and choices:
@@ -759,7 +871,16 @@ def item(api, cid, pid):
     pid = LEGACY.get(pid, pid)
     v = VARIANTS.get(pid)
     if not v:
-        products(api, cid)
+        cp = custom_product(pid)
+        if not cp:
+            products(api, cid)
+            return
+        _, product_name, description, price_usd, available, category_id, stock = cp
+        status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
+        text = product_name + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + (description or '')
+        rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
+        rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
+        card(api, cid, None, product_name, text, kb(rows))
         return
     lang = prefs(cid)[0]
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
@@ -783,12 +904,14 @@ def can_order(pid):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
         return in_stock(pid) and not VARIANTS[pid].get('review_required')
+    if custom_product(pid):
+        return in_stock(pid) and amount(pid) is not None
     return pid in G['PRODUCTS'] and in_stock(pid) and amount(pid) is not None
 
 
 def back(pid):
     pid = LEGACY.get(pid, pid)
-    return ('item:' if pid in VARIANTS else 'product:') + pid
+    return ('item:' if pid in VARIANTS or custom_product(pid) else 'product:') + pid
 
 
 def summary(cid, pid):
@@ -1147,6 +1270,8 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'mycategory':
+        admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
         admin_product_detail(api, cid, arg)
     elif prefix == 'myproducttoggle':
