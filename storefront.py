@@ -536,12 +536,62 @@ def card(api, cid, image_path, title, text, keyboard):
         send(api, cid, esc(chunk), keyboard if i == len(chunks)-1 else None)
 
 
+
+def grok_cards(api, cid, choices):
+    """Compact photo cards for Grok only; prices share the checkout source."""
+    send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
+    for v in choices:
+        pid = v['id']
+        available = can_order(pid)
+        if v.get('review_required'):
+            status = tr(cid, '⏸ قيد المراجعة — الطلب غير متاح', '⏸ Under review — ordering unavailable')
+        elif v['source_stock'] == 0:
+            status = tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
+        else:
+            status = tr(cid, '✅ متوفر لدى المورد — يُؤكد قبل الطلب', '✅ Supplier stock — confirm before ordering')
+        caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
+        caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
+        if v.get('manual_delivery'):
+            caption += '\n' + tr(cid, '✉️ تسليم يدوي — تواصل مع الدعم قبل الشراء', '✉️ Manual delivery — contact support before buying')
+        details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
+        rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
+        if not available:
+            rows[0][0]['style'] = 'danger'
+        rows.append([btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')])
+        markup = kb(rows)
+        path = (BASE / (v.get('image') or 'assets/grok.png')).resolve()
+        delivered = False
+        if path.is_relative_to(BASE) and path.is_file():
+            boundary = 'VEXA' + uuid.uuid4().hex
+            fields = {'chat_id': str(cid), 'caption': caption, 'parse_mode': 'HTML',
+                      'reply_markup': json.dumps(markup, ensure_ascii=False)}
+            body = b''
+            for key, value in fields.items():
+                body += f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode()
+            body += f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="{path.name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
+            body += path.read_bytes() + f'\r\n--{boundary}--\r\n'.encode()
+            try:
+                api_url = getattr(api, 'base_url', None) or getattr(api, 'u', None)
+                req = urllib.request.Request(api_url + 'sendPhoto', body, {'Content-Type': f'multipart/form-data; boundary={boundary}'})
+                with urllib.request.urlopen(req, timeout=40) as response:
+                    delivered = bool(json.load(response).get('ok'))
+            except Exception as exc:
+                print('Grok card image failed:', type(exc).__name__)
+        if not delivered:
+            send(api, cid, caption, markup)
+    send(api, cid, tr(cid, 'تصفح أقسام المتجر:', 'Browse store categories:'),
+         kb([[btn(tr(cid, '↩️ الأقسام', '↩️ Categories'), 'products'),
+              btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]))
+
+
 def category(api, cid, pid):
     p = G['PRODUCTS'].get(pid)
     if not p:
         products(api, cid)
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid]
+    if pid == 'grok' and choices:
+        return grok_cards(api, cid, choices)
     if choices:
         rows = []
         for v in choices:
