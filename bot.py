@@ -124,6 +124,7 @@ def main():
  offset=0;print('Bot running...')
  while True:
   try:
+   if 'tick_auto_ads' in globals(): tick_auto_ads(a)
    for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
     offset=u['update_id']+1
     if 'callback_query' in u:
@@ -154,5 +155,6 @@ import iptv_extension
 import broadcast_admin
 iptv_extension.s.install(globals())
 broadcast_admin.install(globals())
+tick_auto_ads = broadcast_admin.tick_auto_ads
 
 if __name__=='__main__':main()
