@@ -134,6 +134,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
     if handle_receipt(a,m):continue
     if txt.startswith('/start'):
      parts=txt.split(maxsplit=1)
