@@ -250,7 +250,9 @@ UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
     'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '💬 الدعم',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
-    'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية'
+    'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
+    'pay_wallet': 'المحفظة', 'pay_cryptopay': 'Crypto Pay', 'pay_bybit': 'USDT — Bybit',
+    'pay_bybitid': 'Bybit Pay', 'pay_trc20': 'USDT • TRON (TRC20)', 'pay_bep20': 'USDT • BSC (BEP20)'
 }
 
 def ui_icon(key):
@@ -563,8 +565,8 @@ def wallet_method(api, cid, value):
         return wallet_amounts(api, cid)
     usd = (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     text = tr(cid, 'اختر طريقة شحن المحفظة:', 'Choose a wallet top-up method:') + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>'
-    send(api, cid, text, kb([[btn('💠 Crypto Pay', f'topupcrypto:{value}')],
-                             [btn('🟡 Bybit / USDT', f'topupbybit:{value}')], nav(cid, 'wallet:topup')]))
+    send(api, cid, text, kb([[btn('Crypto Pay', f'topupcrypto:{value}', ui_icon('pay_cryptopay'))],
+                             [btn('Bybit / USDT', f'topupbybit:{value}', ui_icon('pay_bybit'))], nav(cid, 'wallet:topup')]))
 
 
 def wallet_crypto(api, cid, value):
@@ -589,9 +591,9 @@ def wallet_bybit(api, cid, value):
     with db() as conn:
         conn.execute('INSERT INTO wallet_topups VALUES (?,?,?,?,?,?)', (topup_id, cid, str(value), 'bybit', None, 'pending'))
     send(api, cid, tr(cid, 'اختر طريقة إرسال USDT عبر Bybit:', 'Choose how to send USDT via Bybit:'),
-         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id)],
-             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id)],
-             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id)], nav(cid, f'topup:{value}')]))
+         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id, ui_icon('pay_bybitid'))],
+             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id, ui_icon('pay_trc20'))],
+             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id, ui_icon('pay_bep20'))], nav(cid, f'topup:{value}')]))
 
 
 def wallet_bybit_details(api, cid, method, topup_id):
@@ -639,9 +641,9 @@ def payments(api, cid, pid):
         return
     warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn('👛 ' + tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid)],
-             [btn('💠 Crypto Pay', 'paycrypto:' + pid)],
-             [btn('USDT — Bybit', 'paybybit:' + pid, '5472387796574418157')], nav(cid, back(pid))]))
+         kb([[btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
+             [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
+             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
 
 
 def payment(api, cid, pid, method):
@@ -650,7 +652,7 @@ def payment(api, cid, pid, method):
         return
     if method == 'bybit':
         send(api, cid, '🪙 <b>USDT — Bybit</b>\n\n' + summary(cid, pid),
-             kb([[btn('Bybit Pay', 'bybitid:' + pid)], [btn('USDT • TRON (TRC20)', 'trc20:' + pid)], [btn('USDT • BSC (BEP20)', 'bep20:' + pid)], nav(cid, 'buy:' + pid)]))
+             kb([[btn('Bybit Pay', 'bybitid:' + pid, ui_icon('pay_bybitid'))], [btn('USDT • TRON (TRC20)', 'trc20:' + pid, ui_icon('pay_trc20'))], [btn('USDT • BSC (BEP20)', 'bep20:' + pid, ui_icon('pay_bep20'))], nav(cid, 'buy:' + pid)]))
         return
     choices = {'bybitid': ('Bybit Pay', 'PAYMENT_BYBIT_PAY_ID'), 'trc20': ('USDT — TRON (TRC20)', 'PAYMENT_USDT_TRC20'), 'bep20': ('USDT — BSC (BEP20)', 'PAYMENT_USDT_BEP20')}
     if method not in choices:
