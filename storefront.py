@@ -44,6 +44,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     return conn
 
 
@@ -135,6 +136,13 @@ def referral_page(api, cid):
 
 def amount(pid, currency='SAR', source_price=None):
     pid = LEGACY.get(pid, pid)
+    with db() as conn:
+        override = conn.execute('SELECT value,currency FROM product_prices WHERE pid=?', (pid,)).fetchone()
+    if override:
+        value = Decimal(override[0])
+        if currency != override[1]:
+            value = value * RATE if currency == 'SAR' else value / RATE
+        return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     if pid in VARIANTS:
         usd = Decimal(str(source_price if source_price is not None else VARIANTS[pid]['source_usd'])) + MARKUP
         value = usd * RATE if currency == 'SAR' else usd
@@ -234,11 +242,11 @@ def log_activity(cid, action_name, pid):
         conn.execute('DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT 500)')
 
 
-def add_order(cid, pid, method, status):
+def add_order(cid, pid, method, status, usd=None, sar=None):
     order_id = uuid.uuid4().hex[:10].upper()
     with db() as conn:
         conn.execute('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)',
-                     (order_id, cid, pid, method, str(amount(pid, 'USD')), str(amount(pid, 'SAR')), status, now_saudi()))
+                     (order_id, cid, pid, method, str(amount(pid, 'USD') if usd is None else usd), str(amount(pid, 'SAR') if sar is None else sar), status, now_saudi()))
     return order_id
 
 
@@ -270,16 +278,74 @@ def apply_icon_overrides():
         G['CONFIG']['custom_icons_enabled'] = True
 
 
+def admin_prices(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
+    if category_id is None:
+        rows = [[btn(p['name'], 'pricecat:' + pid)] for pid, p in G['PRODUCTS'].items()]
+    else:
+        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
+        if not ids and category_id in G['PRODUCTS']:
+            ids = [category_id]
+        rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'SAR'), 'pricepick:' + pid)] for pid in ids]
+    send(api, cid, '✏️ اختر القسم أو المنتج لتعديل سعر البيع:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def price_editor(api, cid, pid, currency=None):
+    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS']):
+        return
+    if currency not in ('SAR', 'USD'):
+        return send(api, cid, esc(name(pid, cid)) + '\nالسعر الحالي: ' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD') + '\nاختر عملة السعر الجديد:', kb([[btn('ريال سعودي', 'priceedit:SAR:' + pid), btn('دولار', 'priceedit:USD:' + pid)], [btn('إلغاء', 'admin:prices')]]))
+    BROADCAST_PENDING.discard(cid)
+    with db() as conn:
+        conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'price', json.dumps([pid, currency])))
+    send(api, cid, 'أرسل سعر البيع النهائي بالعملة ' + currency + '\nمثال: 19.50\nسيُحوّل للعملة الأخرى تلقائيًا، دون إضافة هامش ربح فوقه.', kb([[btn('إلغاء', 'admin:prices')]]))
+
+
+def handle_admin_price(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        state = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='price'", (cid,)).fetchone()
+    if not state:
+        return False
+    raw = (message.get('text') or '').strip()
+    if raw.startswith('/') or raw in G.get('MENU', {}):
+        with db() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
+        return False
+    raw = raw.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
+    try:
+        value = Decimal(raw)
+        if not value.is_finite() or value <= 0 or value > 1000000 or value != value.quantize(Decimal('0.01')):
+            raise ValueError()
+    except Exception:
+        send(api, cid, 'أرسل سعرًا أكبر من صفر، برقم فقط وبحد أقصى منزلتين عشريتين. مثال: 19.50', kb([[btn('إلغاء', 'admin:prices')]]))
+        return True
+    pid, currency = json.loads(state[0])
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (pid, str(value), currency))
+        conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
+    send(api, cid, '✅ تم حفظ سعر ' + esc(name(pid, cid)) + '\n' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD'), kb([[btn('تعديل منتج آخر', 'admin:prices')], [btn('لوحة الإدارة', 'admin')]]))
+    return True
+
+
 def admin_panel(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     with db() as conn:
+        conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
         orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
         review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
         activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
@@ -681,7 +747,7 @@ def pay_with_wallet(api, cid, pid):
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
     order_id = add_order(cid, pid, 'wallet', 'paid')
-    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
+    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -703,10 +769,10 @@ def pay_with_crypto(api, cid, pid):
 
 def check_crypto_order(api, cid, order_id):
     with db() as conn:
-        row = conn.execute('SELECT pid,external_id,status FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
+        row = conn.execute('SELECT pid,external_id,status,amount_usd FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
     if not row:
         return products(api, cid)
-    pid, invoice_id, status = row
+    pid, invoice_id, status, paid_usd = row
     if status == 'paid':
         return send(api, cid, tr(cid, '✅ هذه الفاتورة مدفوعة وتم إرسال الطلب.', '✅ This invoice is paid and the order was sent.'), menu(cid))
     if not crypto_paid(invoice_id):
@@ -715,8 +781,8 @@ def check_crypto_order(api, cid, order_id):
     with db() as conn:
         changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
     if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid')
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + summary(cid, pid) + f'\nالعميل: <code>{cid}</code>')
+        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
@@ -731,6 +797,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_price(api, message):
+        return True
     if handle_admin_icon(api, message):
         return True
     if cid == G.get('ADMIN_ID') and cid in BROADCAST_PENDING:
@@ -819,7 +887,7 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
-    add_order(cid, pid, method, 'review')
+    add_order(cid, pid, method, 'review', usd=usd, sar=sar)
     with db() as conn:
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
     send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
@@ -869,6 +937,7 @@ def action(api, cid, value):
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
+        elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.add(cid)
             send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
@@ -877,6 +946,13 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'pricecat':
+        admin_prices(api, cid, arg)
+    elif prefix == 'pricepick':
+        price_editor(api, cid, arg)
+    elif prefix == 'priceedit':
+        currency, _, pid = arg.partition(':')
+        price_editor(api, cid, pid, currency)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
     elif prefix == 'cancelicon':
