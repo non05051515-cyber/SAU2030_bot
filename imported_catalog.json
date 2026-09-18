@@ -329,7 +329,7 @@
       "source_stock": 25,
       "source_checked_at": "2026-09-16T00:01:00Z",
       "promotions": [],
-      "image": null,
+      "image": "assets/grok-products.jpeg",
       "manual_delivery": true
     },
     {
@@ -347,7 +347,7 @@
       "source_stock": 20,
       "source_checked_at": "2026-09-16T00:01:00Z",
       "promotions": [],
-      "image": null,
+      "image": "assets/grok-products.jpeg",
       "manual_delivery": true
     },
     {
@@ -365,7 +365,7 @@
       "source_stock": 20,
       "source_checked_at": "2026-09-16T00:01:00Z",
       "promotions": [],
-      "image": null,
+      "image": "assets/grok-products.jpeg",
       "manual_delivery": true
     },
     {
@@ -383,7 +383,7 @@
       "source_stock": 16,
       "source_checked_at": "2026-09-16T00:01:00Z",
       "promotions": [],
-      "image": null
+      "image": "assets/grok-products.jpeg"
     },
     {
       "id": "pd_22",
