@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 PENDING = set()
+AUTO_AD_STATE = {}
 USERS_FILE = Path('/data/users.json')
 
 
@@ -38,11 +39,32 @@ def install(namespace):
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
+            [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
             [sg['btn']('🏠 الرئيسية', 'home')],
         ]))
 
     def action(api, cid, value):
+        if cid == admin_id and value == 'admin:autoad':
+            AUTO_AD_STATE[cid] = {'step':'target'}
+            return sg['send'](api,cid,'📣 <b>الإعلان التلقائي</b>\n\nأرسل معرف القروب مثل <code>@groupname</code> أو رقم القروب <code>-100...</code>.\nيجب أن يكون البوت داخل القروب. ',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('❌ إلغاء','admin:autoad_cancel')]]))
+        if cid == admin_id and value == 'admin:autoad_stop':
+            with sg['db']() as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS auto_ads (id INTEGER PRIMARY KEY,target TEXT,source_chat INTEGER,message_id INTEGER,interval_sec INTEGER,next_at REAL,enabled INTEGER)')
+                conn.execute('UPDATE auto_ads SET enabled=0 WHERE id=1')
+            AUTO_AD_STATE.pop(cid,None)
+            return admin_panel(api,cid)
+        if cid == admin_id and value == 'admin:autoad_cancel':
+            AUTO_AD_STATE.pop(cid,None); return admin_panel(api,cid)
+        if cid == admin_id and value.startswith('admin:autoad_interval:'):
+            state=AUTO_AD_STATE.get(cid)
+            if not state or state.get('step')!='interval': return admin_panel(api,cid)
+            hours=int(value.rsplit(':',1)[1]); import time
+            with sg['db']() as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS auto_ads (id INTEGER PRIMARY KEY,target TEXT,source_chat INTEGER,message_id INTEGER,interval_sec INTEGER,next_at REAL,enabled INTEGER)')
+                conn.execute('INSERT OR REPLACE INTO auto_ads VALUES (1,?,?,?,?,?,1)',(state['target'],cid,state['message_id'],hours*3600,time.time()))
+            AUTO_AD_STATE.pop(cid,None)
+            return sg['send'](api,cid,f'✅ تم تشغيل الإعلان كل <b>{hours} ساعة</b>.',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('↩️ لوحة الإدارة','admin')]]))
         if cid == admin_id and value == 'admin:broadcast':
             PENDING.add(cid)
             return sg['send'](
@@ -57,6 +79,20 @@ def install(namespace):
 
     def handle_receipt(api, message):
         cid = message.get('chat', {}).get('id')
+        state=AUTO_AD_STATE.get(cid)
+        if cid==admin_id and state:
+            if state.get('step')=='target':
+                target=(message.get('text') or '').strip()
+                if not target or (not target.startswith('@') and not target.startswith('-100')):
+                    sg['send'](api,cid,'أرسل <code>@معرف_القروب</code> أو رقم القروب الذي يبدأ بـ <code>-100</code>.'); return True
+                try: api.call('getChat',chat_id=target)
+                except Exception:
+                    sg['send'](api,cid,'❌ لم أستطع الوصول للقروب. تأكد أن البوت مضاف وأن المعرف صحيح.'); return True
+                state.update(step='message',target=target)
+                sg['send'](api,cid,'✅ أرسل الآن الرسالة الدعائية. يمكن أن تكون نصًا أو صورة مع تعليق.'); return True
+            if state.get('step')=='message':
+                state.update(step='interval',message_id=message['message_id'])
+                sg['send'](api,cid,'⏱ <b>اختر وقت التكرار:</b>',sg['kb']([[sg['btn']('كل ساعة','admin:autoad_interval:1'),sg['btn']('كل ساعتين','admin:autoad_interval:2')],[sg['btn']('كل 6 ساعات','admin:autoad_interval:6'),sg['btn']('كل 12 ساعة','admin:autoad_interval:12')],[sg['btn']('كل 24 ساعة','admin:autoad_interval:24')],[sg['btn']('❌ إلغاء','admin:autoad_cancel')]])); return True
         if cid == admin_id and cid in PENDING:
             text = message.get('text', '')
             if text.startswith('/'):
@@ -86,3 +122,18 @@ def install(namespace):
     namespace['action'] = action
     namespace['handle_action'] = action
     namespace['handle_receipt'] = handle_receipt
+
+
+def tick_auto_ads(api):
+    import time, storefront as sg
+    now=time.time()
+    try:
+        with sg.db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS auto_ads (id INTEGER PRIMARY KEY,target TEXT,source_chat INTEGER,message_id INTEGER,interval_sec INTEGER,next_at REAL,enabled INTEGER)')
+            row=conn.execute('SELECT target,source_chat,message_id,interval_sec,next_at FROM auto_ads WHERE id=1 AND enabled=1').fetchone()
+        if not row or row[4]>now: return
+        target,source_chat,message_id,interval_sec,_=row
+        api.call('copyMessage',chat_id=target,from_chat_id=source_chat,message_id=message_id)
+        with sg.db() as conn: conn.execute('UPDATE auto_ads SET next_at=? WHERE id=1',(now+interval_sec,))
+    except Exception as exc:
+        print('Auto ad error:',type(exc).__name__)
