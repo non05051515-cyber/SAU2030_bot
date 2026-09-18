@@ -123,6 +123,11 @@ def admin_icons(api, cid):
         mark = '✅ ' if product.get('custom_emoji_id') else ''
         callback = 'admin:iptvicons' if pid == 'iptv' else 'seticon:' + pid
         buttons.append(s.btn(mark + product['name'], callback, product.get('custom_emoji_id')))
+    # Also expose the global storefront/interface buttons here. This extension
+    # owns the active admin_icons handler at runtime.
+    for key, label in s.UI_ICON_LABELS.items():
+        icon = s.ui_icon(key)
+        buttons.append(s.btn(('✅ ' if icon else '') + label, 'seticon:' + key, icon))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     s.send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم. عند اختيار IPTV ستظهر أزرار طرق التفعيل داخله.',
            s.kb(rows + [[s.btn('↩️ لوحة الإدارة', 'admin')]]))
