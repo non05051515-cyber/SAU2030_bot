@@ -614,22 +614,39 @@ def admin_icons(api, cid):
         return home(api, cid)
     buttons = []
     for pid, product in G['PRODUCTS'].items():
-        mark = '✅ ' if product.get('custom_emoji_id') else ''
         buttons.append(btn(product['name'], 'seticon:' + pid, product.get('custom_emoji_id')))
+    with db() as conn:
+        custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        custom_products = conn.execute('SELECT pid,name FROM admin_products ORDER BY rowid').fetchall()
+    for category_id, category_name in custom_categories:
+        buttons.append(btn('📁 ' + category_name, 'seticon:' + category_id, ui_icon(category_id)))
+    for product_id, product_name in custom_products:
+        buttons.append(btn('📦 ' + product_name, 'seticon:' + product_id, ui_icon(product_id)))
     for key, label in UI_ICON_LABELS.items():
         icon = ui_icon(key)
         buttons.append(btn(label, 'seticon:' + key, icon))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم، ثم أرسل الأيقونة للبوت في رسالة منفصلة.',
+    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nيمكنك الآن اختيار الأقسام والمنتجات الجديدة أيضًا، ثم إرسال الأيقونة للبوت.',
          kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def begin_icon_setup(api, cid, pid):
-    if cid != G['ADMIN_ID'] or (pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS):
+    if cid != G['ADMIN_ID']:
         return home(api, cid)
+    custom_cat = custom_category(pid)
+    cp = custom_product(pid)
+    if pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS and not custom_cat and not cp:
+        return admin_icons(api, cid)
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'icon', pid))
-    label = G['PRODUCTS'][pid]['name'] if pid in G['PRODUCTS'] else UI_ICON_LABELS[pid]
+    if pid in G['PRODUCTS']:
+        label = G['PRODUCTS'][pid]['name']
+    elif pid in UI_ICON_LABELS:
+        label = UI_ICON_LABELS[pid]
+    elif custom_cat:
+        label = custom_cat[1]
+    else:
+        label = cp[1]
     send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بـ <b>{esc(label)}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
          kb([[btn('❌ إلغاء', 'cancelicon')]]))
 
@@ -656,7 +673,18 @@ def handle_admin_icon(api, message):
     if pid in G['PRODUCTS']:
         G['PRODUCTS'][pid]['custom_emoji_id'] = str(emoji)
     G['CONFIG']['custom_icons_enabled'] = True
-    label = G['PRODUCTS'][pid]['name'] if pid in G['PRODUCTS'] else UI_ICON_LABELS.get(pid, pid)
+    custom_cat = custom_category(pid)
+    cp = custom_product(pid)
+    if pid in G['PRODUCTS']:
+        label = G['PRODUCTS'][pid]['name']
+    elif pid in UI_ICON_LABELS:
+        label = UI_ICON_LABELS[pid]
+    elif custom_cat:
+        label = custom_cat[1]
+    elif cp:
+        label = cp[1]
+    else:
+        label = pid
     send(api, cid, f'✅ تم حفظ الأيقونة لـ <b>{esc(label)}</b>.',
          kb([[btn('➕ إضافة أيقونة أخرى', 'admin:icons')], [btn('🛍 معاينة المنتجات', 'products')]]))
     return True
@@ -741,7 +769,7 @@ def products(api, cid):
     buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items()]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(category_name, 'product:' + category_id) for category_id, category_name in custom_categories]
+    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -843,7 +871,7 @@ def category(api, cid, pid):
         for product_id, product_name, price_usd, available, stock in choices:
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + product_name + ' | ' + price(cid, product_id)
-            rows.append([btn(label, 'item:' + product_id, style='danger' if sold_out else None)])
+            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid]
