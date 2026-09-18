@@ -246,6 +246,18 @@ def customer_link(cid):
     return f'<a href="tg://user?id={cid}">{cid}</a>'
 
 
+UI_ICON_LABELS = {
+    'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
+    'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '💬 الدعم',
+    'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
+    'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية'
+}
+
+def ui_icon(key):
+    with db() as conn:
+        row = conn.execute('SELECT custom_emoji_id FROM category_icons WHERE pid=?', (key,)).fetchone()
+    return row[0] if row else None
+
 def apply_icon_overrides():
     with db() as conn:
         rows = conn.execute('SELECT pid,custom_emoji_id FROM category_icons').fetchall()
@@ -306,17 +318,21 @@ def admin_icons(api, cid):
     for pid, product in G['PRODUCTS'].items():
         mark = '✅ ' if product.get('custom_emoji_id') else ''
         buttons.append(btn(mark + product['name'], 'seticon:' + pid, product.get('custom_emoji_id')))
+    for key, label in UI_ICON_LABELS.items():
+        icon = ui_icon(key)
+        buttons.append(btn(('✅ ' if icon else '') + label, 'seticon:' + key, icon))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم، ثم أرسل الأيقونة للبوت في رسالة منفصلة.',
          kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def begin_icon_setup(api, cid, pid):
-    if cid != G['ADMIN_ID'] or pid not in G['PRODUCTS']:
+    if cid != G['ADMIN_ID'] or (pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS):
         return home(api, cid)
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'icon', pid))
-    send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بقسم <b>{esc(G["PRODUCTS"][pid]["name"])}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
+    label = G['PRODUCTS'][pid]['name'] if pid in G['PRODUCTS'] else UI_ICON_LABELS[pid]
+    send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بـ <b>{esc(label)}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
          kb([[btn('❌ إلغاء', 'cancelicon')]]))
 
 
@@ -339,9 +355,11 @@ def handle_admin_icon(api, message):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)', (pid, str(emoji)))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    G['PRODUCTS'][pid]['custom_emoji_id'] = str(emoji)
+    if pid in G['PRODUCTS']:
+        G['PRODUCTS'][pid]['custom_emoji_id'] = str(emoji)
     G['CONFIG']['custom_icons_enabled'] = True
-    send(api, cid, f'✅ تم حفظ الأيقونة لقسم <b>{esc(G["PRODUCTS"][pid]["name"])}</b>.',
+    label = G['PRODUCTS'][pid]['name'] if pid in G['PRODUCTS'] else UI_ICON_LABELS.get(pid, pid)
+    send(api, cid, f'✅ تم حفظ الأيقونة لـ <b>{esc(label)}</b>.',
          kb([[btn('➕ إضافة أيقونة أخرى', 'admin:icons')], [btn('🛍 معاينة المنتجات', 'products')]]))
     return True
 
@@ -394,7 +412,7 @@ def name(pid, cid=0):
 def start(api, cid):
     send(api, cid, tr(cid, '👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.',
                      '👋 <b>Welcome to VEXA STORE</b>\n\nDigital services and subscriptions.'),
-         kb([[btn('🚀 START | ابدأ', 'enter_store')], [btn('🌐 العربية / English', 'settings:lang')]]))
+         kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'))], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'))]]))
 
 
 def home(api, cid):
@@ -403,9 +421,9 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'🛒 المنتجات','🛒 Products'),'products',style='primary'), btn(tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',style='success')], [btn(tr(cid,'💎 الإحالات','💎 Referrals'),'referrals'), btn(tr(cid,'👤 حسابي','👤 My account'),'wallet')], [btn(tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',style='danger'), btn(tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support')], [btn(tr(cid,'💱 العملة','💱 Currency'),'settings:currency'), btn('🌐 Language / اللغة','settings:lang')]]
+    rows = [[btn(tr(cid,'🛒 المنتجات','🛒 Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'👤 حسابي','👤 My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'💱 العملة','💱 Currency'),'settings:currency',ui_icon('ui_currency')), btn('🌐 Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     if cid == G.get('ADMIN_ID'):
-        rows.append([btn('🧾 لوحة الطلبات', 'admin', style='primary')])
+        rows.append([btn('🧾 لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
