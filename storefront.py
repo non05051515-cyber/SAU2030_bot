@@ -707,10 +707,21 @@ def broadcast_product_alert(api, pid, kind='new'):
             heading = '✨ <b>NEW PRODUCT — VEXA STORE</b>' if kind == 'new' else '🔥 <b>BACK IN STOCK — VEXA STORE</b>'
             if cp:
                 _, product_name, description, price_usd, available, category_id, stock = cp
-                text = heading + '\n\n<b>' + esc(product_name) + '</b>'
+                text = heading + '\\n\\n<b>' + esc(product_name) + '</b>'
                 if description:
-                    text += '\n\n' + esc(description)
-                text += '\n\n💵 <b>
+                    text += '\\n\\n' + esc(description)
+                text += '\\n\\n💵 <b>$' + esc(price_usd) + '</b>'
+                if kind == 'stock':
+                    text += '\\n📦 ' + esc(str(stock)) + ' available'
+            else:
+                text = heading + '\\n\\n<b>' + esc(name(pid, user_id)) + '</b>\\n\\n💵 ' + price(user_id, pid, 'USD')
+            send(api, user_id, text, kb([[btn('Buy Now 🛒', 'item:' + pid, style='success')]]))
+            time.sleep(0.04)
+        except Exception:
+            pass
+
+
+def broadcast_new_products(api):
     """Broadcast each newly-added catalogue item once, across deploys."""
     with db() as conn:
         known = {row[0] for row in conn.execute('SELECT pid FROM announcements').fetchall()}
