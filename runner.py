@@ -6,6 +6,9 @@ import broadcast_admin
 # reinstall storefront into the bot namespace, and finally install admin
 # broadcast so its admin_panel/action handlers are the active ones.
 iptv_extension.s.install(bot.__dict__)
+# Reinstall storefront after the IPTV compatibility layer so newly-added
+# categories/products use the current storefront admin/icon handlers.
+iptv_extension.s.install(bot.__dict__)
 broadcast_admin.install(bot.__dict__)
 
 # storefront.action resolves admin_panel from storefront globals, so point
