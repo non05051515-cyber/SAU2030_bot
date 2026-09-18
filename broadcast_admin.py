@@ -41,6 +41,7 @@ def install(namespace):
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
+            [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
