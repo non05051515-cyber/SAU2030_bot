@@ -56,6 +56,7 @@ def db():
     if 'stock' not in cols:
         conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
     conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
     return conn
 
 
@@ -413,6 +414,70 @@ def handle_admin_text(api, message):
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, text))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
     send(api, cid, '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج') + '\n\n' + esc(text), kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
+    return True
+
+
+def saved_product_photo(pid):
+    with db() as conn:
+        row = conn.execute('SELECT file_id FROM product_photos WHERE pid=?', (LEGACY.get(pid, pid),)).fetchone()
+    return row[0] if row else None
+
+
+def admin_photo_menu(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + conn.execute('SELECT cid,name FROM admin_categories').fetchall()
+        custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
+    if category_id is None:
+        rows = [[btn(label, 'photocat:' + pid)] for pid, label in cats]
+    else:
+        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id] + custom_ids
+        if not ids and category_id in G['PRODUCTS']:
+            ids = [category_id]
+        rows = [[btn(name(pid, cid), 'photopick:' + pid)] for pid in ids]
+    send(api, cid, '🖼️ صورة المنتج\nاختر القسم ثم المنتج:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_photo_editor(api, cid, pid, delete=False):
+    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid)):
+        return
+    BROADCAST_PENDING.discard(cid)
+    with db() as conn:
+        conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        if delete:
+            conn.execute('INSERT OR REPLACE INTO product_photos VALUES (?,?)', (pid, ''))
+            conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        else:
+            conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'product_photo', pid))
+    if delete:
+        return send(api, cid, '✅ تم حذف صورة المنتج. سيظهر دون صورة عند فتحه مجددًا.', kb([[btn('🖼️ إضافة صورة', 'photopick:' + pid)], [btn('لوحة الإدارة', 'admin')]]))
+    send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\nأرسل الصورة هنا كصورة في تيليجرام لإضافتها أو استبدال الصورة الحالية.', kb([[btn('🗑 حذف الصورة', 'photodel:' + pid, style='danger')], [btn('إلغاء', 'admin')]]))
+
+
+def handle_admin_photo(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='product_photo'", (cid,)).fetchone()
+    if not row:
+        return False
+    text = message.get('text', '')
+    if text.startswith('/') or text in G.get('MENU', {}):
+        with db() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='product_photo'", (cid,))
+        return False
+    photos = message.get('photo') or []
+    file_id = photos[-1].get('file_id') if photos else None
+    if not file_id:
+        send(api, cid, 'أرسل الصورة كصورة في تيليجرام، وليس كملف أو نص.', kb([[btn('إلغاء', 'admin')]]))
+        return True
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_photos VALUES (?,?)', (row[0], file_id))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    send(api, cid, '✅ تم حفظ صورة المنتج.', kb([[btn('👁 معاينة المنتج', ('item:' if row[0] in VARIANTS or custom_product(row[0]) else 'product:') + row[0])], [btn('🖼️ منتج آخر', 'admin:photos')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -892,8 +957,13 @@ def settings(api, cid, kind):
     send(api, cid, text, kb(rows + [nav(cid)]))
 
 
-def card(api, cid, image_path, title, text, keyboard):
+def card(api, cid, image_path, title, text, keyboard, pid=None):
     """Separate photo and full text so Telegram's caption limit never drops terms."""
+    override = saved_product_photo(pid) if pid else None
+    if override is not None:
+        image_path = None
+        if override:
+            api.call('sendPhoto', chat_id=cid, photo=override, caption=title[:900])
     if image_path:
         path = (BASE / image_path).resolve()
         if path.is_relative_to(BASE) and path.is_file():
@@ -940,6 +1010,11 @@ def grok_cards(api, cid, choices):
             rows[0][0]['style'] = 'danger'
         rows.append([btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')])
         markup = kb(rows)
+        override = saved_product_photo(pid)
+        if override is not None:
+            if not override or not api.call('sendPhoto', chat_id=cid, photo=override, caption=caption, parse_mode='HTML', reply_markup=markup):
+                send(api, cid, caption, markup)
+            continue
         path = (BASE / (v.get('image') or 'assets/grok.png')).resolve()
         delivered = False
         if path.is_relative_to(BASE) and path.is_file():
@@ -999,7 +1074,7 @@ def category(api, cid, pid):
     text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows))
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
 
 
 def item(api, cid, pid):
@@ -1015,7 +1090,7 @@ def item(api, cid, pid):
         text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
-        card(api, cid, None, product_name, text, kb(rows))
+        card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
@@ -1032,7 +1107,7 @@ def item(api, cid, pid):
     if can_order(pid):
         rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
-    card(api, cid, v.get('image'), name(pid, cid), text, kb(rows))
+    card(api, cid, v.get('image'), name(pid, cid), text, kb(rows), pid=pid)
 
 
 def can_order(pid):
@@ -1250,6 +1325,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_photo(api, message):
+        return True
     if handle_admin_text(api, message):
         return True
     if handle_admin_price(api, message):
@@ -1393,6 +1470,7 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'photos': admin_photo_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
@@ -1436,6 +1514,12 @@ def action(api, cid, value):
         if len(parts) == 3:
             field, lang, pid = parts
             admin_text_editor(api, cid, field, pid, lang)
+    elif prefix == 'photocat':
+        admin_photo_menu(api, cid, arg)
+    elif prefix == 'photopick':
+        admin_photo_editor(api, cid, arg)
+    elif prefix == 'photodel':
+        admin_photo_editor(api, cid, arg, delete=True)
     elif prefix == 'pricecat':
         admin_prices(api, cid, arg)
     elif prefix == 'pricepick':
@@ -1632,8 +1716,13 @@ def settings(api, cid, kind):
     send(api, cid, text, kb(rows + [nav(cid)]))
 
 
-def card(api, cid, image_path, title, text, keyboard):
+def card(api, cid, image_path, title, text, keyboard, pid=None):
     """Separate photo and full text so Telegram's caption limit never drops terms."""
+    override = saved_product_photo(pid) if pid else None
+    if override is not None:
+        image_path = None
+        if override:
+            api.call('sendPhoto', chat_id=cid, photo=override, caption=title[:900])
     if image_path:
         path = (BASE / image_path).resolve()
         if path.is_relative_to(BASE) and path.is_file():
@@ -1680,6 +1769,11 @@ def grok_cards(api, cid, choices):
             rows[0][0]['style'] = 'danger'
         rows.append([btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')])
         markup = kb(rows)
+        override = saved_product_photo(pid)
+        if override is not None:
+            if not override or not api.call('sendPhoto', chat_id=cid, photo=override, caption=caption, parse_mode='HTML', reply_markup=markup):
+                send(api, cid, caption, markup)
+            continue
         path = (BASE / (v.get('image') or 'assets/grok.png')).resolve()
         delivered = False
         if path.is_relative_to(BASE) and path.is_file():
@@ -1739,7 +1833,7 @@ def category(api, cid, pid):
     text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows))
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
 
 
 def item(api, cid, pid):
@@ -1755,7 +1849,7 @@ def item(api, cid, pid):
         text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
-        card(api, cid, None, product_name, text, kb(rows))
+        card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
@@ -1772,7 +1866,7 @@ def item(api, cid, pid):
     if can_order(pid):
         rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
-    card(api, cid, v.get('image'), name(pid, cid), text, kb(rows))
+    card(api, cid, v.get('image'), name(pid, cid), text, kb(rows), pid=pid)
 
 
 def can_order(pid):
@@ -1990,6 +2084,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_photo(api, message):
+        return True
     if handle_admin_text(api, message):
         return True
     if handle_admin_price(api, message):
@@ -2133,6 +2229,7 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'photos': admin_photo_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
@@ -2176,6 +2273,12 @@ def action(api, cid, value):
         if len(parts) == 3:
             field, lang, pid = parts
             admin_text_editor(api, cid, field, pid, lang)
+    elif prefix == 'photocat':
+        admin_photo_menu(api, cid, arg)
+    elif prefix == 'photopick':
+        admin_photo_editor(api, cid, arg)
+    elif prefix == 'photodel':
+        admin_photo_editor(api, cid, arg, delete=True)
     elif prefix == 'pricecat':
         admin_prices(api, cid, arg)
     elif prefix == 'pricepick':
@@ -2277,4 +2380,5 @@ def install(namespace):
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
                          'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
+
 

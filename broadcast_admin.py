@@ -30,7 +30,7 @@ def install(namespace):
         PENDING.discard(cid)
         AUTO_AD_STATE.pop(cid, None)
         with sg['db']() as conn:
-            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text')", (cid,))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
             activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
@@ -41,6 +41,7 @@ def install(namespace):
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
+            [sg['btn']('🖼️ صورة المنتج', 'admin:photos')],
             [sg['btn']('✏️ تعديل اسم المنتج', 'admin:editname')],
             [sg['btn']('📝 تعديل وصف المنتج', 'admin:editdesc')],
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
@@ -53,10 +54,10 @@ def install(namespace):
         ]))
 
     def action(api, cid, value):
-        if cid == admin_id and not value.startswith(('txtcat:', 'txtpick:', 'txtedit:')):
+        if cid == admin_id and not value.startswith(('txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:')):
             with sg['db']() as conn:
-                conn.execute("DELETE FROM admin_state WHERE cid=? AND action='product_text'", (cid,))
-        if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:editname', 'admin:editdesc') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:'))):
+                conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('product_text','product_photo')", (cid,))
+        if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:editname', 'admin:editdesc', 'admin:photos') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
         if cid == admin_id and value == 'admin:autoad':
@@ -151,4 +152,5 @@ def tick_auto_ads(api):
         with sg.db() as conn: conn.execute('UPDATE auto_ads SET next_at=? WHERE id=1',(now+interval_sec,))
     except Exception as exc:
         print('Auto ad error:',type(exc).__name__)
+
 

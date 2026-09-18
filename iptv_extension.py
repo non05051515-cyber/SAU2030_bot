@@ -90,6 +90,9 @@ def iptv_item(api, cid, pid):
         rows.append([s.btn(s.tr(cid, '🛒 طلب الباقة', '🛒 Order package'), 'buy:' + pid)])
     rows.append([s.btn(s.tr(cid, '💬 تواصل للشحن', '💬 Contact for top-up'), 'support')])
     rows.append(s.nav(cid, 'product:iptv'))
+    photo = s.saved_product_photo(pid)
+    if photo:
+        api.call('sendPhoto', chat_id=cid, photo=photo, caption=s.name(pid, cid)[:900])
     return s.send(api, cid, text, s.kb(rows))
 
 
@@ -301,4 +304,5 @@ s.admin_icons = admin_icons
 s.begin_icon_setup = begin_icon_setup
 s.handle_admin_icon = handle_admin_icon
 s.broadcast_new_products = broadcast_new_products
+
 
