@@ -76,6 +76,7 @@ def iptv_item(api, cid, pid):
     usd = (sar / s.RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     text = (
         '<b>' + s.esc(s.name(pid, cid)) + '</b>\n\n'
+        + s.esc(s.product_description(pid, cid)) + '\n\n'
         + s.tr(cid, '👛 رصيدك الموجود في المتجر:', '👛 Your store balance:') + '\n'
         + f'<b>{sar:.2f} {s.tr(cid, "ر.س", "SAR")} / {usd:.2f} USD</b>\n\n'
         + s.tr(cid, '💰 سعر الباقة:', '💰 Package price:') + '\n'
@@ -300,3 +301,4 @@ s.admin_icons = admin_icons
 s.begin_icon_setup = begin_icon_setup
 s.handle_admin_icon = handle_admin_icon
 s.broadcast_new_products = broadcast_new_products
+

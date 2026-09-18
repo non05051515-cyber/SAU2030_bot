@@ -55,6 +55,7 @@ def db():
         conn.execute('ALTER TABLE admin_products ADD COLUMN price_usd TEXT')
     if 'stock' not in cols:
         conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
     return conn
 
 
@@ -338,6 +339,81 @@ def stock_editor(api, cid, pid, value=None):
     send(api, cid, text, kb([[btn('✅ متوفر', 'stockset:1:' + pid, style='success'),
                               btn('🔴 نفدت الكمية', 'stockset:0:' + pid, style='danger')],
                              [btn('↩️ منتج آخر', 'admin:stock')], [btn('لوحة الإدارة', 'admin')]]))
+
+
+def text_override(pid, field, lang, default):
+    with db() as conn:
+        row = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (LEGACY.get(pid, pid), field, lang)).fetchone()
+    return row[0] if row else default
+
+
+def product_description(pid, cid=0):
+    pid = LEGACY.get(pid, pid)
+    lang = prefs(cid)[0]
+    if pid in VARIANTS:
+        default = VARIANTS[pid].get('description', {}).get(lang, '')
+    else:
+        cp = custom_product(pid)
+        default = cp[2] if cp else G['PRODUCTS'].get(pid, {}).get('description', '')
+    return text_override(pid, 'description', lang, default)
+
+
+def admin_text_menu(api, cid, field, category_id=None):
+    if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
+        custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
+    if category_id is None:
+        cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + custom_cats
+        rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
+    else:
+        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id] + custom_ids
+        if not ids and category_id in G['PRODUCTS']:
+            ids = [category_id]
+        rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in ids]
+    send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_text_editor(api, cid, field, pid, lang=None):
+    if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
+        return
+    if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid):
+        return
+    if lang not in ('ar', 'en'):
+        return send(api, cid, 'اختر لغة النص الذي تريد تعديله:', kb([[btn('العربية', f'txtedit:{field}:ar:{pid}'), btn('English', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
+    BROADCAST_PENDING.discard(cid)
+    with db() as conn:
+        conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'product_text', json.dumps([pid, field, lang])))
+    label = 'الاسم الجديد (حتى 120 حرفًا)' if field == 'name' else 'الوصف الجديد (حتى 1500 حرف، ويمكن استخدام عدة أسطر)'
+    send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.'), kb([[btn('إلغاء', 'admin')]]))
+
+
+def handle_admin_text(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='product_text'", (cid,)).fetchone()
+    if not row:
+        return False
+    text = (message.get('text') or '').strip()
+    if text.startswith('/') or text in G.get('MENU', {}):
+        with db() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='product_text'", (cid,))
+        return False
+    pid, field, lang = json.loads(row[0])
+    limit = 120 if field == 'name' else 1500
+    if not text or len(text) > limit or (field == 'name' and '\n' in text):
+        send(api, cid, f'أرسل نصًا غير فارغ لا يتجاوز {limit} حرفًا.' + (' الاسم يكون في سطر واحد.' if field == 'name' else ''), kb([[btn('إلغاء', 'admin')]]))
+        return True
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, text))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    send(api, cid, '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج') + '\n\n' + esc(text), kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
+    return True
 
 
 def admin_prices(api, cid, category_id=None):
@@ -744,7 +820,7 @@ def broadcast_new_products(api):
         for cid in users:
             language = prefs(cid)[0]
             title = variant['name'][language]
-            description = variant['description'][language]
+            description = product_description(pid, cid)
             stock = variant.get('source_stock', 0)
             text = tr(cid, '🔥 <b>منتج جديد في VEXA STORE</b>', '🔥 <b>New product at VEXA STORE</b>')
             text += f'\n\n<b>{esc(title)}</b>\n➕ {tr(cid, "تمت الإضافة", "Added")}: {stock}\n📦 {tr(cid, "الكمية الحالية", "Current stock")}: {stock}'
@@ -772,11 +848,11 @@ def custom_product(pid):
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
-        return VARIANTS[pid]['name'][prefs(cid)[0]]
+        return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     cp = custom_product(pid)
     if cp:
-        return cp[1]
-    return G['PRODUCTS'].get(pid, {}).get('name', pid)
+        return text_override(pid, 'name', prefs(cid)[0], cp[1])
+    return text_override(pid, 'name', prefs(cid)[0], G['PRODUCTS'].get(pid, {}).get('name', pid))
 
 
 def start(api, cid):
@@ -901,7 +977,7 @@ def category(api, cid, pid):
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
             sold_out = not available or int(stock or 0) <= 0
-            label = ('🔴 نفد | ' if sold_out else '') + product_name + ' | ' + price(cid, product_id)
+            label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
@@ -919,11 +995,11 @@ def category(api, cid, pid):
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
-    description = p['description'] if prefs(cid)[0] == 'ar' else english.get(pid, p['name'])
-    text = p['name'] + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
+    description = product_description(pid, cid)
+    text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', p['name'], text, kb(rows))
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows))
 
 
 def item(api, cid, pid):
@@ -936,7 +1012,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = product_name + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + (description or '')
+        text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, product_name, text, kb(rows))
@@ -945,7 +1021,7 @@ def item(api, cid, pid):
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + v['description'][lang]
+    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
@@ -1174,6 +1250,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_text(api, message):
+        return True
     if handle_admin_price(api, message):
         return True
     if handle_admin_icon(api, message):
@@ -1315,6 +1393,8 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'editname': admin_text_menu(api, cid, 'name')
+        elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
@@ -1345,6 +1425,17 @@ def action(api, cid, value):
         value, _, pid = arg.partition(':')
         if value in ('0', '1'):
             stock_editor(api, cid, pid, value)
+    elif prefix == 'txtcat':
+        field, _, category_id = arg.partition(':')
+        admin_text_menu(api, cid, field, category_id)
+    elif prefix == 'txtpick':
+        field, _, pid = arg.partition(':')
+        admin_text_editor(api, cid, field, pid)
+    elif prefix == 'txtedit':
+        parts = arg.split(':', 2)
+        if len(parts) == 3:
+            field, lang, pid = parts
+            admin_text_editor(api, cid, field, pid, lang)
     elif prefix == 'pricecat':
         admin_prices(api, cid, arg)
     elif prefix == 'pricepick':
@@ -1469,7 +1560,7 @@ def install(namespace):
         for cid in users:
             language = prefs(cid)[0]
             title = variant['name'][language]
-            description = variant['description'][language]
+            description = product_description(pid, cid)
             stock = variant.get('source_stock', 0)
             text = tr(cid, '🔥 <b>منتج جديد في VEXA STORE</b>', '🔥 <b>New product at VEXA STORE</b>')
             text += f'\n\n<b>{esc(title)}</b>\n➕ {tr(cid, "تمت الإضافة", "Added")}: {stock}\n📦 {tr(cid, "الكمية الحالية", "Current stock")}: {stock}'
@@ -1497,11 +1588,11 @@ def custom_product(pid):
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
-        return VARIANTS[pid]['name'][prefs(cid)[0]]
+        return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     cp = custom_product(pid)
     if cp:
-        return cp[1]
-    return G['PRODUCTS'].get(pid, {}).get('name', pid)
+        return text_override(pid, 'name', prefs(cid)[0], cp[1])
+    return text_override(pid, 'name', prefs(cid)[0], G['PRODUCTS'].get(pid, {}).get('name', pid))
 
 
 def start(api, cid):
@@ -1626,7 +1717,7 @@ def category(api, cid, pid):
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
             sold_out = not available or int(stock or 0) <= 0
-            label = ('🔴 نفد | ' if sold_out else '') + product_name + ' | ' + price(cid, product_id)
+            label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
@@ -1644,11 +1735,11 @@ def category(api, cid, pid):
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
-    description = p['description'] if prefs(cid)[0] == 'ar' else english.get(pid, p['name'])
-    text = p['name'] + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
+    description = product_description(pid, cid)
+    text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', p['name'], text, kb(rows))
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows))
 
 
 def item(api, cid, pid):
@@ -1661,7 +1752,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = product_name + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + (description or '')
+        text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, product_name, text, kb(rows))
@@ -1670,7 +1761,7 @@ def item(api, cid, pid):
     available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + v['description'][lang]
+    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
@@ -1899,6 +1990,8 @@ def receipt_request(api, cid, pid, method):
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if handle_admin_text(api, message):
+        return True
     if handle_admin_price(api, message):
         return True
     if handle_admin_icon(api, message):
@@ -2040,6 +2133,8 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'editname': admin_text_menu(api, cid, 'name')
+        elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
@@ -2070,6 +2165,17 @@ def action(api, cid, value):
         value, _, pid = arg.partition(':')
         if value in ('0', '1'):
             stock_editor(api, cid, pid, value)
+    elif prefix == 'txtcat':
+        field, _, category_id = arg.partition(':')
+        admin_text_menu(api, cid, field, category_id)
+    elif prefix == 'txtpick':
+        field, _, pid = arg.partition(':')
+        admin_text_editor(api, cid, field, pid)
+    elif prefix == 'txtedit':
+        parts = arg.split(':', 2)
+        if len(parts) == 3:
+            field, lang, pid = parts
+            admin_text_editor(api, cid, field, pid, lang)
     elif prefix == 'pricecat':
         admin_prices(api, cid, arg)
     elif prefix == 'pricepick':
@@ -2171,3 +2277,4 @@ def install(namespace):
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
                          'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
+
