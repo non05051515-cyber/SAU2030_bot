@@ -33,16 +33,8 @@ def is_active(cid):
 
 
 def start_chat(api, cid):
-    with db() as conn:
-        conn.execute("INSERT INTO sessions(cid,active,history) VALUES (?,1,'[]') ON CONFLICT(cid) DO UPDATE SET active=1, history='[]'", (cid,))
-        row = conn.execute("SELECT count FROM usage WHERE cid=? AND day=?", (cid, today())).fetchone()
-    used = row[0] if row else 0
-    remaining = max(MAX_DAILY - used, 0)
-    text = s.tr(cid,
-        "<b>التحدث مع ChatGPT</b>\n\nاكتب رسالتك الآن وسأجيبك هنا داخل البوت.\nالحد اليومي: 15 رسالة.\nالمتبقي اليوم: <b>%d</b>" % remaining,
-        "<b>Chat with ChatGPT</b>\n\nSend your message now and I will answer here in the bot.\nDaily limit: 15 messages.\nRemaining today: <b>%d</b>" % remaining)
-    s.send(api, cid, text, s.kb([[s.btn(s.tr(cid, "إنهاء المحادثة", "End conversation"), "chatgpt:end")],
-                                [s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home")]]))
+    # Temporary placeholder until the API connection is enabled.
+    s.send(api, cid, s.tr(cid, "قريبًا", "Coming soon"), s.menu(cid))
 
 
 def end_chat(api, cid, go_home=False):
