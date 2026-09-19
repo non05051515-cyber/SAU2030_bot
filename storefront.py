@@ -2355,6 +2355,20 @@ def action(api, cid, value):
             conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
         send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
         send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+    elif prefix == 'infocat':
+        admin_info_menu(api, cid, arg)
+    elif prefix == 'infopick':
+        admin_info_editor(api, cid, arg)
+    elif prefix == 'infotoggle' and cid == G['ADMIN_ID']:
+        field, _, pid = arg.partition(':'); sp, ss, sw, w = info_display(pid)
+        if field == 'price': sp = 0 if sp else 1
+        elif field == 'stock': ss = 0 if ss else 1
+        elif field == 'warranty': sw = 0 if sw else 1
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO product_info_display VALUES (?,?,?,?,?)', (pid, sp, ss, sw, w))
+        admin_info_editor(api, cid, pid)
+    elif prefix == 'infowarranty' and cid == G['ADMIN_ID']:
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'info_warranty', arg))
+        send(api, cid, '✏️ أرسل نص الضمان لهذا المنتج، مثال: <b>15 يوم</b>.', kb([[btn('إلغاء', 'admin:info')]]))
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
