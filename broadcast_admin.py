@@ -49,6 +49,7 @@ def install(namespace):
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
+            [sg['btn']('📊 الإحصائيات', 'admin:stats')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
             [sg['btn']('🏠 الرئيسية', 'home')],
@@ -61,6 +62,28 @@ def install(namespace):
         if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
+        if cid == admin_id and value == 'admin:stats':
+            try:
+                users = set(_users())
+            except Exception:
+                users = set()
+            with sg['db']() as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
+                conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
+                departed = conn.execute('SELECT COUNT(*) FROM user_delivery_status WHERE departed=1').fetchone()[0]
+                row = conn.execute('SELECT sent,failed,created_at FROM broadcast_stats WHERE id=1').fetchone()
+            total = len(users)
+            available = max(total - departed, 0)
+            sent, failed, created = row if row else (0, 0, 'لا توجد رسالة جماعية بعد')
+            text = (f'📊 <b>إحصائيات البوت</b>\n\n'
+                    f'👥 إجمالي المستخدمين: <b>{total}</b>\n'
+                    f'🟢 المتاحون: <b>{available}</b>\n'
+                    f'🚪 غادروا البوت: <b>{departed}</b>\n\n'
+                    f'📢 <b>آخر رسالة جماعية</b>\n'
+                    f'✅ تم الإرسال: <b>{sent}</b>\n'
+                    f'❌ فشل الإرسال: <b>{failed}</b>\n'
+                    f'🕒 {sg["esc"](created)}')
+            return sg['send'](api, cid, text, sg['kb']([[sg['btn']('🔄 تحديث', 'admin:stats')], [sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
         if cid == admin_id and value == 'admin:autoad':
             AUTO_AD_STATE[cid] = {'step':'target'}
             return sg['send'](api,cid,'📣 <b>الإعلان التلقائي</b>\n\nأرسل معرف القروب مثل <code>@groupname</code> أو رقم القروب <code>-100...</code>.\nيجب أن يكون البوت داخل القروب. ',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('❌ إلغاء','admin:autoad_cancel')]]))
@@ -123,10 +146,18 @@ def install(namespace):
                                       message_id=message['message_id'])
                     if result:
                         ok += 1
+                        with sg['db']() as conn:
+                            conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0, sg['now_saudi']()))
                     else:
                         failed += 1
+                        with sg['db']() as conn:
+                            conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, sg['now_saudi']()))
                 except Exception:
                     failed += 1
+                    with sg['db']() as conn:
+                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, sg['now_saudi']()))
+            with sg['db']() as conn:
+                conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
             PENDING.discard(cid)
             sg['send'](api, cid,
                        f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
