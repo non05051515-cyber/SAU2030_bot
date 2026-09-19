@@ -28,7 +28,12 @@ class API:
  def call(self,m,**d):
   try:
    with urllib.request.urlopen(urllib.request.Request(self.u+m,json.dumps(d).encode(),{'Content-Type':'application/json'}),timeout=40) as r:return json.load(r).get('result')
-  except Exception as e:print('Telegram API error:',type(e).__name__);time.sleep(1)
+  except Exception as e:
+   if hasattr(e,'read'):
+    try: detail=e.read().decode('utf-8','replace')
+    except Exception: detail=''
+   else: detail=''
+   print('Telegram API error:',type(e).__name__,getattr(e,'code',''),detail,flush=True);time.sleep(1)
 def send(a,c,t,k=None):
  d={'chat_id':c,'text':t,'parse_mode':'HTML'}
  if k:d['reply_markup']=k
