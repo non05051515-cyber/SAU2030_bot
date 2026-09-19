@@ -151,7 +151,7 @@ def handle_chat_message(api, message):
         conn.execute("INSERT INTO usage(cid,day,count) VALUES (?,?,1) ON CONFLICT(cid,day) DO UPDATE SET count=count+1", (cid, today()))
         used = conn.execute("SELECT count FROM usage WHERE cid=? AND day=?", (cid, today())).fetchone()[0]
     s.send(api, cid, answer, s.kb([[s.btn(s.tr(cid, "إنهاء المحادثة", "End conversation"), "chatgpt:end"),
-                                   s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home")]]))
+                                   s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home", s.ui_icon("ui_chatgpt_home"))]]))
     return True
 
 
