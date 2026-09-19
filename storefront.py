@@ -283,6 +283,7 @@ UI_ICON_LABELS = {
     'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '💬 الدعم',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
+    'ui_chatgpt': 'التحدث مع ChatGPT', 'ui_chatgpt_end': 'إنهاء المحادثة', 'ui_chatgpt_home': 'الرجوع للصفحة الرئيسية',
     'pay_wallet': 'المحفظة', 'pay_cryptopay': 'Crypto Pay', 'pay_bybit': 'USDT — Bybit',
     'pay_bybitid': 'Bybit Pay', 'pay_trc20': 'USDT • TRON (TRC20)', 'pay_bep20': 'USDT • BSC (BEP20)'
 }
