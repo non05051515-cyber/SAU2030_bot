@@ -2326,6 +2326,7 @@ def action(api, cid, value):
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
+        elif arg == 'info': admin_info_menu(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
