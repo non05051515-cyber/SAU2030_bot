@@ -52,7 +52,7 @@ def ask_model(cid, text):
     if not key:
         raise RuntimeError("MIRAI_API_KEY missing")
     base = os.getenv("MIRAI_API_BASE", "https://api.miraiapi.com/v1").rstrip("/")
-    model = os.getenv("MIRAI_MODEL", "claude-sonnet-5")
+    model = os.getenv("MIRAI_MODEL", "claude-opus-4.8")
     with db() as conn:
         row = conn.execute("SELECT history FROM sessions WHERE cid=?", (cid,)).fetchone()
         try:
