@@ -1,6 +1,7 @@
 """ChatGPT customer chat extension. Keeps store behavior unchanged outside chat mode."""
 import json
 import os
+import time
 import sqlite3
 import urllib.request
 import urllib.error
@@ -121,7 +122,13 @@ def handle_chat_message(api, message):
                      [s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home")]]))
         return True
     try:
+        try:
+            api.call("sendChatAction", chat_id=cid, action="typing")
+        except Exception:
+            pass
+        started_at = time.monotonic()
         answer = ask_model(cid, text)
+        print("Mirai response time:", round(time.monotonic() - started_at, 2), "seconds")
     except Exception as exc:
         print("ChatGPT API error:", type(exc).__name__)
         if isinstance(exc, RuntimeError) and "MIRAI_API_KEY" in str(exc):
