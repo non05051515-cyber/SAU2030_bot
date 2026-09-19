@@ -61,21 +61,18 @@ def ask_model(cid, text):
     input_messages = [{"role": "system", "content": "You are the helpful customer chat assistant inside VEXA STORE. Reply in the same language as the customer. Be concise and helpful."}]
     input_messages.extend(history[-MAX_HISTORY:])
     input_messages.append({"role": "user", "content": text})
-    payload = json.dumps({"model": model, "input": input_messages, "max_output_tokens": 700}, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(base + "/responses", payload, {
+    payload = json.dumps({"model": model, "messages": input_messages, "max_tokens": 700}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(base + "/chat/completions", payload, {
         "Authorization": "Bearer " + key,
         "Content-Type": "application/json",
     })
     with urllib.request.urlopen(req, timeout=60) as response:
         data = json.load(response)
-    answer = data.get("output_text")
-    if not answer:
-        chunks = []
-        for item in data.get("output", []):
-            for part in item.get("content", []):
-                if part.get("type") == "output_text" and part.get("text"):
-                    chunks.append(part["text"])
-        answer = "\n".join(chunks).strip()
+    answer = ""
+    try:
+        answer = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        pass
     if not answer:
         raise RuntimeError("Empty model response")
     new_history = (history + [{"role": "user", "content": text}, {"role": "assistant", "content": answer}])[-MAX_HISTORY:]
