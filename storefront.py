@@ -778,8 +778,8 @@ def admin_panel(api, cid):
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
+                             [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
-                             [btn('🎛 بيانات المنتج الظاهرة', 'admin:info')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
