@@ -119,8 +119,8 @@ def handle_chat_message(api, message):
         used = row[0] if row else 0
     if used >= MAX_DAILY:
         s.send(api, cid, s.tr(cid, "وصلت إلى الحد اليومي للمحادثة (15 رسالة).", "You reached today's chat limit (15 messages)."),
-               s.kb([[s.btn(s.tr(cid, "إنهاء المحادثة", "End conversation"), "chatgpt:end")],
-                     [s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home")]]))
+               s.kb([[s.btn(s.tr(cid, "إنهاء المحادثة", "End conversation"), "chatgpt:end", s.ui_icon("ui_chatgpt_end"))],
+                     [s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home", s.ui_icon("ui_chatgpt_home"))]]))
         return True
     try:
         typing_stop = threading.Event()
@@ -186,7 +186,7 @@ def install(namespace):
                 [s.btn(s.tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',s.ui_icon('ui_referrals')), s.btn(s.tr(cid,'👤 حسابي','👤 My account'),'wallet',s.ui_icon('ui_account'))],
                 [s.btn(s.tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',s.ui_icon('ui_support'),style='danger'), s.btn(s.tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',s.ui_icon('ui_report'))],
                 [s.btn(s.tr(cid,'💱 العملة','💱 Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('🌐 Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
-                [s.btn(s.tr(cid, 'التحدث مع ChatGPT', 'Chat with ChatGPT'), 'chatgpt:start')]]
+                [s.btn(s.tr(cid, 'التحدث مع ChatGPT', 'Chat with ChatGPT'), 'chatgpt:start', s.ui_icon('ui_chatgpt'))]]
         if cid == s.G.get("ADMIN_ID"):
             rows.append([s.btn('🧾 لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='primary')])
         s.send(api, cid, text, s.kb(rows))
