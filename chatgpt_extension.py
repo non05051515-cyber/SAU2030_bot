@@ -33,8 +33,9 @@ def is_active(cid):
 
 
 def start_chat(api, cid):
-    # Temporary placeholder until the API connection is enabled.
-    s.send(api, cid, s.tr(cid, "قريبًا", "Coming soon"), s.menu(cid))
+    with db() as conn:
+        conn.execute("INSERT INTO sessions(cid,active,history) VALUES (?,1,\'[]\') ON CONFLICT(cid) DO UPDATE SET active=1, history=\'[]\'", (cid,))
+    s.send(api, cid, s.tr(cid, "بدأت المحادثة مع ChatGPT. أرسل رسالتك الآن.", "ChatGPT conversation started. Send your message now."), s.menu(cid))
 
 
 def end_chat(api, cid, go_home=False):
