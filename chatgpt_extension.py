@@ -2,6 +2,7 @@
 import json
 import os
 import time
+import threading
 import sqlite3
 import urllib.request
 import urllib.error
@@ -122,12 +123,21 @@ def handle_chat_message(api, message):
                      [s.btn(s.tr(cid, "الرجوع للصفحة الرئيسية", "Back to home"), "chatgpt:home")]]))
         return True
     try:
-        try:
-            api.call("sendChatAction", chat_id=cid, action="typing")
-        except Exception:
-            pass
+        typing_stop = threading.Event()
+        def keep_typing():
+            while not typing_stop.is_set():
+                try:
+                    api.call("sendChatAction", chat_id=cid, action="typing")
+                except Exception:
+                    pass
+                typing_stop.wait(4)
+        typing_thread = threading.Thread(target=keep_typing, daemon=True)
+        typing_thread.start()
         started_at = time.monotonic()
-        answer = ask_model(cid, text)
+        try:
+            answer = ask_model(cid, text)
+        finally:
+            typing_stop.set()
         print("Mirai response time:", round(time.monotonic() - started_at, 2), "seconds")
     except Exception as exc:
         print("ChatGPT API error:", type(exc).__name__)
