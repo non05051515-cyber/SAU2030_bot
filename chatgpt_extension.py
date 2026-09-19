@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -66,8 +67,16 @@ def ask_model(cid, text):
         "Authorization": "Bearer " + key,
         "Content-Type": "application/json",
     })
-    with urllib.request.urlopen(req, timeout=60) as response:
-        data = json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            data = json.load(response)
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")[:1000]
+        except Exception:
+            body = ""
+        print("Mirai HTTP error:", exc.code, body)
+        raise
     answer = ""
     try:
         answer = data["choices"][0]["message"]["content"]
