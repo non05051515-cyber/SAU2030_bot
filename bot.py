@@ -186,8 +186,10 @@ install(globals())
 # starts bot.py directly instead of using runner.py.
 import iptv_extension
 import broadcast_admin
+import chatgpt_extension
 iptv_extension.s.install(globals())
 broadcast_admin.install(globals())
+chatgpt_extension.install(globals())
 tick_auto_ads = broadcast_admin.tick_auto_ads
 
 if __name__=='__main__':main()
