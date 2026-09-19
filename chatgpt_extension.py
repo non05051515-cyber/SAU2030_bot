@@ -46,11 +46,11 @@ def end_chat(api, cid, go_home=False):
 
 
 def ask_model(cid, text):
-    key = os.getenv("OPENAI_API_KEY", "").strip()
+    key = os.getenv("MIRAI_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("OPENAI_API_KEY missing")
-    base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
-    model = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
+        raise RuntimeError("MIRAI_API_KEY missing")
+    base = os.getenv("MIRAI_API_BASE", "https://api.miraiapi.com/v1").rstrip("/")
+    model = os.getenv("MIRAI_MODEL", "claude-sonnet-5")
     with db() as conn:
         row = conn.execute("SELECT history FROM sessions WHERE cid=?", (cid,)).fetchone()
         try:
@@ -109,7 +109,7 @@ def handle_chat_message(api, message):
         answer = ask_model(cid, text)
     except Exception as exc:
         print("ChatGPT API error:", type(exc).__name__)
-        if isinstance(exc, RuntimeError) and "OPENAI_API_KEY" in str(exc):
+        if isinstance(exc, RuntimeError) and "MIRAI_API_KEY" in str(exc):
             msg = s.tr(cid, "خدمة ChatGPT لم تُربط بمفتاح API على الخادم بعد.", "ChatGPT is not connected to an API key on the server yet.")
         else:
             msg = s.tr(cid, "تعذر الحصول على رد الآن. حاول مرة أخرى.", "Could not get a response right now. Please try again.")
