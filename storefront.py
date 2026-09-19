@@ -1097,10 +1097,10 @@ def item(api, cid, pid):
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
-    available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
+    available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + product_description(pid, cid)
+    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
@@ -1871,10 +1871,10 @@ def item(api, cid, pid):
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
-    available = tr(cid, 'التوفر لدى المورد قابل للتغير؛ يُؤكد قبل تنفيذ الطلب.', 'Supplier availability can change; confirmation is required before fulfilment.')
+    available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + available + '\n\n' + product_description(pid, cid)
+    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
