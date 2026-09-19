@@ -2471,6 +2471,16 @@ def action(api, cid, value):
     elif prefix == 'admin':
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
+        elif arg == 'stats': admin_stats(api, cid)
+        elif arg == 'welcome_text': admin_welcome_text(api, cid)
+        elif arg == 'welcome_edit' and cid == G['ADMIN_ID']:
+            with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'welcome_text', ''))
+            send(api, cid, '✏️ أرسل الآن النص الذي تريد حفظه لواجهة البداية.', kb([[btn('❌ إلغاء', 'admin:welcome_text')]]))
+        elif arg == 'welcome_delete' and cid == G['ADMIN_ID']:
+            with db() as conn:
+                conn.execute('DELETE FROM bot_settings WHERE key="welcome_text"')
+                conn.execute('DELETE FROM admin_state WHERE cid=? AND action="welcome_text"', (cid,))
+            send(api, cid, '✅ تم حذف نص واجهة البداية.', kb([[btn('↩️ رجوع', 'admin:welcome_text')]]))
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
