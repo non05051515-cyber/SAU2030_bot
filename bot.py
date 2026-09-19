@@ -152,6 +152,8 @@ def main():
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
  a=API(t)
+ # This bot uses getUpdates polling; remove any stale webhook first.
+ a.call('deleteWebhook',drop_pending_updates=False)
  a.call('setMyCommands',commands=[{'command':'start','description':'Start | ابدأ'},{'command':'products','description':'Products | المنتجات'},{'command':'currency','description':'Currency | العملة'},{'command':'language','description':'Language | اللغة'}])
  a.call('setChatMenuButton',menu_button={'type':'commands'})
  if 'broadcast_new_products' in globals():broadcast_new_products(a)
