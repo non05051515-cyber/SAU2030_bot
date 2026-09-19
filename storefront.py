@@ -44,6 +44,8 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
+    conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
+    conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
@@ -814,8 +816,33 @@ def admin_panel(api, cid):
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
+                             [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
+
+
+def admin_stats(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    try:
+        users = [int(x) for x in json.loads(USERS_PATH.read_text(encoding='utf-8'))]
+    except Exception:
+        users = []
+    total = len(set(users))
+    with db() as conn:
+        departed = conn.execute('SELECT COUNT(*) FROM user_delivery_status WHERE departed=1').fetchone()[0]
+        row = conn.execute('SELECT sent,failed,created_at FROM broadcast_stats WHERE id=1').fetchone()
+    available = max(total - departed, 0)
+    sent, failed, created = row if row else (0, 0, 'لا توجد رسالة جماعية بعد')
+    text = (f'📊 <b>إحصائيات البوت</b>\n\n'
+            f'👥 إجمالي المستخدمين: <b>{total}</b>\n'
+            f'🟢 المتاحون: <b>{available}</b>\n'
+            f'🚪 غادروا البوت: <b>{departed}</b>\n\n'
+            f'📢 <b>آخر رسالة جماعية</b>\n'
+            f'✅ تم الإرسال: <b>{sent}</b>\n'
+            f'❌ فشل الإرسال: <b>{failed}</b>\n'
+            f'🕒 {esc(created)}')
+    send(api, cid, text, kb([[btn('🔄 تحديث', 'admin:stats')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_orders(api, cid):
@@ -1460,10 +1487,18 @@ def receipt(api, message):
                                   message_id=message['message_id'])
                 if result:
                     ok += 1
+                    with db() as conn:
+                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0, now_saudi()))
                 else:
                     failed += 1
+                    with db() as conn:
+                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, now_saudi()))
             except Exception:
                 failed += 1
+                with db() as conn:
+                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, now_saudi()))
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, now_saudi()))
         BROADCAST_PENDING.discard(cid)
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
@@ -1578,6 +1613,7 @@ def action(api, cid, value):
     elif prefix == 'admin':
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
+        elif arg == 'stats': admin_stats(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
