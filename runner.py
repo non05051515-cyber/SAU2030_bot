@@ -1,6 +1,7 @@
 import bot
 import iptv_extension
 import broadcast_admin
+import chatgpt_extension
 
 # bot already installs storefront during import. Apply IPTV patches, then
 # reinstall storefront into the bot namespace, and finally install admin
@@ -10,6 +11,7 @@ iptv_extension.s.install(bot.__dict__)
 # categories/products use the current storefront admin/icon handlers.
 iptv_extension.s.install(bot.__dict__)
 broadcast_admin.install(bot.__dict__)
+chatgpt_extension.install(bot.__dict__)
 
 # storefront.action resolves admin_panel from storefront globals, so point
 # that global at the admin-only broadcast panel as well.
