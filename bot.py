@@ -164,6 +164,7 @@ def main():
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
     if handle_admin_delivery(a,m):continue
+    if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
     if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
     if handle_receipt(a,m):continue
