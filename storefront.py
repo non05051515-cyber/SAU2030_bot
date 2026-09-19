@@ -44,7 +44,6 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
-    conn.execute('CREATE TABLE IF NOT EXISTS bot_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
@@ -819,7 +818,6 @@ def admin_panel(api, cid):
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
-                             [btn('📝 نص واجهة البداية', 'admin:welcome_text', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
 
@@ -846,18 +844,6 @@ def admin_stats(api, cid):
             f'❌ فشل الإرسال: <b>{failed}</b>\n'
             f'🕒 {esc(created)}')
     send(api, cid, text, kb([[btn('🔄 تحديث', 'admin:stats')], [btn('↩️ لوحة الإدارة', 'admin')]]))
-
-
-def admin_welcome_text(api, cid):
-    if cid != G['ADMIN_ID']:
-        return home(api, cid)
-    with db() as conn:
-        row = conn.execute('SELECT value FROM bot_settings WHERE key="welcome_text"').fetchone()
-    current = row[0] if row and row[0] else 'لا يوجد نص مضاف حالياً.'
-    send(api, cid, '📝 <b>نص واجهة البداية</b>\n\nالنص الحالي:\n' + esc(current),
-         kb([[btn('✏️ إضافة / تعديل النص', 'admin:welcome_edit', style='primary')],
-             [btn('🗑 حذف النص', 'admin:welcome_delete', style='danger')],
-             [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_orders(api, cid):
@@ -1511,19 +1497,6 @@ def receipt(api, message):
         return True
     if handle_admin_price(api, message):
         return True
-    if cid == G.get('ADMIN_ID'):
-        with db() as conn:
-            state = conn.execute('SELECT action FROM admin_state WHERE cid=?', (cid,)).fetchone()
-        if state and state[0] == 'welcome_text':
-            value = (message.get('text') or '').strip()
-            if not value:
-                send(api, cid, 'أرسل نصاً صالحاً.')
-                return True
-            with db() as conn:
-                conn.execute('INSERT OR REPLACE INTO bot_settings(key,value) VALUES ("welcome_text",?)', (value,))
-                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-            send(api, cid, '✅ تم حفظ النص.', kb([[btn('↩️ رجوع', 'admin:welcome_text')]]))
-            return True
     if handle_admin_icon(api, message):
         return True
     if cid == G.get('ADMIN_ID') and cid in BROADCAST_PENDING:
@@ -1671,15 +1644,6 @@ def action(api, cid, value):
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'stats': admin_stats(api, cid)
-        elif arg == 'welcome_text': admin_welcome_text(api, cid)
-        elif arg == 'welcome_edit' and cid == G['ADMIN_ID']:
-            with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'welcome_text', ''))
-            send(api, cid, '✏️ أرسل الآن النص الذي تريد حفظه لواجهة البداية.', kb([[btn('❌ إلغاء', 'admin:welcome_text')]]))
-        elif arg == 'welcome_delete' and cid == G['ADMIN_ID']:
-            with db() as conn:
-                conn.execute('DELETE FROM bot_settings WHERE key="welcome_text"')
-                conn.execute('DELETE FROM admin_state WHERE cid=? AND action="welcome_text"', (cid,))
-            send(api, cid, '✅ تم حذف نص واجهة البداية.', kb([[btn('↩️ رجوع', 'admin:welcome_text')]]))
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
@@ -2472,15 +2436,6 @@ def action(api, cid, value):
         if arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'stats': admin_stats(api, cid)
-        elif arg == 'welcome_text': admin_welcome_text(api, cid)
-        elif arg == 'welcome_edit' and cid == G['ADMIN_ID']:
-            with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'welcome_text', ''))
-            send(api, cid, '✏️ أرسل الآن النص الذي تريد حفظه لواجهة البداية.', kb([[btn('❌ إلغاء', 'admin:welcome_text')]]))
-        elif arg == 'welcome_delete' and cid == G['ADMIN_ID']:
-            with db() as conn:
-                conn.execute('DELETE FROM bot_settings WHERE key="welcome_text"')
-                conn.execute('DELETE FROM admin_state WHERE cid=? AND action="welcome_text"', (cid,))
-            send(api, cid, '✅ تم حذف نص واجهة البداية.', kb([[btn('↩️ رجوع', 'admin:welcome_text')]]))
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
