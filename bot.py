@@ -2,7 +2,7 @@
 import json,os,time,urllib.request
 from pathlib import Path
 BASE=Path(__file__).resolve().parent;CONFIG=json.loads((BASE/'catalog.json').read_text(encoding='utf-8'));ADMIN_ID=8386371522
-USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={}
+USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={};PENDING_ADMIN_DELIVERY={};PAYMENT_REVIEWS={}
 ICONS={'chatgpt':'🤖','youtube':'▶️','canva':'🎨','gemini':'✨','capcut':'🎬','claude':'✳️','grok':'✖️','netflix':'📺','iptv':'📡'}
 PRODUCTS={x['id']:dict(x,icon=ICONS.get(x['id'],'▫️')) for x in CONFIG['products']}
 EN={'chatgpt':('ChatGPT','AI assistant for conversations, writing, and everyday tasks.'),'youtube':('YouTube','Enjoy YouTube without ads, background playback, offline downloads, and YouTube Music Premium benefits.'),'canva':('Canva','A design platform for creating graphics and visual content.'),'gemini':('Gemini','AI assistant for conversations, writing, and content analysis.'),'capcut':('CapCut','Video editing and content creation tool.'),'claude':('Claude','Choose the Claude product that suits you.'),'grok':('Grok','AI assistant for conversations and answering questions.'),'netflix':('NETFLIX','Netflix subscription for movies, series, and entertainment content.'),'iptv':('IPTV','IPTV subscriptions for watching content on supported devices.')}
@@ -83,17 +83,46 @@ def back(pid):
 def pv(n):return os.getenv(n,'Not configured')
 def show_payment(a,c,pid):
  bank={'text':tr(c,'تحويل بنكي — الراجحي','Bank Transfer — Al Rajhi'),'callback_data':f'paybank:{pid}','icon_custom_emoji_id':'5452024291472196683'};by={'text':'USDT — Bybit','callback_data':f'paybybit:{pid}','icon_custom_emoji_id':'5472387796574418157'};send(a,c,f"💳 <b>{tr(c,'اختر طريقة الدفع','Choose Payment Method')}</b>\n\n🛒 {tr(c,'المنتج','Product')}: <b>{order_name(c,pid)}</b>",{'inline_keyboard':[[bank],[by],[btn(tr(c,'↩️ رجوع','↩️ Back'),back(pid))]]})
-def show_bank(a,c,pid):send(a,c,tr(c,f"🏦 <b>التحويل البنكي — مصرف الراجحي</b>\n\nاسم الحساب: <b>{pv('PAYMENT_BANK_HOLDER')}</b>\nرقم الحساب:\n<code>{pv('PAYMENT_BANK_ACCOUNT')}</code>\n\nالآيبان:\n<code>{pv('PAYMENT_BANK_IBAN')}</code>\n\n⚠️ تأكد من البيانات قبل التحويل.",f"🏦 <b>Bank Transfer — Al Rajhi</b>\n\nAccount holder: <b>{pv('PAYMENT_BANK_HOLDER')}</b>\nAccount number:\n<code>{pv('PAYMENT_BANK_ACCOUNT')}</code>\n\nIBAN:\n<code>{pv('PAYMENT_BANK_IBAN')}</code>\n\n⚠️ Verify the details before transferring."),{'inline_keyboard':[[btn(tr(c,'✅ تم التحويل','✅ Transfer Complete'),f'receipt:bank:{pid}')],[btn(tr(c,'↩️ طرق الدفع','↩️ Payment Methods'),f'buy:{pid}')]]})
+def show_bank(a,c,pid):send(a,c,tr(c,f"🏦 <b>التحويل البنكي — مصرف الراجحي</b>\n\nاسم الحساب: <b>{pv('PAYMENT_BANK_HOLDER')}</b>\nرقم الحساب:\n<code>{pv('PAYMENT_BANK_ACCOUNT')}</code>\n\nالآيبان:\n<code>{pv('PAYMENT_BANK_IBAN')}</code>\n\n⚠️ تأكد من البيانات قبل التحويل.",f"🏦 <b>Bank Transfer — Al Rajhi</b>\n\nAccount holder: <b>{pv('PAYMENT_BANK_HOLDER')}</b>\nAccount number:\n<code>{pv('PAYMENT_BANK_ACCOUNT')}</code>\n\nIBAN:\n<code>{pv('PAYMENT_BANK_IBAN')}</code>\n\n⚠️ Verify the details before transferring."),{'inline_keyboard':[[btn(tr(c,'🟢 تم التحويل','🟢 Transfer Complete'),f'receipt:bank:{pid}')],[btn(tr(c,'↩️ طرق الدفع','↩️ Payment Methods'),f'buy:{pid}')]]})
 def show_bybit(a,c,pid):send(a,c,tr(c,'🪙 <b>USDT — Bybit</b>\n\nاختر طريقة إرسال USDT:','🪙 <b>USDT — Bybit</b>\n\nChoose how to send USDT:'),{'inline_keyboard':[[btn('🟡 Bybit Pay',f'bybitid:{pid}')],[btn('🔴 USDT • TRON (TRC20)',f'trc20:{pid}')],[btn('🟡 USDT • BSC (BEP20)',f'bep20:{pid}')],[btn(tr(c,'↩️ طرق الدفع','↩️ Payment Methods'),f'buy:{pid}')]]})
 def show_crypto(a,c,pid,kind):
- key={'bybitid':'PAYMENT_BYBIT_PAY_ID','trc20':'PAYMENT_USDT_TRC20','bep20':'PAYMENT_USDT_BEP20'}[kind];send(a,c,f"🪙 <b>USDT</b>\n\n{'Bybit Pay ID' if kind=='bybitid' else 'Wallet Address'}:\n<code>{pv(key)}</code>\n\n⚠️ {tr(c,'تأكد من الشبكة والمعرف قبل الإرسال.','Verify the network and address/ID before sending.')}",{'inline_keyboard':[[btn(tr(c,'✅ تم التحويل','✅ Transfer Complete'),f'receipt:{kind}:{pid}')],[btn('↩️ Bybit',f'paybybit:{pid}')]]})
+ key={'bybitid':'PAYMENT_BYBIT_PAY_ID','trc20':'PAYMENT_USDT_TRC20','bep20':'PAYMENT_USDT_BEP20'}[kind];send(a,c,f"🪙 <b>USDT</b>\n\n{'Bybit Pay ID' if kind=='bybitid' else 'Wallet Address'}:\n<code>{pv(key)}</code>\n\n⚠️ {tr(c,'تأكد من الشبكة والمعرف قبل الإرسال.','Verify the network and address/ID before sending.')}",{'inline_keyboard':[[btn(tr(c,'🟢 تم التحويل','🟢 Transfer Complete'),f'receipt:{kind}:{pid}')],[btn('↩️ Bybit',f'paybybit:{pid}')]]})
 def receipt(a,c,pid,m):PENDING_RECEIPTS[c]={'product':pid,'method':m};send(a,c,tr(c,'📸 <b>إرسال إثبات الدفع</b>\n\nأرسل الآن صورة إثبات التحويل.','📸 <b>Send Payment Proof</b>\n\nSend a photo of your payment receipt now.'))
 def handle_receipt(a,m):
  c=m['chat']['id'];x=PENDING_RECEIPTS.get(c)
  if not x:return False
  if not m.get('photo'):send(a,c,tr(c,'📸 فضلاً أرسل صورة إثبات الدفع.','📸 Please send a photo of the payment receipt.'));return True
- u=m.get('from',{});send(a,ADMIN_ID,f"🧾 <b>إثبات دفع جديد</b>\n🛒 {order_name(c,x['product'])}\n👤 {'@'+u['username'] if u.get('username') else 'بدون معرف'}\n🆔 <code>{c}</code>");a.call('forwardMessage',chat_id=ADMIN_ID,from_chat_id=c,message_id=m['message_id']);PENDING_RECEIPTS.pop(c,None);send(a,c,tr(c,'✅ تم استلام إثبات الدفع وإرساله للإدارة.','✅ Payment proof received and sent to the administration.'),keyboard(c));return True
+ u=m.get('from',{});review_id=str(int(time.time()*1000));PAYMENT_REVIEWS[review_id]={'customer':c,'product':x['product'],'method':x['method'],'lang':lang(c)}
+ send(a,ADMIN_ID,f"🧾 <b>إثبات دفع جديد</b>\n🛒 {order_name(c,x['product'])}\n👤 {'@'+u['username'] if u.get('username') else 'بدون معرف'}\n🆔 <code>{c}</code>")
+ a.call('forwardMessage',chat_id=ADMIN_ID,from_chat_id=c,message_id=m['message_id'])
+ send(a,ADMIN_ID,'اختر الإجراء لهذا الطلب:',{'inline_keyboard':[[btn('✅ قبول',f'adminpay:accept:{review_id}'),btn('❌ رفض',f'adminpay:reject:{review_id}')]]})
+ PENDING_RECEIPTS.pop(c,None);send(a,c,tr(c,'✅ تم استلام إثبات الدفع وإرساله للإدارة للمراجعة.','✅ Payment proof received and sent for review.'),keyboard(c));return True
+
+def handle_admin_delivery(a,m):
+ if m.get('chat',{}).get('id')!=ADMIN_ID:return False
+ x=PENDING_ADMIN_DELIVERY.get(ADMIN_ID)
+ if not x:return False
+ customer=x['customer']
+ try:
+  a.call('copyMessage',chat_id=customer,from_chat_id=ADMIN_ID,message_id=m['message_id'])
+  send(a,ADMIN_ID,'✅ تم إرسال الرسالة للعميل بنجاح.')
+ except Exception:
+  send(a,ADMIN_ID,'❌ تعذر إرسال الرسالة للعميل.')
+ PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
+ return True
 def action(a,c,x):
+ if x.startswith('adminpay:') and c==ADMIN_ID:
+  _,decision,rid=x.split(':',2);r=PAYMENT_REVIEWS.get(rid)
+  if not r:return send(a,c,'⚠️ هذا الطلب غير موجود أو تمت معالجته.')
+  customer=r['customer']
+  if decision=='accept':
+   send(a,customer,'✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
+   PENDING_ADMIN_DELIVERY[ADMIN_ID]={'customer':customer,'review_id':rid}
+   PAYMENT_REVIEWS.pop(rid,None)
+   return send(a,c,'✅ تم قبول الدفع.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> للعميل مباشرة.')
+  PAYMENT_REVIEWS.pop(rid,None)
+  send(a,customer,'❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى التواصل مع الدعم أو إعادة المحاولة.')
+  return send(a,c,'❌ تم رفض إثبات الدفع وإبلاغ العميل.')
  if x.startswith('lang:'):
   set_lang(c,x.split(':',1)[1]);show_home(a,c)
  elif x in ('home','enter_store'):show_home(a,c)
@@ -134,6 +163,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    if handle_admin_delivery(a,m):continue
     if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
     if handle_receipt(a,m):continue
     if txt.startswith('/start'):
