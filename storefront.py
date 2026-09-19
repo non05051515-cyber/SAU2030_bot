@@ -819,7 +819,7 @@ def admin_panel(api, cid):
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
-                             [btn('📝 نص واجهة البداية', 'admin:welcome_text')],
+                             [btn('📝 نص واجهة البداية', 'admin:welcome_text', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
 
