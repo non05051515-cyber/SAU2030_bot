@@ -106,6 +106,12 @@ def handle_chat_message(api, message):
     if not text:
         s.send(api, cid, s.tr(cid, "أرسل رسالة نصية للمحادثة.", "Send a text message to chat."))
         return True
+    # Normal store/menu commands must leave ChatGPT mode instead of being sent to Mirai.
+    menu_actions = s.G.get("MENU", {})
+    if text.startswith("/start") or (text in menu_actions and menu_actions.get(text) not in ("chatgpt", "chatgpt:start", "chatgpt:end", "chatgpt:home")):
+        with db() as conn:
+            conn.execute("INSERT INTO sessions(cid,active,history) VALUES (?,0,'[]') ON CONFLICT(cid) DO UPDATE SET active=0, history='[]'", (cid,))
+        return False
     with db() as conn:
         row = conn.execute("SELECT count FROM usage WHERE cid=? AND day=?", (cid, today())).fetchone()
         used = row[0] if row else 0
