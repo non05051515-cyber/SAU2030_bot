@@ -66,6 +66,8 @@ def ask_model(cid, text):
     req = urllib.request.Request(base + "/chat/completions", payload, {
         "Authorization": "Bearer " + key,
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; SAU2030Bot/1.0)",
     })
     try:
         with urllib.request.urlopen(req, timeout=60) as response:
