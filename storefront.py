@@ -59,6 +59,9 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
+    icon_cols={row[1] for row in conn.execute('PRAGMA table_info(product_info_icons)').fetchall()}
+    if 'fallback_emoji' not in icon_cols:
+        conn.execute('ALTER TABLE product_info_icons ADD COLUMN fallback_emoji TEXT NOT NULL DEFAULT "⭐"')
     return conn
 
 
@@ -378,8 +381,8 @@ def product_stock(pid):
 
 def info_icon(pid,field,fallback):
     with db() as conn:
-        row=conn.execute('SELECT custom_emoji_id FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
-    return ('<tg-emoji emoji-id="'+esc(row[0])+'">'+fallback+'</tg-emoji>') if row else fallback
+        row=conn.execute('SELECT custom_emoji_id,fallback_emoji FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
+    return ('<tg-emoji emoji-id="'+esc(row[0])+'">'+esc(row[1] or fallback)+'</tg-emoji>') if row else fallback
 
 def info_block(pid,cid):
     sp,ss,sw,w=info_display(pid); lines=[]
@@ -455,8 +458,15 @@ def handle_info_icon(api,message):
     if not emoji:
         send(api,cid,'لم أجد أيقونة مخصصة. أرسل الأيقونة المتحركة نفسها.',kb([[btn('❌ إلغاء','admin:info')]])); return True
     field,_,pid=row[0].partition(':')
+    fallback='⭐'
+    try:
+        stickers=api.call('getCustomEmojiStickers',custom_emoji_ids=[str(emoji)]) or []
+        if stickers and stickers[0].get('emoji'):
+            fallback=stickers[0]['emoji']
+    except Exception:
+        pass
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO product_info_icons VALUES (?,?,?)',(pid,field,str(emoji)))
+        conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,str(emoji),fallback))
         conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
     admin_info_editor(api,cid,pid); return True
 
