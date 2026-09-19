@@ -1182,29 +1182,37 @@ def category(api, cid, pid):
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
-        # Keep the whole ChatGPT catalogue in ONE Telegram message to avoid
-        # flooding the customer with one message per product.
-        lines = ['<b>' + esc(p['name']) + '</b>', '', tr(cid, 'اختر المنتج:', 'Choose a product:'), '']
+        # Compact storefront-style catalogue: one Telegram message, one
+        # selectable row per product. Telegram bots cannot render arbitrary
+        # HTML/CSS cards, so this is the closest native layout to the mockup.
+        lines = ['<b>🤖 ChatGPT</b>',
+                 tr(cid, 'حسابات أصلية • تسليم فوري • أسعار مميزة',
+                    'Original accounts • Instant delivery • Great prices'),
+                 '',
+                 tr(cid, 'اختر المنتج من القائمة بالأسفل:', 'Choose a product below:')]
         rows = []
         for v in choices:
             product_id = v['id']
             sold_out = not in_stock(product_id)
             stock = product_stock(product_id)
             show_price, show_stock, show_warranty, warranty = info_display(product_id)
-            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '🟢 ')
-            lines.append(status + '<b>' + esc(name(product_id, cid)) + '</b>')
+
+            details = []
             if show_price:
-                lines.append('💰 ' + esc(price(cid, product_id)))
+                details.append('💰 ' + price(cid, product_id))
             if show_stock:
-                lines.append('📦 ' + tr(cid, 'المخزون: ', 'Stock: ') + esc(stock))
+                details.append('📦 ' + tr(cid, 'المخزون ', 'Stock ') + str(stock))
             if show_warranty and warranty:
-                lines.append('🛡️ ' + tr(cid, 'الضمان: ', 'Warranty: ') + esc(warranty))
-            lines.append('')
-            rows.append([btn(('🔴 ' if sold_out else '🛒 ') + name(product_id, cid),
-                             'item:' + product_id, p.get('custom_emoji_id'),
+                details.append('🛡️ ' + str(warranty))
+
+            label = ('🔴 ' if sold_out else '🟢 ') + name(product_id, cid)
+            if details:
+                label += ' — ' + ' | '.join(details)
+            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id),
                              'danger' if sold_out else 'primary')])
-        rows.append(nav(cid))
-        send(api, cid, '\n'.join(lines).rstrip(), kb(rows))
+
+        rows.append([btn(tr(cid, '⬅️ العودة إلى الأقسام', '⬅️ Back to categories'), 'products')])
+        send(api, cid, '\n'.join(lines), kb(rows))
         return
     if choices:
         rows = []
