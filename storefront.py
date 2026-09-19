@@ -1044,7 +1044,17 @@ def name(pid, cid=0):
     return text_override(pid, 'name', prefs(cid)[0], G['PRODUCTS'].get(pid, {}).get('name', pid))
 
 
+def reset_navigation_state(cid):
+    """Exit any unfinished input/payment flow when the user explicitly starts over or goes home."""
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+        conn.execute('UPDATE wallet_topups SET status="cancelled" WHERE cid=? AND status="receipt_pending"', (cid,))
+
+
 def start(api, cid):
+    reset_navigation_state(cid)
     send(api, cid, tr(cid, '👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.',
                      '👋 <b>Welcome to VEXA STORE</b>\n\nDigital services and subscriptions.'),
          kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'))], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'))]]))
@@ -1613,6 +1623,7 @@ def action(api, cid, value):
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
     if prefix in ('home', 'enter_store'):
+        reset_navigation_state(cid)
         home(api, cid)
     elif prefix == 'start':
         start(api, cid)
@@ -1875,6 +1886,7 @@ def name(pid, cid=0):
 
 
 def start(api, cid):
+    reset_navigation_state(cid)
     send(api, cid, tr(cid, '👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.',
                      '👋 <b>Welcome to VEXA STORE</b>\n\nDigital services and subscriptions.'),
          kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'))], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'))]]))
@@ -2403,6 +2415,7 @@ def action(api, cid, value):
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
     if prefix in ('home', 'enter_store'):
+        reset_navigation_state(cid)
         home(api, cid)
     elif prefix == 'start':
         start(api, cid)
