@@ -1154,6 +1154,21 @@ def category(api, cid, pid):
     choices = [v for v in VARIANTS.values() if v['category'] == pid]
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
+    if pid == 'chatgpt' and choices:
+        send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'))
+        for v in choices:
+            product_id = v['id']
+            sold_out = not in_stock(product_id)
+            stock = product_stock(product_id)
+            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
+            card_text = status + '<b>' + esc(name(product_id, cid)) + '</b>\n'
+            card_text += '<b>' + esc(price(cid, product_id)) + '</b>\n'
+            card_text += '<code>' + tr(cid, 'الكمية: ', 'Quantity: ') + esc(stock) + '</code>'
+            send(api, cid, card_text, kb([[btn(tr(cid, 'اختيار المنتج', 'Select product'), 'item:' + product_id,
+                                                   p.get('custom_emoji_id'), 'danger' if sold_out else 'primary')]]))
+        send(api, cid, tr(cid, 'اختر من المنتجات أعلاه.', 'Choose from the products above.'),
+             kb([nav(cid)]))
+        return
     if choices:
         rows = []
         for v in choices:
