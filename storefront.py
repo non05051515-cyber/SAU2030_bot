@@ -1067,10 +1067,11 @@ def card(api, cid, image_path, title, text, keyboard, pid=None):
                     json.load(response)
             except Exception as exc:
                 print('Product image failed:', type(exc).__name__)
-    # Split plain content before HTML escaping; 1700 characters <= 3400 UTF-16 units.
+    # Product text already contains safe HTML markup (bold/custom emoji).
+    # Preserve it so Telegram renders configured product-info icons.
     chunks = [text[i:i+1700] for i in range(0, len(text), 1700)] or ['']
     for i, chunk in enumerate(chunks):
-        send(api, cid, esc(chunk), keyboard if i == len(chunks)-1 else None)
+        send(api, cid, chunk, keyboard if i == len(chunks)-1 else None)
 
 
 
