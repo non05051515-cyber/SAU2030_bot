@@ -735,9 +735,13 @@ def admin_orders(api, cid):
         return send(api, cid, '📦 لا توجد طلبات مسجلة حتى الآن.', kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
     status_names = {'paid': '✅ مدفوع', 'review': '⏳ مراجعة', 'rejected': '❌ مرفوض'}
     parts = ['📦 <b>آخر الطلبات</b>']
+    review_buttons = []
     for oid, user_id, pid, method, usd, sar, status, created in rows:
         parts.append(f'\n<b>#{esc(oid)}</b> • {status_names.get(status, esc(status))}\n{esc(name(pid, cid))}\n{esc(sar)} SAR / {esc(usd)} USD • {esc(method)}\nالعميل: {customer_link(user_id)} • {esc(created)}')
-    send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        if status == 'review':
+            review_buttons.append([btn('✅ قبول #' + oid, 'payreview:accept:' + oid, style='success'), btn('❌ رفض', 'payreview:reject:' + oid, style='danger')])
+    review_buttons.extend([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]])
+    send(api, cid, '\n'.join(parts), kb(review_buttons))
 
 
 def admin_activity(api, cid):
@@ -1487,6 +1491,21 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'payreview' and cid == G['ADMIN_ID']:
+        decision, _, oid = arg.partition(':')
+        with db() as conn:
+            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
+            if not row or row[1] != 'review':
+                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
+            customer = row[0]
+            if decision == 'accept':
+                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
+                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
+                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
+            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
+        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
+        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
@@ -2246,6 +2265,21 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'payreview' and cid == G['ADMIN_ID']:
+        decision, _, oid = arg.partition(':')
+        with db() as conn:
+            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
+            if not row or row[1] != 'review':
+                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
+            customer = row[0]
+            if decision == 'accept':
+                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
+                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
+                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
+            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
+        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
+        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
