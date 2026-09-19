@@ -57,6 +57,7 @@ def db():
         conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
     conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
     return conn
 
 
@@ -359,6 +360,50 @@ def product_description(pid, cid=0):
     return text_override(pid, 'description', lang, default)
 
 
+def info_display(pid):
+    with db() as conn:
+        row = conn.execute('SELECT show_price,show_stock,show_warranty,warranty FROM product_info_display WHERE pid=?', (LEGACY.get(pid,pid),)).fetchone()
+    return row or (1,1,0,'')
+
+def product_stock(pid):
+    cp=custom_product(pid)
+    if cp: return int(cp[6] or 0)
+    v=VARIANTS.get(LEGACY.get(pid,pid),{})
+    for key in ('stock','quantity','available_quantity'):
+        if key in v:
+            try:return int(v[key])
+            except:return v[key]
+    return 1 if in_stock(pid) else 0
+
+def info_block(pid,cid):
+    sp,ss,sw,w=info_display(pid); lines=[]
+    if sp: lines.append('💵 <b>'+tr(cid,'السعر','Price')+':</b> '+price(cid,pid))
+    if ss: lines.append('📦 <b>'+tr(cid,'الكمية','Quantity')+':</b> '+esc(product_stock(pid)))
+    if sw and w: lines.append('🛡 <b>'+tr(cid,'الضمان','Warranty')+':</b> '+esc(w))
+    return '\n'.join(lines)
+
+def admin_info_menu(api,cid,category_id=None):
+    if cid!=G['ADMIN_ID']: return home(api,cid)
+    with db() as conn:
+        custom_cats=conn.execute('SELECT cid,name FROM admin_categories').fetchall()
+        custom_ids=[r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?',(category_id,)).fetchall()] if category_id else []
+    if category_id is None:
+        cats=[(pid,p['name']) for pid,p in G['PRODUCTS'].items()]+custom_cats
+        rows=[[btn(label,'infocat:'+pid)] for pid,label in cats]
+    else:
+        ids=[pid for pid,v in VARIANTS.items() if v['category']==category_id]+custom_ids
+        if not ids and category_id in G['PRODUCTS']: ids=[category_id]
+        rows=[[btn(name(pid,cid),'infopick:'+pid)] for pid in ids]
+    send(api,cid,'🎛 <b>بيانات المنتج الظاهرة</b>\nاختر القسم ثم المنتج:',kb(rows+[[btn('↩️ لوحة الإدارة','admin')]]))
+
+def admin_info_editor(api,cid,pid):
+    if cid!=G['ADMIN_ID']: return
+    sp,ss,sw,w=info_display(pid)
+    rows=[[btn(('✅ ' if sp else '❌ ')+'السعر','infotoggle:price:'+pid),btn(('✅ ' if ss else '❌ ')+'الكمية','infotoggle:stock:'+pid)],
+          [btn(('✅ ' if sw else '❌ ')+'الضمان','infotoggle:warranty:'+pid),btn('✏️ نص الضمان','infowarranty:'+pid)],
+          [btn('↩️ منتج آخر','admin:info')],[btn('↩️ لوحة الإدارة','admin')]]
+    send(api,cid,'🎛 <b>'+esc(name(pid,cid))+'</b>\n\nحدد المعلومات التي تريد ظهورها للعميل.\nالضمان الحالي: <b>'+esc(w or 'غير محدد')+'</b>',kb(rows))
+
 def admin_text_menu(api, cid, field, category_id=None):
     if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
         return
@@ -391,6 +436,19 @@ def admin_text_editor(api, cid, field, pid, lang=None):
     label = 'الاسم الجديد (حتى 120 حرفًا)' if field == 'name' else 'الوصف الجديد (حتى 1500 حرف، ويمكن استخدام عدة أسطر)'
     send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.'), kb([[btn('إلغاء', 'admin')]]))
 
+
+def handle_info_warranty(api,message):
+    cid=message.get('chat',{}).get('id')
+    if cid!=G.get('ADMIN_ID'): return False
+    with db() as conn: row=conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='info_warranty'",(cid,)).fetchone()
+    if not row:return False
+    value=(message.get('text') or '').strip()
+    if not value:return True
+    pid=row[0]; sp,ss,sw,_=info_display(pid)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_info_display VALUES (?,?,?,?,?)',(pid,sp,ss,1,value[:120]))
+        conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
+    admin_info_editor(api,cid,pid); return True
 
 def handle_admin_text(api, message):
     cid = message.get('chat', {}).get('id')
@@ -721,6 +779,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
+                             [btn('🎛 بيانات المنتج الظاهرة', 'admin:info')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🏠 الرئيسية', 'home')]]))
@@ -1091,7 +1150,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
+        text = name(pid, cid) + '\n\n' + info_block(pid,cid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -1100,7 +1159,7 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
+    text = name(pid, cid) + '\n\n' + info_block(pid,cid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
@@ -1478,6 +1537,7 @@ def action(api, cid, value):
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
+        elif arg == 'info': admin_info_menu(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
@@ -1506,6 +1566,20 @@ def action(api, cid, value):
             conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
         send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
         send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+    elif prefix == 'infocat':
+        admin_info_menu(api,cid,arg)
+    elif prefix == 'infopick':
+        admin_info_editor(api,cid,arg)
+    elif prefix == 'infotoggle' and cid == G['ADMIN_ID']:
+        field,_,pid=arg.partition(':'); sp,ss,sw,w=info_display(pid)
+        if field=='price': sp=0 if sp else 1
+        elif field=='stock': ss=0 if ss else 1
+        elif field=='warranty': sw=0 if sw else 1
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO product_info_display VALUES (?,?,?,?,?)',(pid,sp,ss,sw,w))
+        admin_info_editor(api,cid,pid)
+    elif prefix == 'infowarranty' and cid == G['ADMIN_ID']:
+        with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'info_warranty',arg))
+        send(api,cid,'✏️ أرسل نص الضمان لهذا المنتج، مثال: <b>15 يوم</b>.',kb([[btn('إلغاء','admin:info')]]))
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
@@ -1626,7 +1700,7 @@ def install(namespace):
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
                       'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
                       'broadcast_new_products': broadcast_new_products,
-                      'handle_admin_product': handle_admin_product})
+                      'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
                          '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
@@ -1865,7 +1939,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
+        text = name(pid, cid) + '\n\n' + info_block(pid,cid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -1874,7 +1948,7 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n💰 ' + price(cid, pid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
+    text = name(pid, cid) + '\n\n' + info_block(pid,cid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
         for tier in v['promotions']:
