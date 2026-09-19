@@ -58,6 +58,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
     return conn
 
 
@@ -375,11 +376,16 @@ def product_stock(pid):
             except:return v[key]
     return 1 if in_stock(pid) else 0
 
+def info_icon(pid,field,fallback):
+    with db() as conn:
+        row=conn.execute('SELECT custom_emoji_id FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
+    return ('<tg-emoji emoji-id="'+esc(row[0])+'">'+fallback+'</tg-emoji>') if row else fallback
+
 def info_block(pid,cid):
     sp,ss,sw,w=info_display(pid); lines=[]
-    if sp: lines.append('💵 <b>'+tr(cid,'السعر','Price')+':</b> '+price(cid,pid))
-    if ss: lines.append('📦 <b>'+tr(cid,'الكمية','Quantity')+':</b> '+esc(product_stock(pid)))
-    if sw and w: lines.append('🛡 <b>'+tr(cid,'الضمان','Warranty')+':</b> '+esc(w))
+    if sp: lines.append(info_icon(pid,'price','💵')+' <b>'+tr(cid,'السعر','Price')+':</b> '+price(cid,pid))
+    if ss: lines.append(info_icon(pid,'stock','📦')+' <b>'+tr(cid,'الكمية','Quantity')+':</b> '+esc(product_stock(pid)))
+    if sw and w: lines.append(info_icon(pid,'warranty','🛡')+' <b>'+tr(cid,'الضمان','Warranty')+':</b> '+esc(w))
     return '\n'.join(lines)
 
 def admin_info_menu(api,cid,category_id=None):
@@ -401,6 +407,8 @@ def admin_info_editor(api,cid,pid):
     sp,ss,sw,w=info_display(pid)
     rows=[[btn(('✅ ' if sp else '❌ ')+'السعر','infotoggle:price:'+pid),btn(('✅ ' if ss else '❌ ')+'الكمية','infotoggle:stock:'+pid)],
           [btn(('✅ ' if sw else '❌ ')+'الضمان','infotoggle:warranty:'+pid),btn('✏️ نص الضمان','infowarranty:'+pid)],
+          [btn('💵 أيقونة السعر','infoicon:price:'+pid),btn('📦 أيقونة الكمية','infoicon:stock:'+pid)],
+          [btn('🛡 أيقونة الضمان','infoicon:warranty:'+pid)],
           [btn('↩️ منتج آخر','admin:info')],[btn('↩️ لوحة الإدارة','admin')]]
     send(api,cid,'🎛 <b>'+esc(name(pid,cid))+'</b>\n\nحدد المعلومات التي تريد ظهورها للعميل.\nالضمان الحالي: <b>'+esc(w or 'غير محدد')+'</b>',kb(rows))
 
@@ -436,6 +444,21 @@ def admin_text_editor(api, cid, field, pid, lang=None):
     label = 'الاسم الجديد (حتى 120 حرفًا)' if field == 'name' else 'الوصف الجديد (حتى 1500 حرف، ويمكن استخدام عدة أسطر)'
     send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.'), kb([[btn('إلغاء', 'admin')]]))
 
+
+def handle_info_icon(api,message):
+    cid=message.get('chat',{}).get('id')
+    if cid!=G.get('ADMIN_ID'): return False
+    with db() as conn: row=conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='info_icon'",(cid,)).fetchone()
+    if not row: return False
+    entities=list(message.get('entities',[]))+list(message.get('caption_entities',[]))
+    emoji=next((e.get('custom_emoji_id') for e in entities if e.get('type')=='custom_emoji' and e.get('custom_emoji_id')),None)
+    if not emoji:
+        send(api,cid,'لم أجد أيقونة مخصصة. أرسل الأيقونة المتحركة نفسها.',kb([[btn('❌ إلغاء','admin:info')]])); return True
+    field,_,pid=row[0].partition(':')
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_info_icons VALUES (?,?,?)',(pid,field,str(emoji)))
+        conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
+    admin_info_editor(api,cid,pid); return True
 
 def handle_info_warranty(api,message):
     cid=message.get('chat',{}).get('id')
@@ -1700,7 +1723,7 @@ def install(namespace):
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
                       'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
                       'broadcast_new_products': broadcast_new_products,
-                      'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty})
+                      'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty, 'handle_info_icon': handle_info_icon})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
                          '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
@@ -2369,6 +2392,11 @@ def action(api, cid, value):
     elif prefix == 'infowarranty' and cid == G['ADMIN_ID']:
         with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'info_warranty', arg))
         send(api, cid, '✏️ أرسل نص الضمان لهذا المنتج، مثال: <b>15 يوم</b>.', kb([[btn('إلغاء', 'admin:info')]]))
+    elif prefix == 'infoicon' and cid == G['ADMIN_ID']:
+        field, _, pid = arg.partition(':')
+        if field in ('price','stock','warranty'):
+            with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'info_icon',field+':'+pid))
+            send(api,cid,'أرسل الآن الأيقونة المتحركة المخصصة لهذا الحقل.',kb([[btn('❌ إلغاء','infopick:'+pid)]]))
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
