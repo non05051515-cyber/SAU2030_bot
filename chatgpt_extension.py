@@ -59,7 +59,7 @@ def ask_model(cid, text):
             history = json.loads(row[0]) if row else []
         except Exception:
             history = []
-    input_messages = [{"role": "system", "content": "You are the helpful customer chat assistant inside VEXA STORE. Reply in the same language as the customer. Be concise and helpful."}]
+    input_messages = [{"role": "system", "content": "You are a general-purpose helpful AI assistant. Answer the user's questions naturally across general topics. Reply in the same language as the user unless they ask for another language. Be concise, accurate, and helpful."}]
     input_messages.extend(history[-MAX_HISTORY:])
     input_messages.append({"role": "user", "content": text})
     payload = json.dumps({"model": model, "messages": input_messages, "max_tokens": 700}, ensure_ascii=False).encode("utf-8")
