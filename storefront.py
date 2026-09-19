@@ -2517,7 +2517,7 @@ def install(namespace):
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
                       'handle_receipt': receipt, 'order_name': name, 'home_keyboard': menu,
                       'broadcast_new_products': broadcast_new_products,
-                      'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty})
+                      'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty, 'handle_info_icon': handle_info_icon})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
                          '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
