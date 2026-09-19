@@ -1182,19 +1182,29 @@ def category(api, cid, pid):
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
-        send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'))
+        # Keep the whole ChatGPT catalogue in ONE Telegram message to avoid
+        # flooding the customer with one message per product.
+        lines = ['<b>' + esc(p['name']) + '</b>', '', tr(cid, 'اختر المنتج:', 'Choose a product:'), '']
+        rows = []
         for v in choices:
             product_id = v['id']
             sold_out = not in_stock(product_id)
             stock = product_stock(product_id)
-            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
-            card_text = status + '<b>' + esc(name(product_id, cid)) + '</b>\n'
-            card_text += '<b>' + esc(price(cid, product_id)) + '</b>\n'
-            card_text += '<code>' + tr(cid, 'الكمية: ', 'Quantity: ') + esc(stock) + '</code>'
-            send(api, cid, card_text, kb([[btn(tr(cid, 'اختيار المنتج', 'Select product'), 'item:' + product_id,
-                                                   p.get('custom_emoji_id'), 'danger' if sold_out else 'primary')]]))
-        send(api, cid, tr(cid, 'اختر من المنتجات أعلاه.', 'Choose from the products above.'),
-             kb([nav(cid)]))
+            show_price, show_stock, show_warranty, warranty = info_display(product_id)
+            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '🟢 ')
+            lines.append(status + '<b>' + esc(name(product_id, cid)) + '</b>')
+            if show_price:
+                lines.append('💰 ' + esc(price(cid, product_id)))
+            if show_stock:
+                lines.append('📦 ' + tr(cid, 'المخزون: ', 'Stock: ') + esc(stock))
+            if show_warranty and warranty:
+                lines.append('🛡️ ' + tr(cid, 'الضمان: ', 'Warranty: ') + esc(warranty))
+            lines.append('')
+            rows.append([btn(('🔴 ' if sold_out else '🛒 ') + name(product_id, cid),
+                             'item:' + product_id, p.get('custom_emoji_id'),
+                             'danger' if sold_out else 'primary')])
+        rows.append(nav(cid))
+        send(api, cid, '\n'.join(lines).rstrip(), kb(rows))
         return
     if choices:
         rows = []
