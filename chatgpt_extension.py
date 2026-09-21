@@ -161,7 +161,9 @@ def install(namespace):
         return
     _INSTALLED = True
     old_home = s.home
-    old_action = namespace["action"]
+    # Keep the current storefront implementation active. Re-installing
+    # extensions can leave bot.action pointing at an older wrapper.
+    old_action = s.action
     old_receipt = namespace["handle_receipt"]
     old_menu = s.menu
 
@@ -211,6 +213,9 @@ def install(namespace):
     namespace["show_home"] = home
     namespace["action"] = action
     namespace["handle_action"] = action
+    # bot.main resolves the global action at runtime; make sure this wrapper
+    # delegates to the freshly deployed storefront.action.
+    s.G["action"] = action
     namespace["handle_receipt"] = receipt
     menu_actions = namespace.setdefault("MENU_ACTIONS", namespace.get("MENU", {}))
     menu_actions.update({"التحدث مع ChatGPT": "chatgpt", "Chat with ChatGPT": "chatgpt",
