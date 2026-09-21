@@ -1230,8 +1230,12 @@ def category(api, cid, pid):
         for v in choices:
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
-            rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
-                             'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
+            label = status + name(v['id'], cid)
+            if pid == 'chatgpt':
+                label += tr(cid, '  •  💰 ', '  •  💰 ') + price(cid, v['id'])
+            else:
+                label += ' | ' + price(cid, v['id'])
+            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
@@ -1271,7 +1275,10 @@ def item(api, cid, pid):
         text += '\n\n⚠️ ' + v['review_required'][lang]
     rows = []
     if can_order(pid):
-        rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
+        order_label = tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item')
+        if v.get('category') == 'chatgpt':
+            order_label = tr(cid, '🛒 شراء الآن • ', '🛒 Buy now • ') + price(cid, pid)
+        rows.append([btn(order_label, 'buy:' + pid, style='primary' if v.get('category') == 'chatgpt' else None)])
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
     card(api, cid, v.get('image'), name(pid, cid), text, kb(rows), pid=pid)
 
