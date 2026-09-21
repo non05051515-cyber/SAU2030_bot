@@ -48,6 +48,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_visibility (pid TEXT PRIMARY KEY, visible INTEGER NOT NULL CHECK(visible IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
     cols = {row[1] for row in conn.execute('PRAGMA table_info(admin_products)').fetchall()}
@@ -1121,6 +1122,45 @@ def card(api, cid, image_path, title, text, keyboard, pid=None):
 
 
 
+def product_visible(pid):
+    with db() as conn:
+        row = conn.execute('SELECT visible FROM product_visibility WHERE pid=?', (pid,)).fetchone()
+    if row is not None:
+        return bool(row[0])
+    # Default ChatGPT catalogue requested by the store owner.
+    if VARIANTS.get(pid, {}).get('category') == 'chatgpt':
+        return pid in ('pd_01', 'pd_04', 'pd_05')
+    return True
+
+
+def chatgpt_visibility_admin(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    choices = [v for v in VARIANTS.values() if v.get('category') == 'chatgpt']
+    rows = []
+    for v in choices:
+        visible = product_visible(v['id'])
+        rows.append([btn(('👁 ' if visible else '🙈 ') + name(v['id'], cid),
+                         'chatgptvis:' + v['id'],
+                         style='success' if visible else 'danger')])
+    rows.append([btn('↩️ لوحة الإدارة', 'admin')])
+    send(api, cid, '🤖 <b>إظهار وإخفاء منتجات ChatGPT</b>\n\n👁 ظاهر للعملاء\n🙈 مخفي عن العملاء\n\nاضغط على المنتج لتغيير حالته.', kb(rows))
+
+
+def toggle_chatgpt_visibility(api, cid, pid):
+    if cid != G['ADMIN_ID'] or VARIANTS.get(pid, {}).get('category') != 'chatgpt':
+        return
+    new_value = 0 if product_visible(pid) else 1
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_visibility(pid,visible) VALUES (?,?)', (pid, new_value))
+    chatgpt_visibility_admin(api, cid)
+
+
+def chatgpt_cards(api, cid, choices):
+    """Show ChatGPT products using the same card layout as Grok."""
+    return grok_cards(api, cid, [v for v in choices if product_visible(v['id'])])
+
+
 def grok_cards(api, cid, choices):
     """Compact photo cards for Grok only; prices share the checkout source."""
     send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
@@ -1193,38 +1233,7 @@ def category(api, cid, pid):
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
-        # Compact storefront-style catalogue: one Telegram message, one
-        # selectable row per product. Telegram bots cannot render arbitrary
-        # HTML/CSS cards, so this is the closest native layout to the mockup.
-        lines = ['<b>🤖 ChatGPT</b>',
-                 tr(cid, 'حسابات أصلية • تسليم فوري • أسعار مميزة',
-                    'Original accounts • Instant delivery • Great prices'),
-                 '',
-                 tr(cid, 'اختر المنتج من القائمة بالأسفل:', 'Choose a product below:')]
-        rows = []
-        for v in choices:
-            product_id = v['id']
-            sold_out = not in_stock(product_id)
-            stock = product_stock(product_id)
-            show_price, show_stock, show_warranty, warranty = info_display(product_id)
-
-            details = []
-            if show_price:
-                details.append('💰 ' + price(cid, product_id))
-            if show_stock:
-                details.append('📦 ' + tr(cid, 'المخزون ', 'Stock ') + str(stock))
-            if show_warranty and warranty:
-                details.append('🛡️ ' + str(warranty))
-
-            label = ('🔴 ' if sold_out else '🟢 ') + name(product_id, cid)
-            if details:
-                label += ' — ' + ' | '.join(details)
-            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id),
-                             'danger' if sold_out else 'primary')])
-
-        rows.append([btn(tr(cid, '⬅️ العودة إلى الأقسام', '⬅️ Back to categories'), 'products')])
-        send(api, cid, '\n'.join(lines), kb(rows))
-        return
+        return chatgpt_cards(api, cid, choices)
     if choices:
         rows = []
         for v in choices:
