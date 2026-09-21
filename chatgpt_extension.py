@@ -186,7 +186,7 @@ def install(namespace):
                 [s.btn(s.tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',s.ui_icon('ui_referrals')), s.btn(s.tr(cid,'👤 حسابي','👤 My account'),'wallet',s.ui_icon('ui_account'))],
                 [s.btn(s.tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',s.ui_icon('ui_support'),style='danger'), s.btn(s.tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',s.ui_icon('ui_report'))],
                 [s.btn(s.tr(cid,'💱 العملة','💱 Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('🌐 Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
-                [s.btn(s.tr(cid, 'تحت الصيانة', 'Under maintenance'), 'chatgpt:maintenance', s.ui_icon('ui_chatgpt'))]]
+                [s.btn(s.tr(cid, 'تحت الصيانة (التحدث مع Ai)', 'Under maintenance (Chat with AI)'), 'chatgpt:maintenance', s.ui_icon('ui_chatgpt'))]]
         if cid == s.G.get("ADMIN_ID"):
             rows.append([s.btn('🧾 لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='primary')])
         s.send(api, cid, text, s.kb(rows))
