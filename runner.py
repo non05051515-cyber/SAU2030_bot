@@ -3,13 +3,9 @@ import iptv_extension
 import broadcast_admin
 import chatgpt_extension
 
-# bot already installs storefront during import. Apply IPTV patches, then
-# reinstall storefront into the bot namespace, and finally install admin
-# broadcast so its admin_panel/action handlers are the active ones.
-iptv_extension.s.install(bot.__dict__)
-# Reinstall storefront after the IPTV compatibility layer so newly-added
-# categories/products use the current storefront admin/icon handlers.
-iptv_extension.s.install(bot.__dict__)
+# bot.py already installs storefront and all extensions during import.
+# Do not reinstall storefront here: doing so overwrites the IPTV/ChatGPT
+# category wrappers and makes those buttons fall back to Grok rendering.
 broadcast_admin.install(bot.__dict__)
 chatgpt_extension.install(bot.__dict__)
 
