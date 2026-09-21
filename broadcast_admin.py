@@ -40,6 +40,7 @@ def install(namespace):
                 f'سجل الاختيارات: <b>{activity_count}</b>')
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
+            [sg['btn']('👥 مستخدمو البوت', 'admin:users', style='success')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
             [sg['btn']('🖼️ صورة المنتج', 'admin:photos')],
             [sg['btn']('✏️ تعديل اسم المنتج', 'admin:editname')],
@@ -62,6 +63,22 @@ def install(namespace):
         if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
+        if cid == admin_id and value == 'admin:users':
+            users = sorted(set(_users()))
+            with sg['db']() as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
+                departed_ids = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1').fetchall()}
+                recent_rows = conn.execute('SELECT cid, MAX(created_at) FROM activity GROUP BY cid ORDER BY MAX(created_at) DESC LIMIT 15').fetchall()
+            total = len(users)
+            available = max(total - len(departed_ids.intersection(users)), 0)
+            recent = [(uid, ts) for uid, ts in recent_rows if uid != admin_id]
+            lines = ['👥 <b>مستخدمو البوت</b>', '', f'إجمالي المستخدمين: <b>{total}</b>', f'🟢 المتاحون: <b>{available}</b>', f'🚪 غادروا/حظروا البوت: <b>{len(departed_ids.intersection(users))}</b>']
+            if recent:
+                lines += ['', '🕒 <b>آخر نشاط مسجل:</b>']
+                for uid, ts in recent[:10]:
+                    lines.append(f'• <code>{uid}</code> — {sg["esc"](ts)}')
+            lines += ['', 'ℹ️ تيليجرام لا يتيح للبوت معرفة من هو Online الآن؛ هذه القائمة تعتمد على آخر تفاعل مسجل.']
+            return sg['send'](api, cid, '\n'.join(lines), sg['kb']([[sg['btn']('🔄 تحديث', 'admin:users')], [sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
         if cid == admin_id and value == 'admin:stats':
             try:
                 users = set(_users())
