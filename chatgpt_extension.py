@@ -188,7 +188,7 @@ def install(namespace):
                 [s.btn(s.tr(cid,'💱 العملة','💱 Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('🌐 Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
                 [s.btn(s.tr(cid, 'تحت الصيانة (التحدث مع Ai)', 'Under maintenance (Chat with AI)'), 'chatgpt:maintenance', s.ui_icon('ui_chatgpt'), style='success')]]
         if cid == s.G.get("ADMIN_ID"):
-            rows.append([s.btn('🧾 لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='primary')])
+            rows.append([s.btn('🧾 لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='danger')])
         s.send(api, cid, text, s.kb(rows))
 
     def action(api, cid, value):
