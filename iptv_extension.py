@@ -55,18 +55,9 @@ def category(api, cid, pid):
     product = s.G['PRODUCTS'].get('iptv')
     if not product:
         return s.products(api, cid)
-    rows = []
-    for variant_id in IPTV_IDS:
-        variant = s.VARIANTS[variant_id]
-        sold_out = not s.in_stock(variant_id)
-        status = s.tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else ''
-        rows.append([s.btn(status + s.name(variant_id, cid) + ' | ' + s.price(cid, variant_id),
-                           'item:' + variant_id, product.get('custom_emoji_id'),
-                           'danger' if sold_out else None)])
-    rows.append([s.btn(s.tr(cid, '🛠 طرق التفعيل', '🛠 Activation Methods'), 'iptvactivation')])
-    rows.append(s.nav(cid))
-    s.send(api, cid, '<b>IPTV</b>\n\n' + s.tr(cid, 'اختر المنتج:', 'Choose a product:'), s.kb(rows))
-
+    # Test IPTV with the same card presentation used by Grok.
+    choices = [s.VARIANTS[variant_id] for variant_id in IPTV_IDS if variant_id in s.VARIANTS]
+    return s.grok_cards(api, cid, choices)
 
 def iptv_item(api, cid, pid):
     variant = s.VARIANTS.get(pid)
