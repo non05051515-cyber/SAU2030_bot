@@ -1230,11 +1230,12 @@ def category(api, cid, pid):
         for v in choices:
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
-            label = status + name(v['id'], cid)
             if pid == 'chatgpt':
-                label += tr(cid, '  •  💰 ', '  •  💰 ') + price(cid, v['id'])
+                # Keep the price at the beginning so Telegram cannot hide it
+                # when a long product name is truncated on mobile.
+                label = status + '💰 ' + price(cid, v['id']) + ' • ' + name(v['id'], cid)
             else:
-                label += ' | ' + price(cid, v['id'])
+                label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
