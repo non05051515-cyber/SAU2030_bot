@@ -1317,7 +1317,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
+    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
@@ -1335,7 +1335,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = name(pid, cid) + '\n\n' + info_block(pid,cid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
+        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -1344,13 +1344,13 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n' + info_block(pid,cid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
     if v.get('promotions'):
-        text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
+        text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
-            text += '\n' + str(tier['min_quantity']) + '+: ' + price(cid, pid, source_price=tier['source_usd']) + tr(cid, ' لكل قطعة', ' per unit')
+            text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
     if v.get('review_required'):
-        text += '\n\n⚠️ ' + v['review_required'][lang]
+        text += '\n\n⚠️ ' + esc(v['review_required'][lang])
     rows = []
     if can_order(pid):
         order_label = tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item')
@@ -2036,10 +2036,9 @@ def card(api, cid, image_path, title, text, keyboard, pid=None):
                     json.load(response)
             except Exception as exc:
                 print('Product image failed:', type(exc).__name__)
-    # Split plain content before HTML escaping; 1700 characters <= 3400 UTF-16 units.
-    chunks = [text[i:i+1700] for i in range(0, len(text), 1700)] or ['']
-    for i, chunk in enumerate(chunks):
-        send(api, cid, esc(chunk), keyboard if i == len(chunks)-1 else None)
+    # The product fields are escaped at their source; info_block supplies
+    # the only HTML markup, including the custom emoji entity.
+    send(api, cid, text, keyboard)
 
 
 
@@ -2130,7 +2129,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = name(pid, cid) + '\n\n' + price(cid, pid) + '\n\n' + tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock') + '\n\n' + description
+    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
@@ -2148,7 +2147,7 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = name(pid, cid) + '\n\n' + info_block(pid,cid) + '\n\n' + status + '\n\n' + product_description(pid, cid)
+        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -2157,13 +2156,13 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = name(pid, cid) + '\n\n' + info_block(pid,cid) + (('\n\n' + available) if available else '') + '\n\n' + product_description(pid, cid)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
     if v.get('promotions'):
-        text += '\n\n' + tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:')
+        text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
-            text += '\n' + str(tier['min_quantity']) + '+: ' + price(cid, pid, source_price=tier['source_usd']) + tr(cid, ' لكل قطعة', ' per unit')
+            text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
     if v.get('review_required'):
-        text += '\n\n⚠️ ' + v['review_required'][lang]
+        text += '\n\n⚠️ ' + esc(v['review_required'][lang])
     rows = []
     if can_order(pid):
         rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
