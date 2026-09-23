@@ -1,10 +1,12 @@
 """Admin-only broadcast messaging for VEXA STORE."""
 import json
+import uuid
 from pathlib import Path
 
 PENDING = set()
 AUTO_AD_STATE = {}
 USERS_FILE = Path('/data/users.json')
+PRODUCT_BROADCAST = {}
 
 
 def _users():
@@ -29,6 +31,7 @@ def install(namespace):
             return namespace['show_home'](api, cid)
         PENDING.discard(cid)
         AUTO_AD_STATE.pop(cid, None)
+        PRODUCT_BROADCAST.pop(cid, None)
         with sg['db']() as conn:
             conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
@@ -51,13 +54,88 @@ def install(namespace):
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
+            [sg['btn']('🛍 إرسال منتج للجميع', 'admin:product_broadcast', style='primary')],
             [sg['btn']('📊 الإحصائيات', 'admin:stats')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
             [sg['btn']('🏠 الرئيسية', 'home')],
         ]))
 
+    def categories(api, cid):
+        with sg['db']() as conn:
+            custom = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        entries = [(pid, product['name']) for pid, product in sg['G']['PRODUCTS'].items()] + custom
+        rows = [[sg['btn'](title, 'pbcat:' + pid)] for pid, title in entries if sg['category_visible'](pid)]
+        return sg['send'](api, cid, '🛍 <b>إرسال منتج للجميع</b>\n\nاختر القسم:', sg['kb'](rows + [[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+
+    def products_in_category(category):
+        if category in sg['G']['PRODUCTS']:
+            ids = [v['id'] for v in sg['VARIANTS'].values() if v['category'] == category]
+            return ids or [category]
+        if not sg['custom_category'](category):
+            return []
+        with sg['db']() as conn:
+            return [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category,))]
+
+    def product_card(api, cid, pid):
+        title = sg['esc'](sg['name'](pid, cid))
+        description = sg['esc'](sg['product_description'](pid, cid))
+        status = '✅ متوفر' if sg['in_stock'](pid) else '🔴 غير متوفر حاليًا'
+        body = f'🛍 <b>{title}</b>\n\n{sg["info_block"](pid, cid)}\n{status}'
+        if description:
+            body += '\n\n' + description
+        buttons = [[sg['btn']('🛒 الذهاب للمنتج', 'item:' + pid, style='primary')]]
+        if sg['can_order'](pid):
+            buttons.append([sg['btn']('⚡ شراء مباشرة', 'buy:' + pid, style='success')])
+        photo = sg['saved_product_photo'](pid)
+        if photo:
+            api.call('sendPhoto', chat_id=cid, photo=photo)
+        return sg['send'](api, cid, body[:3900], sg['kb'](buttons))
+
     def action(api, cid, value):
+        if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbconfirm:')) and cid != admin_id:
+            return namespace['show_home'](api, cid)
+        if cid == admin_id and value == 'admin:product_broadcast':
+            PRODUCT_BROADCAST.pop(cid, None)
+            return categories(api, cid)
+        if cid == admin_id and value.startswith('pbcat:'):
+            category = value.split(':', 1)[1]
+            ids = [pid for pid in products_in_category(category) if sg['product_visible'](pid)]
+            rows = [[sg['btn'](sg['name'](pid, cid), 'pbpick:' + pid)] for pid in ids]
+            return sg['send'](api, cid, 'اختر المنتج الذي تريد إرساله:' if rows else 'لا توجد منتجات ظاهرة في هذا القسم.', sg['kb'](rows + [[sg['btn']('↩️ الأقسام', 'admin:product_broadcast')]]))
+        if cid == admin_id and value.startswith('pbpick:'):
+            pid = value.split(':', 1)[1]
+            valid = pid in sg['VARIANTS'] or bool(sg['custom_product'](pid)) or (pid in sg['G']['PRODUCTS'] and products_in_category(pid) == [pid])
+            if not valid or not sg['product_visible'](pid):
+                return categories(api, cid)
+            token = uuid.uuid4().hex[:12]
+            PRODUCT_BROADCAST[cid] = (token, pid)
+            product_card(api, cid, pid)
+            return sg['send'](api, cid, 'هذه معاينة الإعلان. هل تريد إرساله لجميع مستخدمي البوت؟', sg['kb']([[sg['btn']('✅ تأكيد الإرسال', 'pbconfirm:' + token, style='success')], [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
+        if cid == admin_id and value.startswith('pbconfirm:'):
+            token = value.split(':', 1)[1]
+            pending = PRODUCT_BROADCAST.get(cid)
+            if not pending or pending[0] != token:
+                return sg['send'](api, cid, 'انتهت صلاحية التأكيد. اختر المنتج مرة أخرى.', sg['kb']([[sg['btn']('🛍 اختيار منتج', 'admin:product_broadcast')]]))
+            PRODUCT_BROADCAST.pop(cid, None)
+            pid = pending[1]
+            if not sg['product_visible'](pid):
+                return sg['send'](api, cid, 'المنتج مخفي الآن. لم يتم الإرسال.')
+            ok = failed = 0
+            for user_id in set(_users()) - {admin_id}:
+                try:
+                    result = product_card(api, user_id, pid)
+                except Exception:
+                    result = None
+                if result:
+                    ok += 1
+                else:
+                    failed += 1
+                with sg['db']() as conn:
+                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
+            with sg['db']() as conn:
+                conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
+            return sg['send'](api, cid, f'✅ تم إرسال المنتج إلى <b>{ok}</b> مستخدم.\n❌ تعذر الإرسال إلى <b>{failed}</b>.', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
         if cid == admin_id and value in ('admin:visibility', 'admin:chatgptvis'):
             return sg['visibility_categories'](api, cid)
         if cid == admin_id and value.startswith('viscat:'):
@@ -211,4 +289,3 @@ def tick_auto_ads(api):
         with sg.db() as conn: conn.execute('UPDATE auto_ads SET next_at=? WHERE id=1',(now+interval_sec,))
     except Exception as exc:
         print('Auto ad error:',type(exc).__name__)
-
