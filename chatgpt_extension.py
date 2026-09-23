@@ -184,13 +184,13 @@ def install(namespace):
             purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
         text = s.tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:',
                     f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-        rows = [[s.btn(s.tr(cid,'🛒 المنتجات','🛒 Products'),'products',s.ui_icon('ui_products'),style='primary'), s.btn(s.tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',s.ui_icon('ui_topup'),style='success')],
-                [s.btn(s.tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',s.ui_icon('ui_referrals')), s.btn(s.tr(cid,'👤 حسابي','👤 My account'),'wallet',s.ui_icon('ui_account'))],
-                [s.btn(s.tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',s.ui_icon('ui_support'),style='danger'), s.btn(s.tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',s.ui_icon('ui_report'))],
-                [s.btn(s.tr(cid,'💱 العملة','💱 Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('🌐 Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
+        rows = [[s.btn(s.tr(cid,'المنتجات','Products'),'products',s.ui_icon('ui_products'),style='primary'), s.btn(s.tr(cid,'شحن الرصيد','Top up'),'wallet:topup',s.ui_icon('ui_topup'),style='success')],
+                [s.btn(s.tr(cid,'الإحالات','Referrals'),'referrals',s.ui_icon('ui_referrals')), s.btn(s.tr(cid,'حسابي','My account'),'wallet',s.ui_icon('ui_account'))],
+                [s.btn(s.tr(cid,'تواصل مع الدعم','Contact support'),'support',s.ui_icon('ui_support'),style='danger'), s.btn(s.tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',s.ui_icon('ui_report'))],
+                [s.btn(s.tr(cid,'العملة','Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
                 [s.btn(s.tr(cid, 'تحت الصيانة (التحدث مع Ai)', 'Under maintenance (Chat with AI)'), 'chatgpt:maintenance', s.ui_icon('ui_chatgpt'), style='success')]]
         if cid == s.G.get("ADMIN_ID"):
-            rows.append([s.btn('🧾 لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='danger')])
+            rows.append([s.btn('لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='danger')])
         s.send(api, cid, text, s.kb(rows))
 
     def action(api, cid, value):
