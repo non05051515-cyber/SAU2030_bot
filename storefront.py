@@ -1163,7 +1163,7 @@ def visibility_products(api, cid, category_id):
     else:
         return visibility_categories(api, cid)
     rows = [[btn(('👁 ' if product_visible(pid) else '🙈 ') + name(pid, cid), 'vistoggle:' + pid)] for pid in ids]
-    send(api, cid, '👁 ظاهر للعملاء | 🙈 مخفي عن العملاء\nاضغط على المنتج لتغيير حالته.',
+    send(api, cid, '👁 ظاهر في المتجر | 🙈 مخفي من المتجر\nالمنتج المخفي يبقى هنا حتى تستطيع إظهاره مجددًا.',
          kb(rows + [[btn('↩️ الأقسام', 'admin:visibility')]]))
 
 
@@ -1261,7 +1261,7 @@ def grok_cards(api, cid, choices):
 
 
 def category(api, cid, pid):
-    if cid != G['ADMIN_ID'] and not category_visible(pid):
+    if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
     if not p:
@@ -1273,14 +1273,14 @@ def category(api, cid, pid):
             choices = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (pid,)).fetchall()
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
-            if cid != G['ADMIN_ID'] and not product_visible(product_id):
+            if not product_visible(product_id):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
-    choices = [v for v in VARIANTS.values() if v['category'] == pid and (cid == G['ADMIN_ID'] or product_visible(v['id']))]
+    choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
@@ -1310,7 +1310,7 @@ def category(api, cid, pid):
 
 def item(api, cid, pid):
     pid = LEGACY.get(pid, pid)
-    if cid != G['ADMIN_ID'] and not product_visible(pid):
+    if not product_visible(pid):
         return send(api, cid, tr(cid, 'هذا المنتج مخفي حاليًا.', 'This product is currently hidden.'), kb([nav(cid, 'products')]))
     v = VARIANTS.get(pid)
     if not v:
@@ -2081,7 +2081,7 @@ def grok_cards(api, cid, choices):
 
 
 def category(api, cid, pid):
-    if cid != G['ADMIN_ID'] and not category_visible(pid):
+    if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
     if not p:
@@ -2093,14 +2093,14 @@ def category(api, cid, pid):
             choices = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (pid,)).fetchall()
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
-            if cid != G['ADMIN_ID'] and not product_visible(product_id):
+            if not product_visible(product_id):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
-    choices = [v for v in VARIANTS.values() if v['category'] == pid and (cid == G['ADMIN_ID'] or product_visible(v['id']))]
+    choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if choices:
@@ -2123,7 +2123,7 @@ def category(api, cid, pid):
 
 def item(api, cid, pid):
     pid = LEGACY.get(pid, pid)
-    if cid != G['ADMIN_ID'] and not product_visible(pid):
+    if not product_visible(pid):
         return send(api, cid, tr(cid, 'هذا المنتج مخفي حاليًا.', 'This product is currently hidden.'), kb([nav(cid, 'products')]))
     v = VARIANTS.get(pid)
     if not v:
