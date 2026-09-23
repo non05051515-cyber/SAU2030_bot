@@ -131,9 +131,11 @@ def install(namespace):
         body = f'🛍 <b>{title}</b>\n\n{info}\n{status}'
         if description:
             body += '\n\n' + description
-        buttons = [[sg['btn']('🛒 الذهاب للمنتج', 'item:' + pid, style='primary')]]
+        buttons = [[sg['btn']('الذهاب للمنتج', 'item:' + pid,
+                              sg['ui_icon']('ui_broadcast_product'), style='primary')]]
         if sg['can_order'](pid):
-            buttons.append([sg['btn']('⚡ شراء مباشرة', 'buy:' + pid, style='success')])
+            buttons.append([sg['btn']('شراء مباشرة', 'buy:' + pid,
+                                      sg['ui_icon']('ui_broadcast_buy'), style='success')])
         photo = photo or sg['saved_product_photo'](pid)
         if photo:
             # Telegram photo captions are limited to 1024 characters. Keep the
