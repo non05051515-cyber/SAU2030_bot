@@ -42,8 +42,7 @@ def install(namespace):
             [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
             [sg['btn']('👥 مستخدمو البوت', 'admin:users', style='success')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
-            [sg['btn']('🤖 عرض/إخفاء منتجات ChatGPT', 'admin:chatgptvis', style='primary')],
-            [sg['btn']('👁 إظهار وإخفاء أي منتج', 'admin:visibility', style='primary')],
+            [sg['btn']('👁 عرض/إخفاء المنتجات', 'admin:visibility', style='primary')],
             [sg['btn']('🖼️ صورة المنتج', 'admin:photos')],
             [sg['btn']('✏️ تعديل اسم المنتج', 'admin:editname')],
             [sg['btn']('📝 تعديل وصف المنتج', 'admin:editdesc')],
@@ -59,16 +58,14 @@ def install(namespace):
         ]))
 
     def action(api, cid, value):
-        if cid == admin_id and value == 'admin:visibility':
+        if cid == admin_id and value in ('admin:visibility', 'admin:chatgptvis'):
             return sg['visibility_categories'](api, cid)
         if cid == admin_id and value.startswith('viscat:'):
             return sg['visibility_products'](api, cid, value.split(':', 1)[1])
         if cid == admin_id and value.startswith('vistoggle:'):
             return sg['toggle_visibility'](api, cid, value.split(':', 1)[1])
-        if cid == admin_id and value == 'admin:chatgptvis':
-            return sg['chatgpt_visibility_admin'](api, cid)
         if cid == admin_id and value.startswith('chatgptvis:'):
-            return sg['toggle_chatgpt_visibility'](api, cid, value.split(':', 1)[1])
+            return sg['toggle_visibility'](api, cid, value.split(':', 1)[1])
 
         if cid == admin_id and not value.startswith(('txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:')):
             with sg['db']() as conn:
