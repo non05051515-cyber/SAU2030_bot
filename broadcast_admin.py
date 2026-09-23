@@ -77,7 +77,7 @@ def install(namespace):
         with sg['db']() as conn:
             return [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category,))]
 
-    def product_card(api, cid, pid):
+    def product_card(api, cid, pid, photo=None):
         title = sg['esc'](sg['name'](pid, cid))
         description = sg['esc'](sg['product_description'](pid, cid))
         status = '✅ متوفر' if sg['in_stock'](pid) else '🔴 غير متوفر حاليًا'
@@ -87,13 +87,29 @@ def install(namespace):
         buttons = [[sg['btn']('🛒 الذهاب للمنتج', 'item:' + pid, style='primary')]]
         if sg['can_order'](pid):
             buttons.append([sg['btn']('⚡ شراء مباشرة', 'buy:' + pid, style='success')])
-        photo = sg['saved_product_photo'](pid)
+        photo = photo or sg['saved_product_photo'](pid)
         if photo:
-            api.call('sendPhoto', chat_id=cid, photo=photo)
+            # Telegram photo captions are limited to 1024 characters. Keep the
+            # purchase buttons on the same message as the picture.
+            caption = f'🛍 <b>{title}</b>\n\n{sg["info_block"](pid, cid)}\n{status}'
+            if description and len(caption) + len(description) < 850:
+                caption += '\n\n' + description
+            result = api.call('sendPhoto', chat_id=cid, photo=photo,
+                              caption=caption, parse_mode='HTML', reply_markup=sg['kb'](buttons))
+            if result:
+                return result
         return sg['send'](api, cid, body[:3900], sg['kb'](buttons))
 
+    def product_preview(api, cid, pending):
+        product_card(api, cid, pending['pid'], pending.get('photo'))
+        token = pending['token']
+        return sg['send'](api, cid, 'هذه معاينة الإعلان. يمكنك إضافة صورة خاصة لهذا الإرسال أو تأكيده.',
+                          sg['kb']([[sg['btn']('🖼️ إضافة صورة للإعلان', 'pbphoto:' + token)],
+                                    [sg['btn']('✅ تأكيد الإرسال', 'pbconfirm:' + token, style='success')],
+                                    [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
+
     def action(api, cid, value):
-        if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbconfirm:')) and cid != admin_id:
+        if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbphoto:', 'pbconfirm:')) and cid != admin_id:
             return namespace['show_home'](api, cid)
         if cid == admin_id and value == 'admin:product_broadcast':
             PRODUCT_BROADCAST.pop(cid, None)
@@ -109,22 +125,31 @@ def install(namespace):
             if not valid or not sg['product_visible'](pid):
                 return categories(api, cid)
             token = uuid.uuid4().hex[:12]
-            PRODUCT_BROADCAST[cid] = (token, pid)
-            product_card(api, cid, pid)
-            return sg['send'](api, cid, 'هذه معاينة الإعلان. هل تريد إرساله لجميع مستخدمي البوت؟', sg['kb']([[sg['btn']('✅ تأكيد الإرسال', 'pbconfirm:' + token, style='success')], [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
+            pending = {'token': token, 'pid': pid}
+            PRODUCT_BROADCAST[cid] = pending
+            return product_preview(api, cid, pending)
+        if cid == admin_id and value.startswith('pbphoto:'):
+            pending = PRODUCT_BROADCAST.get(cid)
+            if not pending or pending['token'] != value.split(':', 1)[1]:
+                return categories(api, cid)
+            pending['awaiting_photo'] = True
+            return sg['send'](api, cid, '🖼️ أرسل الآن صورة الإعلان. ستظهر مع المنتج وزر الشراء في المعاينة وعند الإرسال.',
+                              sg['kb']([[sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
         if cid == admin_id and value.startswith('pbconfirm:'):
             token = value.split(':', 1)[1]
             pending = PRODUCT_BROADCAST.get(cid)
-            if not pending or pending[0] != token:
+            if not pending or pending['token'] != token:
                 return sg['send'](api, cid, 'انتهت صلاحية التأكيد. اختر المنتج مرة أخرى.', sg['kb']([[sg['btn']('🛍 اختيار منتج', 'admin:product_broadcast')]]))
+            if pending.get('awaiting_photo'):
+                return sg['send'](api, cid, 'أرسل الصورة أولًا أو ألغِ العملية واختر المنتج من جديد.')
             PRODUCT_BROADCAST.pop(cid, None)
-            pid = pending[1]
+            pid = pending['pid']
             if not sg['product_visible'](pid):
                 return sg['send'](api, cid, 'المنتج مخفي الآن. لم يتم الإرسال.')
             ok = failed = 0
             for user_id in set(_users()) - {admin_id}:
                 try:
-                    result = product_card(api, user_id, pid)
+                    result = product_card(api, user_id, pid, pending.get('photo'))
                 except Exception:
                     result = None
                 if result:
@@ -223,6 +248,15 @@ def install(namespace):
 
     def handle_receipt(api, message):
         cid = message.get('chat', {}).get('id')
+        pending = PRODUCT_BROADCAST.get(cid) if cid == admin_id else None
+        if pending and pending.get('awaiting_photo'):
+            photos = message.get('photo') or []
+            if not photos:
+                sg['send'](api, cid, 'أرسل الصورة كصورة عادية من تيليجرام، وليس كملف.')
+                return True
+            pending['photo'] = photos[-1]['file_id']
+            pending.pop('awaiting_photo', None)
+            return product_preview(api, cid, pending) or True
         state=AUTO_AD_STATE.get(cid)
         if cid==admin_id and state:
             if state.get('step')=='target':
