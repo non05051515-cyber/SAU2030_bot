@@ -1,5 +1,7 @@
 """Admin-only broadcast messaging for VEXA STORE."""
 import json
+import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -7,6 +9,23 @@ PENDING = set()
 AUTO_AD_STATE = {}
 USERS_FILE = Path('/data/users.json')
 PRODUCT_BROADCAST = {}
+DELIVERY_WORKER = None
+DELIVERY_LOCK = threading.Lock()
+
+
+def tick_product_broadcast(api):
+    """Resume queued deliveries after a restart without blocking getUpdates."""
+    if DELIVERY_WORKER and DELIVERY_LOCK.acquire(blocking=False):
+        threading.Thread(target=_run_product_worker, args=(api,), daemon=True).start()
+
+
+def _run_product_worker(api):
+    try:
+        DELIVERY_WORKER(api)
+    except Exception as exc:
+        print('Product broadcast worker:', type(exc).__name__, flush=True)
+    finally:
+        DELIVERY_LOCK.release()
 
 
 def _users():
@@ -26,12 +45,35 @@ def install(namespace):
     import storefront as store
     sg = store.__dict__
 
+    def prepare_broadcast_tables(conn):
+        conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_drafts (cid INTEGER PRIMARY KEY, token TEXT NOT NULL, pid TEXT NOT NULL, photo TEXT, awaiting_photo INTEGER NOT NULL DEFAULT 0)')
+        conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_jobs (token TEXT PRIMARY KEY, pid TEXT NOT NULL, photo TEXT, status TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_recipients (token TEXT NOT NULL, cid INTEGER NOT NULL, status TEXT NOT NULL DEFAULT "pending", PRIMARY KEY(token,cid))')
+
+    def draft(cid):
+        with sg['db']() as conn:
+            prepare_broadcast_tables(conn)
+            row = conn.execute('SELECT token,pid,photo,awaiting_photo FROM product_broadcast_drafts WHERE cid=?', (cid,)).fetchone()
+        return dict(zip(('token', 'pid', 'photo', 'awaiting_photo'), row)) if row else None
+
+    def save_draft(cid, pending):
+        with sg['db']() as conn:
+            prepare_broadcast_tables(conn)
+            conn.execute('INSERT OR REPLACE INTO product_broadcast_drafts VALUES (?,?,?,?,?)',
+                         (cid, pending['token'], pending['pid'], pending.get('photo'), int(bool(pending.get('awaiting_photo')))))
+
+    def clear_draft(cid):
+        with sg['db']() as conn:
+            prepare_broadcast_tables(conn)
+            conn.execute('DELETE FROM product_broadcast_drafts WHERE cid=?', (cid,))
+
     def admin_panel(api, cid):
         if cid != admin_id:
             return namespace['show_home'](api, cid)
         PENDING.discard(cid)
         AUTO_AD_STATE.pop(cid, None)
         PRODUCT_BROADCAST.pop(cid, None)
+        clear_draft(cid)
         with sg['db']() as conn:
             conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
@@ -81,7 +123,12 @@ def install(namespace):
         title = sg['esc'](sg['name'](pid, cid))
         description = sg['esc'](sg['product_description'](pid, cid))
         status = '✅ متوفر' if sg['in_stock'](pid) else '🔴 غير متوفر حاليًا'
-        body = f'🛍 <b>{title}</b>\n\n{sg["info_block"](pid, cid)}\n{status}'
+        details = sg['info_block'](pid, cid)
+        if sg['info_display'](pid)[0]:
+            details = details.partition('\n')[2]
+        price_line = '💵 <b>السعر:</b> ' + sg['esc'](sg['price'](cid, pid))
+        info = price_line + ('\n' + details if details else '')
+        body = f'🛍 <b>{title}</b>\n\n{info}\n{status}'
         if description:
             body += '\n\n' + description
         buttons = [[sg['btn']('🛒 الذهاب للمنتج', 'item:' + pid, style='primary')]]
@@ -91,7 +138,7 @@ def install(namespace):
         if photo:
             # Telegram photo captions are limited to 1024 characters. Keep the
             # purchase buttons on the same message as the picture.
-            caption = f'🛍 <b>{title}</b>\n\n{sg["info_block"](pid, cid)}\n{status}'
+            caption = f'🛍 <b>{title}</b>\n\n{info}\n{status}'
             if description and len(caption) + len(description) < 850:
                 caption += '\n\n' + description
             result = api.call('sendPhoto', chat_id=cid, photo=photo,
@@ -108,11 +155,40 @@ def install(namespace):
                                     [sg['btn']('✅ تأكيد الإرسال', 'pbconfirm:' + token, style='success')],
                                     [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
 
+    def deliver_queued(api):
+        with sg['db']() as conn:
+            prepare_broadcast_tables(conn)
+            jobs = conn.execute('SELECT token,pid,photo FROM product_broadcast_jobs WHERE status IN ("queued","running") ORDER BY rowid').fetchall()
+        for token, pid, photo in jobs:
+            with sg['db']() as conn:
+                conn.execute('UPDATE product_broadcast_jobs SET status="running" WHERE token=?', (token,))
+                recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid', (token,))]
+            for user_id in recipients:
+                try:
+                    result = product_card(api, user_id, pid, photo)
+                except Exception as exc:
+                    print('Product delivery error:', type(exc).__name__, flush=True)
+                    result = None
+                with sg['db']() as conn:
+                    conn.execute('UPDATE product_broadcast_recipients SET status=? WHERE token=? AND cid=?', ('sent' if result else 'failed', token, user_id))
+                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
+                time.sleep(0.05)
+            with sg['db']() as conn:
+                ok = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="sent"', (token,)).fetchone()[0]
+                failed = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="failed"', (token,)).fetchone()[0]
+                conn.execute('UPDATE product_broadcast_jobs SET status="done" WHERE token=?', (token,))
+                conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
+            sg['send'](api, admin_id, f'✅ اكتمل إرسال المنتج.\nوصل إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+
+    global DELIVERY_WORKER
+    DELIVERY_WORKER = deliver_queued
+
     def action(api, cid, value):
         if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbphoto:', 'pbconfirm:')) and cid != admin_id:
             return namespace['show_home'](api, cid)
         if cid == admin_id and value == 'admin:product_broadcast':
             PRODUCT_BROADCAST.pop(cid, None)
+            clear_draft(cid)
             return categories(api, cid)
         if cid == admin_id and value.startswith('pbcat:'):
             category = value.split(':', 1)[1]
@@ -126,41 +202,40 @@ def install(namespace):
                 return categories(api, cid)
             token = uuid.uuid4().hex[:12]
             pending = {'token': token, 'pid': pid}
-            PRODUCT_BROADCAST[cid] = pending
+            save_draft(cid, pending)
             return product_preview(api, cid, pending)
         if cid == admin_id and value.startswith('pbphoto:'):
-            pending = PRODUCT_BROADCAST.get(cid)
+            pending = draft(cid)
             if not pending or pending['token'] != value.split(':', 1)[1]:
                 return categories(api, cid)
             pending['awaiting_photo'] = True
+            save_draft(cid, pending)
             return sg['send'](api, cid, '🖼️ أرسل الآن صورة الإعلان. ستظهر مع المنتج وزر الشراء في المعاينة وعند الإرسال.',
                               sg['kb']([[sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
         if cid == admin_id and value.startswith('pbconfirm:'):
             token = value.split(':', 1)[1]
-            pending = PRODUCT_BROADCAST.get(cid)
+            pending = draft(cid)
             if not pending or pending['token'] != token:
+                with sg['db']() as conn:
+                    prepare_broadcast_tables(conn)
+                    row = conn.execute('SELECT status FROM product_broadcast_jobs WHERE token=?', (token,)).fetchone()
+                if row:
+                    return sg['send'](api, cid, 'الإرسال قيد التنفيذ.' if row[0] != 'done' else 'تم إرسال هذا الإعلان مسبقًا.')
                 return sg['send'](api, cid, 'انتهت صلاحية التأكيد. اختر المنتج مرة أخرى.', sg['kb']([[sg['btn']('🛍 اختيار منتج', 'admin:product_broadcast')]]))
             if pending.get('awaiting_photo'):
                 return sg['send'](api, cid, 'أرسل الصورة أولًا أو ألغِ العملية واختر المنتج من جديد.')
-            PRODUCT_BROADCAST.pop(cid, None)
             pid = pending['pid']
             if not sg['product_visible'](pid):
                 return sg['send'](api, cid, 'المنتج مخفي الآن. لم يتم الإرسال.')
-            ok = failed = 0
-            for user_id in set(_users()) - {admin_id}:
-                try:
-                    result = product_card(api, user_id, pid, pending.get('photo'))
-                except Exception:
-                    result = None
-                if result:
-                    ok += 1
-                else:
-                    failed += 1
-                with sg['db']() as conn:
-                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
             with sg['db']() as conn:
-                conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
-            return sg['send'](api, cid, f'✅ تم إرسال المنتج إلى <b>{ok}</b> مستخدم.\n❌ تعذر الإرسال إلى <b>{failed}</b>.', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+                prepare_broadcast_tables(conn)
+                conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs VALUES (?,?,?,"queued")', (token, pid, pending.get('photo')))
+                conn.executemany('INSERT OR IGNORE INTO product_broadcast_recipients(token,cid) VALUES (?,?)',
+                                 [(token, user_id) for user_id in set(_users()) - {admin_id}])
+                conn.execute('DELETE FROM product_broadcast_drafts WHERE cid=? AND token=?', (cid, token))
+            result = sg['send'](api, cid, '⏳ بدأ إرسال المنتج للمستخدمين. سأرسل لك عدد من وصلتهم الرسالة عند الانتهاء.')
+            tick_product_broadcast(api)
+            return result
         if cid == admin_id and value in ('admin:visibility', 'admin:chatgptvis'):
             return sg['visibility_categories'](api, cid)
         if cid == admin_id and value.startswith('viscat:'):
@@ -248,7 +323,7 @@ def install(namespace):
 
     def handle_receipt(api, message):
         cid = message.get('chat', {}).get('id')
-        pending = PRODUCT_BROADCAST.get(cid) if cid == admin_id else None
+        pending = draft(cid) if cid == admin_id else None
         if pending and pending.get('awaiting_photo'):
             photos = message.get('photo') or []
             if not photos:
@@ -256,6 +331,7 @@ def install(namespace):
                 return True
             pending['photo'] = photos[-1]['file_id']
             pending.pop('awaiting_photo', None)
+            save_draft(cid, pending)
             return product_preview(api, cid, pending) or True
         state=AUTO_AD_STATE.get(cid)
         if cid==admin_id and state:
