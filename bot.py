@@ -194,7 +194,10 @@ install(globals())
 import iptv_extension
 import broadcast_admin
 import chatgpt_extension
-iptv_extension.s.install(globals())
+# IPTV installs its category helpers when imported; preserve its callback
+# handler before adding the admin and ChatGPT handlers.
+action = iptv_extension.action
+handle_action = action
 broadcast_admin.install(globals())
 chatgpt_extension.install(globals())
 tick_auto_ads = broadcast_admin.tick_auto_ads
