@@ -1073,10 +1073,10 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items()]
+    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories]
+    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -1131,6 +1131,53 @@ def product_visible(pid):
     if VARIANTS.get(pid, {}).get('category') == 'chatgpt':
         return pid in ('pd_01', 'pd_04', 'pd_05')
     return True
+
+
+def category_visible(pid):
+    if pid in G['PRODUCTS']:
+        variants = [v['id'] for v in VARIANTS.values() if v['category'] == pid]
+        return any(map(product_visible, variants)) if variants else product_visible(pid)
+    with db() as conn:
+        ids = [row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (pid,))]
+    return any(map(product_visible, ids))
+
+
+def visibility_categories(api, cid):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        custom = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+    categories = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + custom
+    rows = [[btn(name, 'viscat:' + pid)] for pid, name in categories]
+    send(api, cid, '👁 <b>إظهار وإخفاء المنتجات</b>\n\nاختر القسم:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def visibility_products(api, cid, category_id):
+    if cid != G['ADMIN_ID']:
+        return
+    if category_id in G['PRODUCTS']:
+        ids = [v['id'] for v in VARIANTS.values() if v['category'] == category_id] or [category_id]
+    elif custom_category(category_id):
+        with db() as conn:
+            ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
+    else:
+        return visibility_categories(api, cid)
+    rows = [[btn(('👁 ' if product_visible(pid) else '🙈 ') + name(pid, cid), 'vistoggle:' + pid)] for pid in ids]
+    send(api, cid, '👁 ظاهر للعملاء | 🙈 مخفي عن العملاء\nاضغط على المنتج لتغيير حالته.',
+         kb(rows + [[btn('↩️ الأقسام', 'admin:visibility')]]))
+
+
+def toggle_visibility(api, cid, pid):
+    if cid != G['ADMIN_ID']:
+        return
+    cp = custom_product(pid)
+    if pid not in VARIANTS and pid not in G['PRODUCTS'] and not cp:
+        return visibility_categories(api, cid)
+    category_id = VARIANTS[pid]['category'] if pid in VARIANTS else (cp[5] if cp else pid)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_visibility(pid,visible) VALUES (?,?)',
+                     (pid, 0 if product_visible(pid) else 1))
+    visibility_products(api, cid, category_id)
 
 
 def chatgpt_visibility_admin(api, cid):
@@ -1214,6 +1261,8 @@ def grok_cards(api, cid, choices):
 
 
 def category(api, cid, pid):
+    if cid != G['ADMIN_ID'] and not category_visible(pid):
+        return products(api, cid)
     p = G['PRODUCTS'].get(pid)
     if not p:
         custom_cat = custom_category(pid)
@@ -1224,12 +1273,14 @@ def category(api, cid, pid):
             choices = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (pid,)).fetchall()
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
+            if cid != G['ADMIN_ID'] and not product_visible(product_id):
+                continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
-    choices = [v for v in VARIANTS.values() if v['category'] == pid]
+    choices = [v for v in VARIANTS.values() if v['category'] == pid and (cid == G['ADMIN_ID'] or product_visible(v['id']))]
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
@@ -1259,6 +1310,8 @@ def category(api, cid, pid):
 
 def item(api, cid, pid):
     pid = LEGACY.get(pid, pid)
+    if cid != G['ADMIN_ID'] and not product_visible(pid):
+        return send(api, cid, tr(cid, 'هذا المنتج مخفي حاليًا.', 'This product is currently hidden.'), kb([nav(cid, 'products')]))
     v = VARIANTS.get(pid)
     if not v:
         cp = custom_product(pid)
@@ -1295,6 +1348,8 @@ def item(api, cid, pid):
 
 def can_order(pid):
     pid = LEGACY.get(pid, pid)
+    if not product_visible(pid):
+        return False
     if pid in VARIANTS:
         return in_stock(pid) and not VARIANTS[pid].get('review_required')
     if custom_product(pid):
@@ -1923,10 +1978,10 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items()]
+    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories]
+    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -2026,6 +2081,8 @@ def grok_cards(api, cid, choices):
 
 
 def category(api, cid, pid):
+    if cid != G['ADMIN_ID'] and not category_visible(pid):
+        return products(api, cid)
     p = G['PRODUCTS'].get(pid)
     if not p:
         custom_cat = custom_category(pid)
@@ -2036,12 +2093,14 @@ def category(api, cid, pid):
             choices = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (pid,)).fetchall()
         rows = []
         for product_id, product_name, price_usd, available, stock in choices:
+            if cid != G['ADMIN_ID'] and not product_visible(product_id):
+                continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
         send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
-    choices = [v for v in VARIANTS.values() if v['category'] == pid]
+    choices = [v for v in VARIANTS.values() if v['category'] == pid and (cid == G['ADMIN_ID'] or product_visible(v['id']))]
     if pid == 'grok' and choices:
         return grok_cards(api, cid, choices)
     if choices:
@@ -2064,6 +2123,8 @@ def category(api, cid, pid):
 
 def item(api, cid, pid):
     pid = LEGACY.get(pid, pid)
+    if cid != G['ADMIN_ID'] and not product_visible(pid):
+        return send(api, cid, tr(cid, 'هذا المنتج مخفي حاليًا.', 'This product is currently hidden.'), kb([nav(cid, 'products')]))
     v = VARIANTS.get(pid)
     if not v:
         cp = custom_product(pid)
@@ -2097,6 +2158,8 @@ def item(api, cid, pid):
 
 def can_order(pid):
     pid = LEGACY.get(pid, pid)
+    if not product_visible(pid):
+        return False
     if pid in VARIANTS:
         return in_stock(pid) and not VARIANTS[pid].get('review_required')
     if custom_product(pid):
@@ -2643,5 +2706,3 @@ def install(namespace):
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
                          'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
-
-
