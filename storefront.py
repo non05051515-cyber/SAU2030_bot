@@ -584,9 +584,14 @@ def admin_prices(api, cid, category_id=None):
     with db() as conn:
         conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
     if category_id is None:
+        with db() as conn:
+            custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         rows = [[btn(p['name'], 'pricecat:' + pid)] for pid, p in G['PRODUCTS'].items()]
+        rows += [[btn(label, 'pricecat:' + pid)] for pid, label in custom_categories]
     else:
         ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
+        with db() as conn:
+            ids += [row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
         if not ids and category_id in G['PRODUCTS']:
             ids = [category_id]
         rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'SAR'), 'pricepick:' + pid)] for pid in ids]
@@ -594,7 +599,7 @@ def admin_prices(api, cid, category_id=None):
 
 
 def price_editor(api, cid, pid, currency=None):
-    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS']):
+    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid)):
         return
     if currency not in ('SAR', 'USD'):
         return send(api, cid, esc(name(pid, cid)) + '\nالسعر الحالي: ' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD') + '\nاختر عملة السعر الجديد:', kb([[btn('ريال سعودي', 'priceedit:SAR:' + pid), btn('دولار', 'priceedit:USD:' + pid)], [btn('إلغاء', 'admin:prices')]]))
@@ -629,8 +634,11 @@ def handle_admin_price(api, message):
     pid, currency = json.loads(state[0])
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (pid, str(value), currency))
+        usd = value if currency == 'USD' else (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        sar = value if currency == 'SAR' else (value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        conn.execute('UPDATE admin_products SET price_usd=?,price_sar=? WHERE pid=?', (str(usd), str(sar), pid))
         conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
-    send(api, cid, '✅ تم حفظ سعر ' + esc(name(pid, cid)) + '\n' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD'), kb([[btn('تعديل منتج آخر', 'admin:prices')], [btn('لوحة الإدارة', 'admin')]]))
+    send(api, cid, '✅ تم حفظ سعر ' + esc(name(pid, cid)) + '\n' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD') + '\n\nافتح قائمة المنتجات من جديد لرؤية السعر الجديد.', kb([[btn('تعديل منتج آخر', 'admin:prices')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -653,7 +661,7 @@ def admin_category_detail(api, cid, category_id):
         return admin_products_page(api, cid)
     with db() as conn:
         rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
-    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • $' + str(price_usd), 'myproduct:' + pid),
+    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • ' + price(cid, pid, 'USD'), 'myproduct:' + pid),
                 btn('🖼️ الصورة', 'photopick:' + pid)] for pid, product_name, price_usd, available, stock in rows]
     send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
@@ -780,8 +788,9 @@ def admin_product_detail(api, cid, pid):
     if not cp:
         return admin_products_page(api, cid)
     _, product_name, description, price_usd, available, category_id, stock = cp
-    text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 $' + esc(price_usd) + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
+    text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 ' + price(cid, pid, 'USD') + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
     send(api, cid, text, kb([[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
+                             [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                              [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
                              [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                              [btn('↩️ القسم', 'mycategory:' + category_id)]]))
