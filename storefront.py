@@ -1073,9 +1073,9 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'🛒 المنتجات','🛒 Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'👤 حسابي','👤 My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'💱 العملة','💱 Currency'),'settings:currency',ui_icon('ui_currency')), btn('🌐 Language / اللغة','settings:lang',ui_icon('ui_language'))]]
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     if cid == G.get('ADMIN_ID'):
-        rows.append([btn('🧾 لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
+        rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
@@ -1978,9 +1978,9 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'🛒 المنتجات','🛒 Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'💰 شحن الرصيد','💰 Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'💎 الإحالات','💎 Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'👤 حسابي','👤 My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'💬 تواصل مع الدعم','💬 Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'⚠️ إبلاغ عن مشكلة','⚠️ Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'💱 العملة','💱 Currency'),'settings:currency',ui_icon('ui_currency')), btn('🌐 Language / اللغة','settings:lang',ui_icon('ui_language'))]]
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     if cid == G.get('ADMIN_ID'):
-        rows.append([btn('🧾 لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
+        rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
