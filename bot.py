@@ -161,6 +161,7 @@ def main():
  while True:
   try:
    if 'tick_auto_ads' in globals(): tick_auto_ads(a)
+   if 'tick_product_broadcast' in globals(): tick_product_broadcast(a)
    for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
     offset=u['update_id']+1
     if 'callback_query' in u:
@@ -201,5 +202,6 @@ handle_action = action
 broadcast_admin.install(globals())
 chatgpt_extension.install(globals())
 tick_auto_ads = broadcast_admin.tick_auto_ads
+tick_product_broadcast = broadcast_admin.tick_product_broadcast
 
 if __name__=='__main__':main()
