@@ -1,5 +1,6 @@
 """VEXA STORE Telegram bot — Arabic / English."""
 import json,os,time,urllib.request
+import required_group
 from pathlib import Path
 BASE=Path(__file__).resolve().parent;CONFIG=json.loads((BASE/'catalog.json').read_text(encoding='utf-8'));ADMIN_ID=8386371522
 USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={};PENDING_ADMIN_DELIVERY={};PAYMENT_REVIEWS={}
@@ -166,11 +167,22 @@ def main():
     offset=u['update_id']+1
     if 'callback_query' in u:
      q=u['callback_query'];a.call('answerCallbackQuery',callback_query_id=q['id']);c=q.get('message',{}).get('chat',{}).get('id')
-     if c:save_user(c);action(a,c,q.get('data','home'))
+     if c:
+      save_user(c)
+      data=q.get('data','home')
+      if data=='required_group:verify':
+       if required_group.verify(a,c):show_start(a,c)
+      elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
+      else:required_group.prompt(a,c)
      continue
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    if c!=ADMIN_ID and not required_group.approved(c):
+     if txt.startswith('/start'):
+      required_group.prompt(a,c)
+     else:required_group.prompt(a,c)
+     continue
     if handle_admin_delivery(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
