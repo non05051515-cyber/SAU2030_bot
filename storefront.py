@@ -546,9 +546,10 @@ def admin_photo_editor(api, cid, pid, delete=False):
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         else:
             conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'product_photo', pid))
+    parent = 'myproduct:' + pid if custom_product(pid) else 'admin:photos'
     if delete:
-        return send(api, cid, '✅ تم حذف صورة المنتج. سيظهر دون صورة عند فتحه مجددًا.', kb([[btn('🖼️ إضافة صورة', 'photopick:' + pid)], [btn('لوحة الإدارة', 'admin')]]))
-    send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\nأرسل الصورة هنا كصورة في تيليجرام لإضافتها أو استبدال الصورة الحالية.', kb([[btn('🗑 حذف الصورة', 'photodel:' + pid, style='danger')], [btn('إلغاء', 'admin')]]))
+        return send(api, cid, '✅ تم حذف صورة المنتج. سيظهر دون صورة عند فتحه مجددًا.', kb([[btn('🖼️ إضافة صورة', 'photopick:' + pid)], [btn('↩️ رجوع', parent)]]))
+    send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\nأرسل الصورة هنا كصورة في تيليجرام لإضافتها أو استبدال الصورة الحالية.', kb([[btn('🗑 حذف الصورة', 'photodel:' + pid, style='danger')], [btn('↩️ رجوع', parent)]]))
 
 
 def handle_admin_photo(api, message):
@@ -572,7 +573,8 @@ def handle_admin_photo(api, message):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_photos VALUES (?,?)', (row[0], file_id))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    send(api, cid, '✅ تم حفظ صورة المنتج.', kb([[btn('👁 معاينة المنتج', ('item:' if row[0] in VARIANTS or custom_product(row[0]) else 'product:') + row[0])], [btn('🖼️ منتج آخر', 'admin:photos')], [btn('لوحة الإدارة', 'admin')]]))
+    parent = 'myproduct:' + row[0] if custom_product(row[0]) else 'admin:photos'
+    send(api, cid, '✅ تم حفظ صورة المنتج.', kb([[btn('👁 معاينة المنتج', ('item:' if row[0] in VARIANTS or custom_product(row[0]) else 'product:') + row[0])], [btn('↩️ رجوع للمنتج', parent)], [btn('🖼️ منتج آخر', 'admin:photos')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -651,7 +653,8 @@ def admin_category_detail(api, cid, category_id):
         return admin_products_page(api, cid)
     with db() as conn:
         rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
-    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • $' + str(price_usd), 'myproduct:' + pid)] for pid, product_name, price_usd, available, stock in rows]
+    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • $' + str(price_usd), 'myproduct:' + pid),
+                btn('🖼️ الصورة', 'photopick:' + pid)] for pid, product_name, price_usd, available, stock in rows]
     send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
 
@@ -778,7 +781,10 @@ def admin_product_detail(api, cid, pid):
         return admin_products_page(api, cid)
     _, product_name, description, price_usd, available, category_id, stock = cp
     text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 $' + esc(price_usd) + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
-    send(api, cid, text, kb([[btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)], [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')], [btn('↩️ القسم', 'mycategory:' + category_id)]]))
+    send(api, cid, text, kb([[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
+                             [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
+                             [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
+                             [btn('↩️ القسم', 'mycategory:' + category_id)]]))
 
 
 def toggle_admin_product(api, cid, pid):
