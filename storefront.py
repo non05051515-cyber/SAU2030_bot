@@ -1,6 +1,7 @@
 """Bilingual catalogue extension; preserves the existing bot/admin entry points."""
 import html
 import json
+import unicodedata
 
 BROADCAST_PENDING = set()
 import os
@@ -386,7 +387,9 @@ def product_stock(pid):
 def info_icon(pid,field,fallback):
     with db() as conn:
         row=conn.execute('SELECT custom_emoji_id,fallback_emoji FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
-    return ('<tg-emoji emoji-id="'+esc(row[0])+'">'+esc(row[1] or fallback)+'</tg-emoji>') if row else fallback
+    if not row: return fallback
+    if not row[0]: return esc(row[1] or fallback)
+    return '<tg-emoji emoji-id="'+esc(row[0])+'">'+esc(row[1] or fallback)+'</tg-emoji>'
 
 def info_block(pid,cid):
     sp,ss,sw,w=info_display(pid); lines=[]
@@ -459,9 +462,18 @@ def handle_info_icon(api,message):
     if not row: return False
     entities=list(message.get('entities',[]))+list(message.get('caption_entities',[]))
     emoji=next((e.get('custom_emoji_id') for e in entities if e.get('type')=='custom_emoji' and e.get('custom_emoji_id')),None)
-    if not emoji:
-        send(api,cid,'لم أجد أيقونة مخصصة. أرسل الأيقونة المتحركة نفسها.',kb([[btn('❌ إلغاء','admin:info')]])); return True
     field,_,pid=row[0].partition(':')
+    if not emoji:
+        normal=(message.get('text') or '').strip()
+        is_emoji=(0<len(normal)<=12 and not any(ch.isspace() or ch.isalpha() for ch in normal)
+                  and any(unicodedata.category(ch)=='So' for ch in normal))
+        if is_emoji:
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,'',normal))
+                conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
+            send(api,cid,'✅ تم حفظ '+esc(normal)+' كأيقونة عادية. إذا أردتها متحركة، اختر إيموجي تيليجرام المخصص وأرسله.',kb([[btn('↩️ إعدادات المنتج','infopick:'+pid)]]))
+            return True
+        send(api,cid,'لم أجد أيقونة. أرسل إيموجي واحدًا مثل ➕، أو اختر أيقونة متحركة مخصصة من إيموجي تيليجرام.',kb([[btn('❌ إلغاء','admin:info')]])); return True
     fallback='⭐'
     try:
         stickers=api.call('getCustomEmojiStickers',custom_emoji_ids=[str(emoji)]) or []
