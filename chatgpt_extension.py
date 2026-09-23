@@ -161,9 +161,9 @@ def install(namespace):
         return
     _INSTALLED = True
     old_home = s.home
-    # Keep the current storefront implementation active. Re-installing
-    # extensions can leave bot.action pointing at an older wrapper.
-    old_action = s.action
+    # Delegate to the current bot action, which already includes the
+    # admin and IPTV handlers. Using storefront.action skips those wrappers.
+    old_action = namespace['action']
     old_receipt = namespace["handle_receipt"]
     old_menu = s.menu
 
