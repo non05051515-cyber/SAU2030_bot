@@ -43,6 +43,7 @@ def install(namespace):
             [sg['btn']('👥 مستخدمو البوت', 'admin:users', style='success')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
             [sg['btn']('🤖 عرض/إخفاء منتجات ChatGPT', 'admin:chatgptvis', style='primary')],
+            [sg['btn']('👁 إظهار وإخفاء أي منتج', 'admin:visibility', style='primary')],
             [sg['btn']('🖼️ صورة المنتج', 'admin:photos')],
             [sg['btn']('✏️ تعديل اسم المنتج', 'admin:editname')],
             [sg['btn']('📝 تعديل وصف المنتج', 'admin:editdesc')],
@@ -58,6 +59,12 @@ def install(namespace):
         ]))
 
     def action(api, cid, value):
+        if cid == admin_id and value == 'admin:visibility':
+            return sg['visibility_categories'](api, cid)
+        if cid == admin_id and value.startswith('viscat:'):
+            return sg['visibility_products'](api, cid, value.split(':', 1)[1])
+        if cid == admin_id and value.startswith('vistoggle:'):
+            return sg['toggle_visibility'](api, cid, value.split(':', 1)[1])
         if cid == admin_id and value == 'admin:chatgptvis':
             return sg['chatgpt_visibility_admin'](api, cid)
         if cid == admin_id and value.startswith('chatgptvis:'):
@@ -207,5 +214,4 @@ def tick_auto_ads(api):
         with sg.db() as conn: conn.execute('UPDATE auto_ads SET next_at=? WHERE id=1',(now+interval_sec,))
     except Exception as exc:
         print('Auto ad error:',type(exc).__name__)
-
 
