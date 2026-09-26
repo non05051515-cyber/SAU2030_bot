@@ -53,7 +53,7 @@ def show_products(a,c):
    row.append(b)
   rows.append(row)
  rows.append([btn(tr(c,'🏠 الرئيسية','🏠 Home'),'home')]);send(a,c,tr(c,'🛍 <b>المنتجات</b>\n\nاختر الخدمة:','🛍 <b>Products</b>\n\nChoose a service:'),{'inline_keyboard':rows})
-def show_home(a,c):send(a,c,tr(c,'👋 أهلاً بك في <b>VEXA STORE</b>\n\n🛍 متجر الخدمات الرقمية\nاختر القسم المطلوب.\n\n💳 <b>لشحن النقاط والدعم:</b> @SOQ_ID','👋 Welcome to <b>VEXA STORE</b>\n\n🛍 Digital services store\nChoose a section.\n\n💳 <b>Top-ups & support:</b> @SOQ_ID'),keyboard(c));show_products(a,c)
+def show_home(a,c):send(a,c,tr(c,'👋 أهلاً بك في <b>VEXA STORE</b>\n\n🛍 متجر الخدمات الرقمية\nاختر القسم المطلوب.\n\n💳 <b>لشحن النقاط والدعم:</b> @m7mmd2030_1','👋 Welcome to <b>VEXA STORE</b>\n\n🛍 Digital services store\nChoose a section.\n\n💳 <b>Top-ups & support:</b> @m7mmd2030_1'),keyboard(c));show_products(a,c)
 def show_product(a,c,pid):
  p=PRODUCTS.get(pid)
  if not p:return show_products(a,c)
@@ -143,7 +143,7 @@ def action(a,c,x):
  elif x.startswith('paybybit:'):show_bybit(a,c,x.split(':',1)[1])
  elif x.startswith(('bybitid:','trc20:','bep20:')):k,p=x.split(':',1);show_crypto(a,c,p,k)
  elif x.startswith('receipt:'):_,m,p=x.split(':',2);receipt(a,c,p,m)
- elif x=='support':send(a,c,tr(c,'💬 <b>الدعم الفني</b>\n\nللدعم: @SOQ_ID','💬 <b>Support</b>\n\nSupport: @SOQ_ID'),keyboard(c))
+ elif x=='support':send(a,c,tr(c,'💬 <b>الدعم الفني</b>\n\nللدعم: @m7mmd2030_1','💬 <b>Support</b>\n\nSupport: @m7mmd2030_1'),keyboard(c))
  elif x=='wallet':send(a,c,tr(c,'👛 المحفظة غير مفعّلة حاليًا.','👛 Wallet is currently unavailable.'),keyboard(c))
  elif x=='api':send(a,c,tr(c,'🔗 سيتم إضافة إعدادات API لاحقاً.','🔗 API settings will be added later.'),keyboard(c))
  elif x=='warranty':send(a,c,tr(c,'🛡 سيتم إضافة سياسة الضمان هنا.','🛡 Warranty policy will be added here.'),keyboard(c))
