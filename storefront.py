@@ -25,7 +25,7 @@ USERS_PATH = Path(os.getenv('STORE_USERS_PATH', '/data/users.json'))
 LEGACY = {'chatgpt_email': 'pd_02', 'chatgpt_private': 'pd_04',
           'claude_pro': 'pd_09', 'claude_api_500m': 'pd_10',
           'claude_api_100m': 'pd_11', 'claude_api_50m': 'pd_12', 'claude_api_10m': 'pd_13'}
-SUPPORT = '@SOQ_ID'
+SUPPORT = '@m7mmd2030_1'
 G = {}
 
 
