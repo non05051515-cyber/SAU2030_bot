@@ -106,7 +106,7 @@ class DiscountTests(unittest.TestCase):
         self.bot.action(self.api, self.cid, 'home')
         buttons = self.api.calls[-1][1]['reply_markup']['inline_keyboard']
         button = next(b for row in buttons for b in row if b.get('callback_data') == 'coupon:*')
-        self.assertEqual(button['style'], 'danger')
+        self.assertEqual(button['style'], 'primary')
         self.bot.action(self.api, self.cid, 'coupon:*')
         self.assertTrue(self.msg(self.cid, 'vexa5'))
         self.bot.action(self.api, self.cid, 'buy:' + self.pid)

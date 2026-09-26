@@ -1516,7 +1516,7 @@ def payments(api, cid, pid):
         return
     warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='danger'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
+         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
              [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
@@ -2351,7 +2351,7 @@ def payments(api, cid, pid):
         return
     warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='danger'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
+         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
              [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
