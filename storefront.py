@@ -2,6 +2,7 @@
 import html
 import sys
 import discounts
+import payment_methods
 import json
 import unicodedata
 
@@ -1520,7 +1521,7 @@ def payments(api, cid, pid):
          kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
-             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
+             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))]] + payment_methods.rows(sys.modules[__name__], pid) + [nav(cid, back(pid))]))
 
 
 def payment(api, cid, pid, method):
@@ -1605,7 +1606,7 @@ def check_crypto_order(api, cid, order_id):
 
 
 def receipt_request(api, cid, pid, method):
-    if not can_order(pid) or method not in ('bank', 'bybitid', 'trc20', 'bep20'):
+    if not can_order(pid) or (method not in ('bank', 'bybitid', 'trc20', 'bep20') and not payment_methods.valid(sys.modules[__name__], method)):
         payments(api, cid, pid)
         return
     sar, usd, _, _ = checkout_totals(cid, pid)
@@ -1618,6 +1619,8 @@ def receipt_request(api, cid, pid, method):
 
 
 def receipt(api, message):
+    if payment_methods.message(sys.modules[__name__], api, message):
+        return True
     cid = message['chat']['id']
     if discounts.message(sys.modules[__name__], api, message):
         return True
@@ -1751,6 +1754,8 @@ def review_topup(api, actor, topup_id, approve):
 
 
 def action(api, cid, value):
+    if payment_methods.action(sys.modules[__name__], api, cid, value):
+        return
     if discounts.action(sys.modules[__name__], api, cid, value):
         return
     prefix, _, arg = value.partition(':')
@@ -2356,7 +2361,7 @@ def payments(api, cid, pid):
          kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
-             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
+             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))]] + payment_methods.rows(sys.modules[__name__], pid) + [nav(cid, back(pid))]))
 
 
 def payment(api, cid, pid, method):
@@ -2441,7 +2446,7 @@ def check_crypto_order(api, cid, order_id):
 
 
 def receipt_request(api, cid, pid, method):
-    if not can_order(pid) or method not in ('bank', 'bybitid', 'trc20', 'bep20'):
+    if not can_order(pid) or (method not in ('bank', 'bybitid', 'trc20', 'bep20') and not payment_methods.valid(sys.modules[__name__], method)):
         payments(api, cid, pid)
         return
     sar, usd, _, _ = checkout_totals(cid, pid)
@@ -2454,6 +2459,8 @@ def receipt_request(api, cid, pid, method):
 
 
 def receipt(api, message):
+    if payment_methods.message(sys.modules[__name__], api, message):
+        return True
     cid = message['chat']['id']
     if discounts.message(sys.modules[__name__], api, message):
         return True
@@ -2579,6 +2586,8 @@ def review_topup(api, actor, topup_id, approve):
 
 
 def action(api, cid, value):
+    if payment_methods.action(sys.modules[__name__], api, cid, value):
+        return
     if discounts.action(sys.modules[__name__], api, cid, value):
         return
     prefix, _, arg = value.partition(':')

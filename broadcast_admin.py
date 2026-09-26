@@ -75,7 +75,7 @@ def install(namespace):
         PRODUCT_BROADCAST.pop(cid, None)
         clear_draft(cid)
         with sg['db']() as conn:
-            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount')", (cid,))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
             activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
@@ -93,6 +93,7 @@ def install(namespace):
             [sg['btn']('📝 تعديل وصف المنتج', 'admin:editdesc')],
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
+            [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
