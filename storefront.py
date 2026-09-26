@@ -1242,9 +1242,10 @@ def chatgpt_cards(api, cid, choices):
     return grok_cards(api, cid, [v for v in choices if product_visible(v['id'])])
 
 
-def grok_cards(api, cid, choices):
+def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.png"):
     """Compact photo cards for Grok only; prices share the checkout source."""
-    send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
+    if show_heading:
+        send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
     for v in choices:
         pid = v['id']
         available = can_order(pid)
@@ -1269,7 +1270,7 @@ def grok_cards(api, cid, choices):
             if not override or not api.call('sendPhoto', chat_id=cid, photo=override, caption=caption, parse_mode='HTML', reply_markup=markup):
                 send(api, cid, caption, markup)
             continue
-        path = (BASE / (v.get('image') or 'assets/grok.png')).resolve()
+        path = (BASE / (v.get('image') or default_image)).resolve()
         delivered = False
         if path.is_relative_to(BASE) and path.is_file():
             boundary = 'VEXA' + uuid.uuid4().hex
@@ -2087,9 +2088,10 @@ def card(api, cid, image_path, title, text, keyboard, pid=None):
 
 
 
-def grok_cards(api, cid, choices):
+def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.png"):
     """Compact photo cards for Grok only; prices share the checkout source."""
-    send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
+    if show_heading:
+        send(api, cid, tr(cid, '✦ <b>اشتراكات Grok</b>\nاختر الباقة المناسبة لك:', '✦ <b>Grok subscriptions</b>\nChoose your plan:'))
     for v in choices:
         pid = v['id']
         available = can_order(pid)
@@ -2114,7 +2116,7 @@ def grok_cards(api, cid, choices):
             if not override or not api.call('sendPhoto', chat_id=cid, photo=override, caption=caption, parse_mode='HTML', reply_markup=markup):
                 send(api, cid, caption, markup)
             continue
-        path = (BASE / (v.get('image') or 'assets/grok.png')).resolve()
+        path = (BASE / (v.get('image') or default_image)).resolve()
         delivered = False
         if path.is_relative_to(BASE) and path.is_file():
             boundary = 'VEXA' + uuid.uuid4().hex
