@@ -101,6 +101,19 @@ class DiscountTests(unittest.TestCase):
         self.bot.handle_receipt(self.api, {'chat': {'id': self.cid}, 'photo': [{}], 'message_id': 1})
         with self.s.db() as c:
             self.assertEqual(c.execute('SELECT usd,sar,status FROM orders').fetchone(), ('6.67', '25.00', 'review'))
+    def test_home_coupon_applies_at_checkout(self):
+        self.create()
+        self.bot.action(self.api, self.cid, 'home')
+        buttons = self.api.calls[-1][1]['reply_markup']['inline_keyboard']
+        button = next(b for row in buttons for b in row if b.get('callback_data') == 'coupon:*')
+        self.assertEqual(button['style'], 'danger')
+        self.bot.action(self.api, self.cid, 'coupon:*')
+        self.assertTrue(self.msg(self.cid, 'vexa5'))
+        self.bot.action(self.api, self.cid, 'buy:' + self.pid)
+        self.assertEqual(self.s.checkout_totals(self.cid, self.pid)[0], Decimal('25'))
+        self.bot.action(self.api, self.cid, 'couponremove:' + self.pid)
+        self.assertEqual(self.s.checkout_totals(self.cid, self.pid)[0], Decimal('30'))
+
     def test_full_discount_and_cancel(self):
         self.create('100')
         self.apply()

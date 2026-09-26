@@ -14,8 +14,8 @@ def totals(s, cid, pid):
     original = s.amount(pid, 'SAR')
     usd = s.amount(pid, 'USD')
     with s.db() as conn:
-        row = conn.execute('SELECT d.code,d.sar FROM customer_discounts c JOIN discount_codes d ON c.code=d.code WHERE c.cid=? AND c.pid=? AND d.active=1', (cid, pid)).fetchone()
-    if not row:
+        row = conn.execute('SELECT d.code,d.sar FROM customer_discounts c JOIN discount_codes d ON c.code=d.code WHERE c.cid=? AND c.pid IN (?, ?) AND d.active=1 ORDER BY (c.pid=?) DESC LIMIT 1', (cid, pid, '*', pid)).fetchone()
+    if not row or original is None:
         return original, usd, Decimal('0'), None
     discount = min(original, Decimal(row[1]))
     sar = max(Decimal('0'), original - discount)
@@ -56,21 +56,21 @@ def action(s, api, cid, value):
     if value.startswith(('coupon:', 'couponremove:')):
         prefix, pid = value.split(':', 1)
         pid = s.LEGACY.get(pid, pid)
-        if not s.can_order(pid):
-            s.payments(api, cid, pid)
+        if pid != '*' and not s.can_order(pid):
+            (s.home(api, cid) if pid == '*' else s.payments(api, cid, pid))
             return True
         with s.db() as conn:
             conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
-            conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=?', (cid, pid))
+            conn.execute('DELETE FROM payment_quotes WHERE cid=?', (cid,))
             if prefix == 'couponremove':
-                conn.execute('DELETE FROM customer_discounts WHERE cid=? AND pid=?', (cid, pid))
+                conn.execute('DELETE FROM customer_discounts WHERE cid=?', (cid,))
                 conn.execute('DELETE FROM discount_input WHERE cid=?', (cid,))
             else:
                 conn.execute('INSERT OR REPLACE INTO discount_input VALUES (?,?)', (cid, pid))
         if prefix == 'couponremove':
-            s.payments(api, cid, pid)
+            (s.home(api, cid) if pid == '*' else s.payments(api, cid, pid))
         else:
-            s.send(api, cid, s.tr(cid, '🎟 أرسل كود الخصم الآن:', '🎟 Enter your discount code:'), s.kb([[s.btn(s.tr(cid, 'إلغاء', 'Cancel'), 'buy:' + pid)]]))
+            s.send(api, cid, s.tr(cid, '🎟 أرسل كود الخصم الآن:', '🎟 Enter your discount code:'), s.kb([[s.btn(s.tr(cid, 'إلغاء', 'Cancel'), ('home' if pid == '*' else 'buy:' + pid))]]))
         return True
     # Navigating away cancels text input, but keeps the selected code for this product.
     with s.db() as conn:
@@ -124,14 +124,16 @@ def message(s, api, message):
     with s.db() as conn:
         code = raw.upper()
         found = conn.execute('SELECT 1 FROM discount_codes WHERE code=? AND active=1', (code,)).fetchone()
-        if found and s.can_order(pid):
+        if found and (pid == '*' or s.can_order(pid)):
+            if pid == '*':
+                conn.execute('DELETE FROM customer_discounts WHERE cid=?', (cid,))
             conn.execute('INSERT OR REPLACE INTO customer_discounts VALUES (?,?,?)', (cid, pid, code))
             conn.execute('DELETE FROM discount_input WHERE cid=?', (cid,))
         else:
             found = None
     if not found:
-        s.send(api, cid, s.tr(cid, '❌ الكود غير صحيح أو غير فعّال. جرّب كودًا آخر.', '❌ Invalid or inactive code. Try another code.'), s.kb([[s.btn(s.tr(cid, 'إلغاء', 'Cancel'), 'buy:' + pid)]]))
+        s.send(api, cid, s.tr(cid, '❌ الكود غير صحيح أو غير فعّال. جرّب كودًا آخر.', '❌ Invalid or inactive code. Try another code.'), s.kb([[s.btn(s.tr(cid, 'إلغاء', 'Cancel'), ('home' if pid == '*' else 'buy:' + pid))]]))
         return True
     s.send(api, cid, s.tr(cid, '✅ تم تطبيق كود الخصم.', '✅ Discount code applied.'))
-    s.payments(api, cid, pid)
+    (s.home(api, cid) if pid == '*' else s.payments(api, cid, pid))
     return True
