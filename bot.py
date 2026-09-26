@@ -143,7 +143,7 @@ def action(a,c,x):
  elif x.startswith('paybybit:'):show_bybit(a,c,x.split(':',1)[1])
  elif x.startswith(('bybitid:','trc20:','bep20:')):k,p=x.split(':',1);show_crypto(a,c,p,k)
  elif x.startswith('receipt:'):_,m,p=x.split(':',2);receipt(a,c,p,m)
- elif x=='support':send(a,c,tr(c,'💬 <b>الدعم الفني</b>\n\nللدعم: @m7mmd2030_1','💬 <b>Support</b>\n\nSupport: @m7mmd2030_1'),keyboard(c))
+ elif x=='support':send(a,c,'Support:@m7mmd2030_1',keyboard(c))
  elif x=='wallet':send(a,c,tr(c,'👛 المحفظة غير مفعّلة حاليًا.','👛 Wallet is currently unavailable.'),keyboard(c))
  elif x=='api':send(a,c,tr(c,'🔗 سيتم إضافة إعدادات API لاحقاً.','🔗 API settings will be added later.'),keyboard(c))
  elif x=='warranty':send(a,c,tr(c,'🛡 سيتم إضافة سياسة الضمان هنا.','🛡 Warranty policy will be added here.'),keyboard(c))

@@ -1,5 +1,7 @@
 """Bilingual catalogue extension; preserves the existing bot/admin entry points."""
 import html
+import sys
+import discounts
 import json
 import unicodedata
 
@@ -66,6 +68,7 @@ def db():
     icon_cols={row[1] for row in conn.execute('PRAGMA table_info(product_info_icons)').fetchall()}
     if 'fallback_emoji' not in icon_cols:
         conn.execute('ALTER TABLE product_info_icons ADD COLUMN fallback_emoji TEXT NOT NULL DEFAULT "⭐"')
+    discounts.prepare(conn)
     return conn
 
 
@@ -843,6 +846,7 @@ def admin_panel(api, cid):
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
+                             [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
@@ -1077,6 +1081,7 @@ def name(pid, cid=0):
 def reset_navigation_state(cid):
     """Exit any unfinished input/payment flow when the user explicitly starts over or goes home."""
     with db() as conn:
+        conn.execute('DELETE FROM discount_input WHERE cid=?', (cid,))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
@@ -1096,7 +1101,7 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     if cid == G.get('ADMIN_ID'):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
@@ -1391,8 +1396,17 @@ def back(pid):
     return ('item:' if pid in VARIANTS or custom_product(pid) else 'product:') + pid
 
 
+def checkout_totals(cid, pid):
+    return discounts.totals(sys.modules[__name__], cid, pid)
+
+
 def summary(cid, pid):
-    return esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    text = esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    sar, usd, discount, code = checkout_totals(cid, pid)
+    if code:
+        text += '\n🎟 ' + esc(code) + f' — {tr(cid, "الخصم", "Discount")}: {discount:.2f} SAR'
+        text += f'\n✅ {tr(cid, "الإجمالي بعد الخصم", "Total after discount")}: {sar:.2f} SAR / {usd:.2f} USD'
+    return text
 
 
 def wallet(api, cid):
@@ -1502,7 +1516,8 @@ def payments(api, cid, pid):
         return
     warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
+         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='danger'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
+             [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
              [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
 
@@ -1511,6 +1526,8 @@ def payment(api, cid, pid, method):
     if not can_order(pid):
         payments(api, cid, pid)
         return
+    if checkout_totals(cid, pid)[0] == 0:
+        return pay_with_wallet(api, cid, pid)
     if method == 'bybit':
         send(api, cid, '🪙 <b>USDT — Bybit</b>\n\n' + summary(cid, pid),
              kb([[btn('Bybit Pay', 'bybitid:' + pid, ui_icon('pay_bybitid'))], [btn('USDT • TRON (TRC20)', 'trc20:' + pid, ui_icon('pay_trc20'))], [btn('USDT • BSC (BEP20)', 'bep20:' + pid, ui_icon('pay_bep20'))], nav(cid, 'buy:' + pid)]))
@@ -1524,6 +1541,9 @@ def payment(api, cid, pid, method):
     text += tr(cid, 'أكد مبلغ USDT والرسوم مع الدعم قبل الإرسال. استخدم الطريقة والشبكة المحددة فقط.', 'Confirm the USDT amount and fees with support before sending. Use only the specified method and network.')
     rows = []
     if configured:
+        sar, usd, _, _ = checkout_totals(cid, pid)
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
         text += '\n\n' + tr(cid, 'بعد التحويل أرسل صورة الإثبات للمراجعة.', 'After transferring, submit a receipt photo for review.')
         rows.append([btn(tr(cid, '✅ تم التحويل', '✅ Payment sent'), f'receipt:{method}:{pid}')])
     else:
@@ -1534,14 +1554,14 @@ def payment(api, cid, pid, method):
 def pay_with_wallet(api, cid, pid):
     if not can_order(pid):
         return payments(api, cid, pid)
-    cost = amount(pid, 'SAR')
+    cost, paid_usd, _, _ = checkout_totals(cid, pid)
     remaining = wallet_debit(cid, cost)
     if remaining is None:
         send(api, cid, tr(cid, 'رصيد المحفظة غير كافٍ.', 'Insufficient wallet balance.') +
              f'\n\n{tr(cid, "المطلوب", "Required")}: {cost:.2f} SAR\n{tr(cid, "الرصيد", "Balance")}: {wallet_balance(cid):.2f} SAR',
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
-    order_id = add_order(cid, pid, 'wallet', 'paid')
+    order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
     send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
@@ -1549,7 +1569,9 @@ def pay_with_wallet(api, cid, pid):
 def pay_with_crypto(api, cid, pid):
     if not can_order(pid):
         return payments(api, cid, pid)
-    usd = amount(pid, 'USD')
+    sar, usd, _, _ = checkout_totals(cid, pid)
+    if usd == 0:
+        return pay_with_wallet(api, cid, pid)
     order_id = uuid.uuid4().hex[:16]
     invoice = crypto_invoice(usd, 'VEXA STORE — ' + name(pid, cid), 'order:' + order_id)
     if not invoice:
@@ -1585,13 +1607,19 @@ def receipt_request(api, cid, pid, method):
     if not can_order(pid) or method not in ('bank', 'bybitid', 'trc20', 'bep20'):
         payments(api, cid, pid)
         return
+    sar, usd, _, _ = checkout_totals(cid, pid)
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(amount(pid, 'USD')), str(amount(pid, 'SAR'))))
+        quote = conn.execute('SELECT usd,sar FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method)).fetchone()
+        if quote:
+            usd, sar = quote
+        conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
     send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع هنا. ستصل للإدارة للمراجعة.', '📸 Send your payment receipt photo here. It will be sent to the administrator for review.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
 
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if discounts.message(sys.modules[__name__], api, message):
+        return True
     if handle_admin_photo(api, message):
         return True
     if handle_admin_text(api, message):
@@ -1696,6 +1724,7 @@ def receipt(api, message):
         return True
     add_order(cid, pid, method, 'review', usd=usd, sar=sar)
     with db() as conn:
+        conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
     send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
     return True
@@ -1721,6 +1750,8 @@ def review_topup(api, actor, topup_id, approve):
 
 
 def action(api, cid, value):
+    if discounts.action(sys.modules[__name__], api, cid, value):
+        return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
     if prefix in ('home', 'enter_store'):
@@ -1897,7 +1928,7 @@ def action(api, cid, value):
         method, _, pid = arg.partition(':')
         receipt_request(api, cid, LEGACY.get(pid, pid), method)
     elif prefix == 'support':
-        send(api, cid, tr(cid, '💬 لشحن النقاط والدعم: ', '💬 Top-ups and support: ') + SUPPORT, menu(cid))
+        send(api, cid, 'Support:' + SUPPORT, menu(cid))
     elif prefix == 'api':
         send(api, cid, tr(cid, '🔗 إعدادات API المتجر غير مفعّلة حاليًا.', '🔗 Store API settings are not active yet.'), menu(cid))
     elif prefix == 'warranty':
@@ -2001,7 +2032,7 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     if cid == G.get('ADMIN_ID'):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
@@ -2200,8 +2231,17 @@ def back(pid):
     return ('item:' if pid in VARIANTS or custom_product(pid) else 'product:') + pid
 
 
+def checkout_totals(cid, pid):
+    return discounts.totals(sys.modules[__name__], cid, pid)
+
+
 def summary(cid, pid):
-    return esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    text = esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    sar, usd, discount, code = checkout_totals(cid, pid)
+    if code:
+        text += '\n🎟 ' + esc(code) + f' — {tr(cid, "الخصم", "Discount")}: {discount:.2f} SAR'
+        text += f'\n✅ {tr(cid, "الإجمالي بعد الخصم", "Total after discount")}: {sar:.2f} SAR / {usd:.2f} USD'
+    return text
 
 
 def wallet(api, cid):
@@ -2311,7 +2351,8 @@ def payments(api, cid, pid):
         return
     warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
+         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='danger'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
+             [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
              [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))], nav(cid, back(pid))]))
 
@@ -2320,6 +2361,8 @@ def payment(api, cid, pid, method):
     if not can_order(pid):
         payments(api, cid, pid)
         return
+    if checkout_totals(cid, pid)[0] == 0:
+        return pay_with_wallet(api, cid, pid)
     if method == 'bybit':
         send(api, cid, '🪙 <b>USDT — Bybit</b>\n\n' + summary(cid, pid),
              kb([[btn('Bybit Pay', 'bybitid:' + pid, ui_icon('pay_bybitid'))], [btn('USDT • TRON (TRC20)', 'trc20:' + pid, ui_icon('pay_trc20'))], [btn('USDT • BSC (BEP20)', 'bep20:' + pid, ui_icon('pay_bep20'))], nav(cid, 'buy:' + pid)]))
@@ -2333,6 +2376,9 @@ def payment(api, cid, pid, method):
     text += tr(cid, 'أكد مبلغ USDT والرسوم مع الدعم قبل الإرسال. استخدم الطريقة والشبكة المحددة فقط.', 'Confirm the USDT amount and fees with support before sending. Use only the specified method and network.')
     rows = []
     if configured:
+        sar, usd, _, _ = checkout_totals(cid, pid)
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
         text += '\n\n' + tr(cid, 'بعد التحويل أرسل صورة الإثبات للمراجعة.', 'After transferring, submit a receipt photo for review.')
         rows.append([btn(tr(cid, '✅ تم التحويل', '✅ Payment sent'), f'receipt:{method}:{pid}')])
     else:
@@ -2343,14 +2389,14 @@ def payment(api, cid, pid, method):
 def pay_with_wallet(api, cid, pid):
     if not can_order(pid):
         return payments(api, cid, pid)
-    cost = amount(pid, 'SAR')
+    cost, paid_usd, _, _ = checkout_totals(cid, pid)
     remaining = wallet_debit(cid, cost)
     if remaining is None:
         send(api, cid, tr(cid, 'رصيد المحفظة غير كافٍ.', 'Insufficient wallet balance.') +
              f'\n\n{tr(cid, "المطلوب", "Required")}: {cost:.2f} SAR\n{tr(cid, "الرصيد", "Balance")}: {wallet_balance(cid):.2f} SAR',
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
-    order_id = add_order(cid, pid, 'wallet', 'paid')
+    order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
     send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
@@ -2358,7 +2404,9 @@ def pay_with_wallet(api, cid, pid):
 def pay_with_crypto(api, cid, pid):
     if not can_order(pid):
         return payments(api, cid, pid)
-    usd = amount(pid, 'USD')
+    sar, usd, _, _ = checkout_totals(cid, pid)
+    if usd == 0:
+        return pay_with_wallet(api, cid, pid)
     order_id = uuid.uuid4().hex[:16]
     invoice = crypto_invoice(usd, 'VEXA STORE — ' + name(pid, cid), 'order:' + order_id)
     if not invoice:
@@ -2394,13 +2442,19 @@ def receipt_request(api, cid, pid, method):
     if not can_order(pid) or method not in ('bank', 'bybitid', 'trc20', 'bep20'):
         payments(api, cid, pid)
         return
+    sar, usd, _, _ = checkout_totals(cid, pid)
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(amount(pid, 'USD')), str(amount(pid, 'SAR'))))
+        quote = conn.execute('SELECT usd,sar FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method)).fetchone()
+        if quote:
+            usd, sar = quote
+        conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
     send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع هنا. ستصل للإدارة للمراجعة.', '📸 Send your payment receipt photo here. It will be sent to the administrator for review.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
 
 
 def receipt(api, message):
     cid = message['chat']['id']
+    if discounts.message(sys.modules[__name__], api, message):
+        return True
     if handle_admin_photo(api, message):
         return True
     if handle_admin_text(api, message):
@@ -2497,6 +2551,7 @@ def receipt(api, message):
         return True
     add_order(cid, pid, method, 'review', usd=usd, sar=sar)
     with db() as conn:
+        conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
     send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
     return True
@@ -2522,6 +2577,8 @@ def review_topup(api, actor, topup_id, approve):
 
 
 def action(api, cid, value):
+    if discounts.action(sys.modules[__name__], api, cid, value):
+        return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
     if prefix in ('home', 'enter_store'):
@@ -2703,7 +2760,7 @@ def action(api, cid, value):
         method, _, pid = arg.partition(':')
         receipt_request(api, cid, LEGACY.get(pid, pid), method)
     elif prefix == 'support':
-        send(api, cid, tr(cid, '💬 لشحن النقاط والدعم: ', '💬 Top-ups and support: ') + SUPPORT, menu(cid))
+        send(api, cid, 'Support:' + SUPPORT, menu(cid))
     elif prefix == 'api':
         send(api, cid, tr(cid, '🔗 إعدادات API المتجر غير مفعّلة حاليًا.', '🔗 Store API settings are not active yet.'), menu(cid))
     elif prefix == 'warranty':
