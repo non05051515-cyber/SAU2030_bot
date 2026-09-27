@@ -306,6 +306,60 @@ def ui_icon(key):
         row = conn.execute('SELECT custom_emoji_id FROM category_icons WHERE pid=?', (key,)).fetchone()
     return row[0] if row else None
 
+def ui_label(key, default):
+    """Optional complete button caption; independent from Telegram custom icon."""
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS ui_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
+        row = conn.execute('SELECT label FROM ui_button_labels WHERE key=?', (key,)).fetchone()
+    return row[0] if row else default
+
+
+def admin_button_labels(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    labels = dict(UI_ICON_LABELS)
+    labels.update({'ui_quantity': 'أزرار الكمية', 'ui_quantity_custom': 'كمية مخصصة',
+                   'ui_stock_alert': 'تنبيه التوفر', 'ui_delivery_note': 'ملاحظات التسليم'})
+    rows = [[btn(label, 'buttonlabel:' + key)] for key, label in labels.items()]
+    send(api, cid, '✏️ <b>تعديل اسم الزر بالكامل</b>\\n\\nاختر الزر، ثم أرسل الاسم الجديد مع الأيقونات التي تريدها. لن تُضاف أيقونة ثابتة تلقائيًا.',
+         kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def begin_button_label(api, cid, key):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    if key not in UI_ICON_LABELS and key not in ('ui_quantity','ui_quantity_custom','ui_stock_alert','ui_delivery_note'):
+        return admin_button_labels(api, cid)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'button_label', key))
+    send(api, cid, '✏️ أرسل الاسم الجديد كاملًا كما تريد ظهوره على الزر، مع أيقونة واحدة أو بدونها.\\nمثال: 🛍 ×١\\n\\nأرسل /reset لإرجاع الاسم الافتراضي.',
+         kb([[btn('❌ إلغاء', 'cancelbuttonlabel')]]))
+
+
+def handle_button_label(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='button_label'", (cid,)).fetchone()
+    if not row:
+        return False
+    value = (message.get('text') or '').strip()
+    if value not in ('/reset',) and (not value or len(value) > 64):
+        send(api, cid, 'أرسل اسمًا من ١ إلى ٦٤ حرفًا، أو /reset لاستعادة الاسم الافتراضي.')
+        return True
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS ui_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
+        if value == '/reset':
+            conn.execute('DELETE FROM ui_button_labels WHERE key=?', (row[0],))
+        else:
+            conn.execute('INSERT OR REPLACE INTO ui_button_labels VALUES (?,?)', (row[0], value))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    send(api, cid, '✅ تم تحديث اسم الزر دون تغيير وظيفته.',
+         kb([[btn('✏️ تعديل زر آخر', 'admin:buttonlabels')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+    return True
+
+
 def apply_icon_overrides():
     with db() as conn:
         rows = conn.execute('SELECT pid,custom_emoji_id FROM category_icons').fetchall()
@@ -859,6 +913,7 @@ def admin_panel(api, cid):
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
+                             [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
                              [btn('🏠 الرئيسية', 'home')]]))
 
 
@@ -1714,6 +1769,8 @@ def receipt(api, message):
         return True
     if handle_admin_price(api, message):
         return True
+    if handle_button_label(api, message):
+        return True
     if handle_admin_icon(api, message):
         return True
     if cid == G.get('ADMIN_ID') and cid in BROADCAST_PENDING:
@@ -1864,6 +1921,7 @@ def action(api, cid, value):
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'stats': admin_stats(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
+        elif arg == 'buttonlabels': admin_button_labels(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
@@ -1952,6 +2010,12 @@ def action(api, cid, value):
     elif prefix == 'priceedit':
         currency, _, pid = arg.partition(':')
         price_editor(api, cid, pid, currency)
+    elif prefix == 'buttonlabel':
+        begin_button_label(api, cid, arg)
+    elif prefix == 'cancelbuttonlabel':
+        if cid == G['ADMIN_ID']:
+            with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            admin_button_labels(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
     elif prefix == 'cancelicon':
