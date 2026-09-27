@@ -3,6 +3,7 @@ import html
 import sys
 import discounts
 import payment_methods
+import product_options
 import json
 import unicodedata
 
@@ -70,6 +71,7 @@ def db():
     if 'fallback_emoji' not in icon_cols:
         conn.execute('ALTER TABLE product_info_icons ADD COLUMN fallback_emoji TEXT NOT NULL DEFAULT "⭐"')
     discounts.prepare(conn)
+    product_options.prepare(conn)
     return conn
 
 
@@ -272,11 +274,14 @@ def log_activity(cid, action_name, pid):
         conn.execute('DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT 500)')
 
 
-def add_order(cid, pid, method, status, usd=None, sar=None):
+def add_order(cid, pid, method, status, usd=None, sar=None, quantity=None):
+    if quantity is None:
+        quantity = product_options.snapshot(sys.modules[__name__], "receipt", cid) if status == "review" else product_options.selected(sys.modules[__name__], cid, pid)
     order_id = uuid.uuid4().hex[:10].upper()
     with db() as conn:
         conn.execute('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)',
                      (order_id, cid, pid, method, str(amount(pid, 'USD') if usd is None else usd), str(amount(pid, 'SAR') if sar is None else sar), status, now_saudi()))
+        conn.execute("INSERT OR REPLACE INTO quantity_snapshots VALUES (?,?,?)", ("order", order_id, quantity))
     return order_id
 
 
@@ -892,7 +897,7 @@ def admin_orders(api, cid):
     parts = ['📦 <b>آخر الطلبات</b>']
     review_buttons = []
     for oid, user_id, pid, method, usd, sar, status, created in rows:
-        parts.append(f'\n<b>#{esc(oid)}</b> • {status_names.get(status, esc(status))}\n{esc(name(pid, cid))}\n{esc(sar)} SAR / {esc(usd)} USD • {esc(method)}\nالعميل: {customer_link(user_id)} • {esc(created)}')
+        parts.append(f'\n<b>#{esc(oid)}</b> • {status_names.get(status, esc(status))}\n{esc(name(pid, cid))}\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", oid)}\n{esc(sar)} SAR / {esc(usd)} USD • {esc(method)}\nالعميل: {customer_link(user_id)} • {esc(created)}')
         if status == 'review':
             review_buttons.append([btn('✅ قبول #' + oid, 'payreview:accept:' + oid, style='success'), btn('❌ رفض', 'payreview:reject:' + oid, style='danger')])
     review_buttons.extend([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]])
@@ -1482,12 +1487,12 @@ def checkout_totals(cid, pid):
 
 
 def summary(cid, pid):
-    text = esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    qty = product_options.selected(sys.modules[__name__], cid, pid)
     sar, usd, discount, code = checkout_totals(cid, pid)
+    text = esc(name(pid,cid)) + '\n💰 سعر الوحدة: ' + price(cid,pid) + f'\n🛍 الكمية: {qty}'
     if code:
-        text += '\n🎟 ' + esc(code) + f' — {tr(cid, "الخصم", "Discount")}: {discount:.2f} SAR'
-        text += f'\n✅ {tr(cid, "الإجمالي بعد الخصم", "Total after discount")}: {sar:.2f} SAR / {usd:.2f} USD'
-    return text
+        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount:.2f} SAR'
+    return text + f'\n✅ الإجمالي: {sar:.2f} SAR / {usd:.2f} USD'
 
 
 def wallet(api, cid):
@@ -1643,7 +1648,7 @@ def pay_with_wallet(api, cid, pid):
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
     order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
-    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -1679,8 +1684,8 @@ def check_crypto_order(api, cid, order_id):
     with db() as conn:
         changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
     if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
+        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
@@ -1800,7 +1805,7 @@ def receipt(api, message):
     pid, method, usd, sar = pending
     user = message.get('from', {})
     username = '@' + user['username'] if user.get('username') else str(cid)
-    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: 1\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
+    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "receipt", cid)}\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
     forwarded = api.call('forwardMessage', chat_id=G['ADMIN_ID'], from_chat_id=cid, message_id=message['message_id']) if result else None
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
@@ -2319,12 +2324,12 @@ def checkout_totals(cid, pid):
 
 
 def summary(cid, pid):
-    text = esc(name(pid, cid)) + '\n💰 ' + price(cid, pid) + '\n' + tr(cid, 'الكمية: 1', 'Quantity: 1')
+    qty = product_options.selected(sys.modules[__name__], cid, pid)
     sar, usd, discount, code = checkout_totals(cid, pid)
+    text = esc(name(pid,cid)) + '\n💰 سعر الوحدة: ' + price(cid,pid) + f'\n🛍 الكمية: {qty}'
     if code:
-        text += '\n🎟 ' + esc(code) + f' — {tr(cid, "الخصم", "Discount")}: {discount:.2f} SAR'
-        text += f'\n✅ {tr(cid, "الإجمالي بعد الخصم", "Total after discount")}: {sar:.2f} SAR / {usd:.2f} USD'
-    return text
+        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount:.2f} SAR'
+    return text + f'\n✅ الإجمالي: {sar:.2f} SAR / {usd:.2f} USD'
 
 
 def wallet(api, cid):
@@ -2480,7 +2485,7 @@ def pay_with_wallet(api, cid, pid):
              kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'buy:' + pid)]))
         return
     order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
-    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+    send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -2516,8 +2521,8 @@ def check_crypto_order(api, cid, order_id):
     with db() as conn:
         changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
     if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
+        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
@@ -2629,7 +2634,7 @@ def receipt(api, message):
     pid, method, usd, sar = pending
     user = message.get('from', {})
     username = '@' + user['username'] if user.get('username') else str(cid)
-    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: 1\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
+    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "receipt", cid)}\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
     forwarded = api.call('forwardMessage', chat_id=G['ADMIN_ID'], from_chat_id=cid, message_id=message['message_id']) if result else None
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)

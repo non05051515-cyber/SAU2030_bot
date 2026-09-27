@@ -1,0 +1,167 @@
+"""Arabic product quantity controls and durable checkout quantity snapshots."""
+import time
+from decimal import Decimal
+
+
+def prepare(c):
+    c.execute('CREATE TABLE IF NOT EXISTS selected_quantities (cid INTEGER, pid TEXT, qty INTEGER NOT NULL, PRIMARY KEY(cid,pid))')
+    c.execute('CREATE TABLE IF NOT EXISTS quantity_input (cid INTEGER PRIMARY KEY, pid TEXT)')
+    c.execute('CREATE TABLE IF NOT EXISTS quantity_snapshots (kind TEXT, key TEXT, qty INTEGER NOT NULL, PRIMARY KEY(kind,key))')
+    c.execute('CREATE TABLE IF NOT EXISTS stock_alerts (cid INTEGER, pid TEXT, was_available INTEGER, PRIMARY KEY(cid,pid))')
+    # Freeze quantity alongside the existing immutable price snapshots.
+    c.execute('''CREATE TRIGGER IF NOT EXISTS quantity_quote AFTER INSERT ON payment_quotes BEGIN
+        INSERT OR REPLACE INTO quantity_snapshots VALUES ('quote', NEW.cid || ':' || NEW.pid || ':' || NEW.method,
+        COALESCE((SELECT qty FROM selected_quantities WHERE cid=NEW.cid AND pid=NEW.pid),1)); END''')
+    c.execute('''CREATE TRIGGER IF NOT EXISTS quantity_receipt AFTER INSERT ON receipts BEGIN
+        INSERT OR REPLACE INTO quantity_snapshots VALUES ('receipt', CAST(NEW.cid AS TEXT),
+        COALESCE((SELECT qty FROM quantity_snapshots WHERE kind='quote' AND key=NEW.cid || ':' || NEW.pid || ':' || NEW.method),
+        (SELECT qty FROM selected_quantities WHERE cid=NEW.cid AND pid=NEW.pid),1)); END''')
+    c.execute('''CREATE TRIGGER IF NOT EXISTS quantity_crypto AFTER INSERT ON crypto_orders BEGIN
+        INSERT OR REPLACE INTO quantity_snapshots VALUES ('crypto', NEW.id,
+        COALESCE((SELECT qty FROM selected_quantities WHERE cid=NEW.cid AND pid=NEW.pid),1)); END''')
+
+
+def selected(s, cid, pid):
+    with s.db() as c:
+        row = c.execute('SELECT qty FROM selected_quantities WHERE cid=? AND pid=?', (cid,pid)).fetchone()
+    return row[0] if row else 1
+
+
+def snapshot(s, kind, key):
+    with s.db() as c:
+        row = c.execute('SELECT qty FROM quantity_snapshots WHERE kind=? AND key=?', (kind,str(key))).fetchone()
+    return row[0] if row else 1
+
+
+def limit(s, pid):
+    try:
+        return max(0, int(s.product_stock(pid)))
+    except (ValueError, TypeError):
+        return 1 if s.in_stock(pid) else 0
+
+
+def valid(s, cid, pid):
+    return s.can_order(pid) and 1 <= selected(s,cid,pid) <= limit(s,pid)
+
+
+def choose(s, api, cid, pid, value):
+    try:
+        qty = int(value)
+    except (ValueError, TypeError):
+        qty = 0
+    if not s.can_order(pid) or not 1 <= qty <= min(limit(s,pid), 10000):
+        return s.send(api,cid,f'أدخل كمية صحيحة من ١ إلى {min(limit(s,pid),10000)} حسب المتوفر.',
+                      s.kb([[s.btn('↩️ رجوع للمنتج','options:'+pid)]]))
+    with s.db() as c:
+        c.execute('INSERT OR REPLACE INTO selected_quantities VALUES (?,?,?)',(cid,pid,qty))
+        c.execute('DELETE FROM quantity_input WHERE cid=?',(cid,))
+    s.payments(api,cid,pid)
+
+
+def button(s, text, data, key, style=None):
+    return s.btn(text,data,s.ui_icon(key),style=style)
+
+
+def page(s, api, cid, pid):
+    if not s.product_visible(pid):
+        return s.send(api,cid,'هذا المنتج غير متاح حاليًا.')
+    qty = selected(s,cid,pid)
+    rows = []
+    if s.can_order(pid):
+        nums = {1:'١',2:'٢',3:'٣',5:'٥',10:'١٠'}
+        choices = [button(s,'🛍 ×'+nums[n],f'chooseqty:{pid}:{n}','ui_quantity',
+                          'primary' if qty==n else None) for n in nums]
+        rows = [choices[:3], choices[3:]+[button(s,'⭐ كمية مخصصة','customqty:'+pid,'ui_quantity_custom')]]
+    with s.db() as c:
+        subscribed = c.execute('SELECT 1 FROM stock_alerts WHERE cid=? AND pid=?',(cid,pid)).fetchone()
+    rows += [[button(s,'🔕 إيقاف تنبيه التوفر' if subscribed else '🔔 تفعيل تنبيه التوفر','stockalert:'+pid,'ui_stock_alert','primary')],
+             [button(s,'📃 ملاحظات التسليم','deliverynote:'+pid,'ui_delivery_note')]]
+    v = s.VARIANTS.get(pid)
+    cp = s.custom_product(pid)
+    parent = v['category'] if v else cp[5] if cp else None
+    rows.append([button(s,'↩️ رجوع','product:'+parent if parent else 'products','ui_back')])
+    text = '<b>'+s.esc(s.name(pid,cid))+'</b>\n\n'+s.info_block(pid,cid)
+    text += f'\n👛 رصيدك: {s.wallet_balance(cid):.2f} ر.س\n\n'+s.esc(s.product_description(pid,cid))
+    if s.can_order(pid):
+        unit = s.amount(pid,'SAR')
+        text += f'\n\n🛍 الكمية المختارة: {qty}\n💰 الإجمالي قبل الخصم: {unit*qty:.2f} ر.س\nاختر الكمية للانتقال إلى الدفع.'
+    else:
+        text += '\n\n🔴 الطلب غير متاح حاليًا.'
+    s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.kb(rows),pid=pid)
+
+
+def install(s, namespace):
+    old_action = namespace['action']
+    old_receipt = namespace['handle_receipt']
+    s.UI_ICON_LABELS.update({'ui_quantity':'أيقونة الكميات','ui_quantity_custom':'أيقونة الكمية المخصصة',
+                            'ui_stock_alert':'أيقونة تنبيه التوفر','ui_delivery_note':'أيقونة ملاحظات التسليم'})
+
+    def action(api,cid,value):
+        prefix,_,arg = value.partition(':')
+        with s.db() as c:
+            c.execute('DELETE FROM quantity_input WHERE cid=?',(cid,))
+        if prefix in ('item','claude','options') or value in s.LEGACY:
+            return page(s,api,cid,s.LEGACY.get(value,s.LEGACY.get(arg,arg)))
+        if prefix=='product' and s.amount(arg,'SAR') is not None and not any(v['category']==arg for v in s.VARIANTS.values()):
+            return page(s,api,cid,arg)
+        if prefix=='chooseqty':
+            pid,_,qty = arg.rpartition(':')
+            return choose(s,api,cid,pid,qty)
+        if prefix=='customqty':
+            if not s.can_order(arg): return page(s,api,cid,arg)
+            s.reset_navigation_state(cid)
+            with s.db() as c:
+                c.execute('INSERT OR REPLACE INTO quantity_input VALUES (?,?)',(cid,arg))
+            return s.send(api,cid,f'✍️ أرسل الكمية المطلوبة من ١ إلى {min(limit(s,arg),10000)}.',
+                          s.kb([[s.btn('❌ إلغاء','options:'+arg)]]))
+        if prefix=='stockalert':
+            if not s.product_visible(arg): return
+            with s.db() as c:
+                exists=c.execute('SELECT 1 FROM stock_alerts WHERE cid=? AND pid=?',(cid,arg)).fetchone()
+                if exists: c.execute('DELETE FROM stock_alerts WHERE cid=? AND pid=?',(cid,arg))
+                else: c.execute('INSERT INTO stock_alerts VALUES (?,?,?)',(cid,arg,int(s.can_order(arg))))
+            return page(s,api,cid,arg)
+        if prefix=='deliverynote':
+            text=s.product_description(arg,cid)
+            warranty=s.info_display(arg)
+            if warranty[2] and warranty[3]: text+='\n\nالضمان: '+warranty[3]
+            return s.send(api,cid,'📃 <b>ملاحظات التسليم</b>\n\n'+s.esc(text or 'تواصل مع الدعم لمعرفة تفاصيل التسليم.'),
+                          s.kb([[s.btn('💬 الدعم','support')],[s.btn('↩️ رجوع','options:'+arg)]]))
+        if prefix in ('buy','paywallet','paycrypto','paybybit','bybitid','trc20','bep20','custompay'):
+            pid=arg.split(':',1)[1] if prefix=='custompay' and ':' in arg else arg
+            pid=s.LEGACY.get(pid,pid)
+            if not valid(s,cid,pid):
+                return s.send(api,cid,'الكمية المختارة لم تعد متاحة. اختر كمية مناسبة من صفحة المنتج.',
+                              s.kb([[s.btn('↩️ المنتج','options:'+pid)]]))
+        return old_action(api,cid,value)
+
+    def receipt(api,msg):
+        cid=msg['chat']['id']
+        with s.db() as c:
+            pending=c.execute('SELECT pid FROM quantity_input WHERE cid=?',(cid,)).fetchone()
+        if pending:
+            text=msg.get('text','').strip()
+            if text.startswith('/') or text in namespace.get('MENU',{}):
+                with s.db() as c:c.execute('DELETE FROM quantity_input WHERE cid=?',(cid,))
+            else:
+                choose(s,api,cid,pending[0],text)
+                return True
+        return old_receipt(api,msg)
+
+    last_tick=[0]
+    def tick(api):
+        if time.monotonic()-last_tick[0]<30:return
+        last_tick[0]=time.monotonic()
+        with s.db() as c: rows=c.execute('SELECT cid,pid,was_available FROM stock_alerts').fetchall()
+        for cid,pid,was in rows:
+            available=int(s.can_order(pid))
+            if available and not was:
+                result=s.send(api,cid,'🔔 عاد المنتج للتوفر: '+s.esc(s.name(pid,cid)),
+                              s.kb([[s.btn('🛍 عرض المنتج','options:'+pid)]]))
+                if not result: continue
+            with s.db() as c:c.execute('UPDATE stock_alerts SET was_available=? WHERE cid=? AND pid=?',(available,cid,pid))
+
+    namespace['action']=action
+    namespace['handle_action']=action
+    namespace['handle_receipt']=receipt
+    namespace['tick_stock_alerts']=tick

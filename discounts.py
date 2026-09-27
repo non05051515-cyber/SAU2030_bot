@@ -1,5 +1,6 @@
 """Fixed SAR coupons. Prices are calculated server-side for every checkout."""
 import re
+import product_options
 from decimal import Decimal, ROUND_HALF_UP
 
 
@@ -11,8 +12,11 @@ def prepare(conn):
 
 
 def totals(s, cid, pid):
+    qty = product_options.selected(s, cid, pid)
     original = s.amount(pid, 'SAR')
     usd = s.amount(pid, 'USD')
+    if original is not None: original *= qty
+    if usd is not None: usd *= qty
     with s.db() as conn:
         row = conn.execute('SELECT d.code,d.sar FROM customer_discounts c JOIN discount_codes d ON c.code=d.code WHERE c.cid=? AND c.pid IN (?, ?) AND d.active=1 ORDER BY (c.pid=?) DESC LIMIT 1', (cid, pid, '*', pid)).fetchone()
     if not row or original is None:
