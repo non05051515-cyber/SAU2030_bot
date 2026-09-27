@@ -162,6 +162,7 @@ def main():
  while True:
   try:
    storefront.tick_customer_activity(a)
+   if 'tick_stock_alerts' in globals(): tick_stock_alerts(a)
    if 'tick_channel_catalog' in globals(): tick_channel_catalog(a)
    if 'tick_auto_ads' in globals(): tick_auto_ads(a)
    if 'tick_product_broadcast' in globals(): tick_product_broadcast(a)
@@ -225,5 +226,7 @@ tick_product_broadcast = broadcast_admin.tick_product_broadcast
 
 import channel_catalog
 channel_catalog.install(globals())
+import product_options
+product_options.install(storefront, globals())
 
 if __name__=='__main__':main()
