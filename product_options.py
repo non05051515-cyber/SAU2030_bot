@@ -102,6 +102,12 @@ def install(s, namespace):
 
     def action(api,cid,value):
         prefix,_,arg = value.partition(':')
+        if value == 'admin:addtocategory':
+            return s.add_to_category(api, cid)
+        if prefix == 'addtocategory':
+            return s.add_to_category(api, cid, arg)
+        if prefix == 'product' and s.show_extended_category(api, cid, arg):
+            return
         button_actions = {
             'buttonlabel': s.begin_button_label,
             'resetbuttonlabel': s.reset_button_label,

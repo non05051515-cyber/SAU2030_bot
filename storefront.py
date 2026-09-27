@@ -844,7 +844,7 @@ def admin_category_detail(api, cid, category_id):
         rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
     buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • ' + price(cid, pid, 'USD'), 'myproduct:' + pid),
                 btn('🖼️ الصورة', 'photopick:' + pid)] for pid, product_name, price_usd, available, stock in rows]
-    send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
+    send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')], [btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
 
 def begin_add_product(api, cid):
@@ -854,6 +854,46 @@ def begin_add_product(api, cid):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'add_product_category', '{}'))
     send(api, cid, '➕ <b>إضافة قسم ومنتجات</b>\n\n1️⃣ أرسل <b>اسم القسم</b> الذي سيظهر للعملاء.\nمثال: <code>ChatGPT</code>', kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
+
+
+def add_to_category(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    reset_navigation_state(cid)
+    BROADCAST_PENDING.discard(cid)
+    if category_id is None:
+        with db() as conn:
+            custom = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        categories = list(G['PRODUCTS']) + [row[0] for row in custom]
+        return send(api, cid, '📁 اختر القسم الذي تريد إضافة منتج جديد إليه:',
+                    kb([[btn(name(key, cid), 'addtocategory:' + key)] for key in categories] +
+                       [[btn('↩️ لوحة التحكم', 'admin')]]))
+    if category_id not in G['PRODUCTS'] and not custom_category(category_id):
+        return add_to_category(api, cid)
+    payload = {'category_id': category_id, 'category_name': name(category_id, cid),
+               'count': 1, 'index': 0, 'products': []}
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
+                     (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
+    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد:',
+         kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
+
+
+def show_extended_category(api, cid, category_id):
+    """Include owner-added products alongside a built-in category's products."""
+    if category_id not in G['PRODUCTS']:
+        return False
+    with db() as conn:
+        custom = [row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
+    if not custom:
+        return False
+    variants = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
+    originals = variants or ([category_id] if amount(category_id, 'SAR') is not None else [])
+    rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid), 'options:' + pid,
+                 ui_icon(pid), style='danger' if not in_stock(pid) else None)]
+            for pid in originals + custom if product_visible(pid)]
+    send(api, cid, '<b>' + esc(name(category_id, cid)) + '</b>\n\nاختر المنتج:', kb(rows + [nav(cid)]))
+    return True
 
 
 def handle_admin_product(api, message):
@@ -940,10 +980,15 @@ def handle_admin_product(api, message):
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_products_page(api, cid)
             return True
-        category_id = 'cat_' + uuid.uuid4().hex[:10]
+        category_id = payload.get('category_id') or 'cat_' + uuid.uuid4().hex[:10]
+        if payload.get('category_id') and category_id not in G['PRODUCTS'] and not custom_category(category_id):
+            send(api, cid, 'القسم لم يعد موجودًا. اختر قسمًا آخر.')
+            add_to_category(api, cid)
+            return True
         saved_product_ids = []
         with db() as conn:
-            conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
+            if not payload.get('category_id'):
+                conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
             for product in payload['products']:
                 pid = 'custom_' + uuid.uuid4().hex[:10]
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -1423,11 +1468,11 @@ def product_visible(pid):
 
 
 def category_visible(pid):
-    if pid in G['PRODUCTS']:
-        variants = [v['id'] for v in VARIANTS.values() if v['category'] == pid]
-        return any(map(product_visible, variants)) if variants else product_visible(pid)
     with db() as conn:
         ids = [row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (pid,))]
+    if pid in G['PRODUCTS']:
+        variants = [v['id'] for v in VARIANTS.values() if v['category'] == pid]
+        ids += variants or [pid]
     return any(map(product_visible, ids))
 
 

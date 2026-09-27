@@ -92,6 +92,7 @@ def install(namespace):
             [sg['btn']('✏️ تعديل اسم المنتج', 'admin:editname')],
             [sg['btn']('📝 تعديل وصف المنتج', 'admin:editdesc')],
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
+            [sg['btn']('➕ إضافة منتج داخل قسم', 'admin:addtocategory', style='success')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
             [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
