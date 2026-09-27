@@ -65,6 +65,7 @@ def db():
     if 'stock' not in cols:
         conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
     conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
+    conn.execute('CREATE TABLE IF NOT EXISTS description_emoji (pid TEXT, lang TEXT, plain TEXT NOT NULL, html TEXT NOT NULL, PRIMARY KEY(pid,lang))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
@@ -489,6 +490,49 @@ def product_description(pid, cid=0):
     return text_override(pid, 'description', lang, default)
 
 
+def description_message_html(message, plain):
+    """Preserve custom emoji IDs using Telegram's UTF-16 entity offsets."""
+    raw = message.get('text') or ''
+    leading = len(raw) - len(raw.lstrip())
+    shift = len(raw[:leading].encode('utf-16-le')) // 2
+    data = plain.encode('utf-16-le')
+    spans = []
+    for entity in message.get('entities', []):
+        emoji_id = str(entity.get('custom_emoji_id', ''))
+        if entity.get('type') != 'custom_emoji' or not emoji_id.isdecimal():
+            continue
+        start = entity.get('offset', -1) - shift
+        end = start + entity.get('length', 0)
+        if 0 <= start < end <= len(data) // 2:
+            spans.append((start * 2, end * 2, emoji_id))
+    parts, cursor = [], 0
+    for start, end, emoji_id in sorted(spans):
+        if start < cursor:
+            continue
+        try:
+            before = data[cursor:start].decode('utf-16-le')
+            fallback = data[start:end].decode('utf-16-le')
+        except UnicodeDecodeError:
+            continue
+        parts.extend((esc(before), '<tg-emoji emoji-id="' + emoji_id + '">' + esc(fallback) + '</tg-emoji>'))
+        cursor = end
+    parts.append(esc(data[cursor:].decode('utf-16-le')))
+    return ''.join(parts)
+
+
+def product_description_html(pid, cid=0):
+    pid = LEGACY.get(pid, pid)
+    plain = product_description(pid, cid)
+    lang = prefs(cid)[0]
+    with db() as conn:
+        row = conn.execute('SELECT plain,html FROM description_emoji WHERE pid=? AND lang=?', (pid, lang)).fetchone()
+        # Base custom descriptions apply to either language unless overridden.
+        override = conn.execute("SELECT 1 FROM product_text WHERE pid=? AND field='description' AND lang=?", (pid, lang)).fetchone()
+        if row is None and not override:
+            row = conn.execute("SELECT plain,html FROM description_emoji WHERE pid=? AND lang='*'", (pid,)).fetchone()
+    return row[1] if row and row[0] == plain else esc(plain)
+
+
 def info_display(pid):
     with db() as conn:
         row = conn.execute('SELECT show_price,show_stock,show_warranty,warranty FROM product_info_display WHERE pid=?', (LEGACY.get(pid,pid),)).fetchone()
@@ -641,8 +685,11 @@ def handle_admin_text(api, message):
         return True
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, text))
+        if field == 'description':
+            conn.execute('INSERT OR REPLACE INTO description_emoji VALUES (?,?,?,?)',
+                         (pid, lang, text, description_message_html(message, text)))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    send(api, cid, '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج') + '\n\n' + esc(text), kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
+    send(api, cid, '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج') + '\n\n' + (description_message_html(message, text) if field == 'description' else esc(text)), kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -850,6 +897,7 @@ def handle_admin_product(api, message):
         prompt = '📝 أرسل <b>وصف المنتج</b> لـ <b>' + esc(payload['current']['name']) + '</b>.'
     elif action_name == 'add_product_desc':
         payload['current']['description'] = raw[:1500]
+        payload['current']['description_html'] = description_message_html(message, raw[:1500])
         next_action = 'add_product_price'
         prompt = '💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
     elif action_name == 'add_product_price':
@@ -903,6 +951,9 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
                              (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
                 saved_product_ids.append(pid)
+                if 'description_html' in product:
+                    conn.execute('INSERT OR REPLACE INTO description_emoji VALUES (?,?,?,?)',
+                                 (pid, '*', product.get('description', ''), product['description_html']))
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         with db() as conn:
             conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')

@@ -84,7 +84,7 @@ def page(s, api, cid, pid):
     parent = v['category'] if v else cp[5] if cp else None
     rows.append([button(s,'↩️ رجوع','product:'+parent if parent else 'products','ui_back')])
     text = '<b>'+s.esc(s.name(pid,cid))+'</b>\n\n'+s.info_block(pid,cid)
-    text += f'\n👛 رصيدك: {s.wallet_balance(cid):.2f} ر.س\n\n'+s.esc(s.product_description(pid,cid))
+    text += f'\n👛 رصيدك: {s.wallet_balance(cid):.2f} ر.س\n\n'+s.product_description_html(pid,cid)
     if s.can_order(pid):
         unit = s.amount(pid,'SAR')
         text += f'\n\n🛍 الكمية المختارة: {qty}\n💰 الإجمالي قبل الخصم: {unit*qty:.2f} ر.س\nاختر الكمية للانتقال إلى الدفع.'
@@ -141,10 +141,10 @@ def install(s, namespace):
                 else: c.execute('INSERT INTO stock_alerts VALUES (?,?,?)',(cid,arg,int(s.can_order(arg))))
             return page(s,api,cid,arg)
         if prefix=='deliverynote':
-            text=s.product_description(arg,cid)
+            text=s.product_description_html(arg,cid)
             warranty=s.info_display(arg)
-            if warranty[2] and warranty[3]: text+='\n\nالضمان: '+warranty[3]
-            return s.send(api,cid,'📃 <b>ملاحظات التسليم</b>\n\n'+s.esc(text or 'تواصل مع الدعم لمعرفة تفاصيل التسليم.'),
+            if warranty[2] and warranty[3]: text+='\n\nالضمان: '+s.esc(warranty[3])
+            return s.send(api,cid,'📃 <b>ملاحظات التسليم</b>\n\n'+(text or 'تواصل مع الدعم لمعرفة تفاصيل التسليم.'),
                           s.kb([[s.btn('💬 الدعم','support')],[s.btn('↩️ رجوع','options:'+arg)]]))
         if prefix in ('buy','paywallet','paycrypto','paybybit','bybitid','trc20','bep20','custompay'):
             pid=arg.split(':',1)[1] if prefix=='custompay' and ':' in arg else arg
