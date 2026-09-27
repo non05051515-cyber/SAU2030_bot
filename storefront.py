@@ -899,18 +899,97 @@ def admin_orders(api, cid):
     send(api, cid, '\n'.join(parts), kb(review_buttons))
 
 
+# Only the currently opened admin activity message is refreshed.
+ACTIVITY_VIEW = {}
+ACTIVITY_LABELS = {
+    'category': 'فتح القسم', 'item': 'فتح المنتج', 'start': 'بدء البوت',
+    'home': 'فتح الرئيسية', 'products': 'عرض المنتجات', 'buy': 'بدء الطلب',
+    'wallet': 'فتح المحفظة', 'support': 'فتح الدعم', 'receipt': 'إرسال صورة',
+    'message': 'إرسال رسالة', 'interaction': 'تفاعل مع البوت',
+}
+
+
+def track_customer_activity(cid, value=None, message=None):
+    if cid == G.get('ADMIN_ID'):
+        if value != 'admin:activity':
+            ACTIVITY_VIEW.clear()
+        return
+    if message is not None:
+        text = message.get('text', '')
+        value = G.get('MENU', {}).get(text)
+        if text.startswith('/start'):
+            value = 'start'
+        elif text.startswith('/products'):
+            value = 'products'
+        if value is None:
+            log_activity(cid, 'receipt' if message.get('photo') else 'message', '')
+            return
+    value = value or ''
+    prefix, _, arg = value.partition(':')
+    if value in LEGACY:
+        action_name, pid = 'item', LEGACY[value]
+    elif prefix in ('product', 'item', 'claude', 'buy'):
+        action_name = {'product': 'category', 'claude': 'item'}.get(prefix, prefix)
+        pid = LEGACY.get(arg, arg)
+    else:
+        action_name = {'enter_store': 'home'}.get(prefix, prefix)
+        if action_name not in ACTIVITY_LABELS:
+            action_name = 'interaction'
+        pid = ''
+    # Never persist private message text, payment details, or arbitrary callback data.
+    log_activity(cid, action_name, pid)
+
+
+def activity_page(cid):
+    with db() as conn:
+        rows = conn.execute('SELECT id,cid,action,pid,created_at FROM activity ORDER BY id DESC LIMIT 20').fetchall()
+    parts = ['👀 <b>آخر نشاط العملاء</b>', '🟢 تحديث تلقائي أثناء فتح الصفحة (حتى 15 دقيقة).']
+    if not rows:
+        parts.append('لا يوجد نشاط مسجل حتى الآن.')
+    for _, user_id, action_name, pid, created in rows:
+        label = ACTIVITY_LABELS.get(action_name, 'تفاعل مع البوت')
+        detail = ': <b>' + esc(name(pid, cid)[:100]) + '</b>' if pid else ''
+        entry = f'\n{label}{detail}\nالعميل: {customer_link(user_id)} • {esc(created)}'
+        if len(('\n'.join(parts) + entry).encode('utf-16-le')) // 2 > 3500:
+            break
+        parts.append(entry)
+    return '\n'.join(parts), rows[0][0] if rows else 0
+
+
+def activity_keyboard():
+    return kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]])
+
+
 def admin_activity(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
+    text, latest = activity_page(cid)
+    result = send(api, cid, text, activity_keyboard())
+    ACTIVITY_VIEW.clear()
+    if isinstance(result, dict) and result.get('message_id'):
+        ACTIVITY_VIEW.update(cid=cid, message_id=result['message_id'], latest=latest,
+                             expires=time.monotonic() + 900)
+
+
+def tick_customer_activity(api):
+    if not ACTIVITY_VIEW:
+        return
+    if time.monotonic() >= ACTIVITY_VIEW['expires']:
+        ACTIVITY_VIEW.clear()
+        return
+    cid = ACTIVITY_VIEW['cid']
     with db() as conn:
-        rows = conn.execute('SELECT cid,action,pid,created_at FROM activity ORDER BY id DESC LIMIT 20').fetchall()
-    if not rows:
-        return send(api, cid, '👀 لا يوجد نشاط مسجل حتى الآن.', kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
-    parts = ['👀 <b>آخر اختيارات العملاء</b>']
-    for user_id, action_name, pid, created in rows:
-        label = 'فتح المنتج' if action_name == 'item' else 'فتح القسم'
-        parts.append(f'\n{label}: <b>{esc(name(pid, cid))}</b>\nالعميل: {customer_link(user_id)} • {esc(created)}')
-    send(api, cid, '\n'.join(parts), kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        latest = conn.execute('SELECT COALESCE(MAX(id),0) FROM activity').fetchone()[0]
+    if latest == ACTIVITY_VIEW['latest']:
+        return
+    text, latest = activity_page(cid)
+    result = api.call('editMessageText', chat_id=cid, message_id=ACTIVITY_VIEW['message_id'],
+                      text=text, parse_mode='HTML', reply_markup=activity_keyboard())
+    if result:
+        ACTIVITY_VIEW['latest'] = latest
+    else:
+        # Deleted/inaccessible messages must not cause an endless retry loop.
+        ACTIVITY_VIEW.clear()
 
 
 def admin_icons(api, cid):
@@ -1770,13 +1849,10 @@ def action(api, cid, value):
     elif prefix == 'referrals':
         referral_page(api, cid)
     elif prefix == 'product':
-        log_activity(cid, 'category', arg)
         category(api, cid, arg)
     elif prefix in ('item', 'claude'):
-        log_activity(cid, 'item', arg)
         item(api, cid, arg)
     elif value in LEGACY:
-        log_activity(cid, 'item', LEGACY[value])
         item(api, cid, LEGACY[value])
     elif prefix == 'admin':
         if arg == 'orders': admin_orders(api, cid)
@@ -2602,13 +2678,10 @@ def action(api, cid, value):
     elif prefix == 'referrals':
         referral_page(api, cid)
     elif prefix == 'product':
-        log_activity(cid, 'category', arg)
         category(api, cid, arg)
     elif prefix in ('item', 'claude'):
-        log_activity(cid, 'item', arg)
         item(api, cid, arg)
     elif value in LEGACY:
-        log_activity(cid, 'item', LEGACY[value])
         item(api, cid, LEGACY[value])
     elif prefix == 'admin':
         if arg == 'orders': admin_orders(api, cid)
