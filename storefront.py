@@ -842,7 +842,7 @@ def admin_category_detail(api, cid, category_id):
         return admin_products_page(api, cid)
     with db() as conn:
         rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
-    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • ' + price(cid, pid, 'USD'), 'myproduct:' + pid),
+    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • ' + price(cid, pid, 'USD'), 'myproduct:' + pid, style='success' if available and int(stock or 0)>0 else 'danger'),
                 btn('🖼️ الصورة', 'photopick:' + pid)] for pid, product_name, price_usd, available, stock in rows]
     send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')], [btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
@@ -1612,7 +1612,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
-            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
+            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -1632,7 +1632,7 @@ def category(api, cid, pid):
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = ui_icon(v['id'])
-            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else None)])
+            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else 'success')])
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
@@ -2480,7 +2480,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
-            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
+            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -2492,7 +2492,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
             rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
-                             'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else None)])
+                             'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
