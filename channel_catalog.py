@@ -100,7 +100,7 @@ def post(api, pid, target=CHANNEL, kind='stock'):
     description = s.product_description(pid, 0)
     if description: text += '\n\n' + description[:250]
     text += '\n\nاضغط الزر لعرض المنتج وشرائه 👇'
-    markup = {'inline_keyboard': [[{'text': '🛒 شراء الآن', 'url': link(pid)}]]}
+    markup = {'inline_keyboard': [[{'text': '🛒 شراء الآن', 'url': link(pid), 'style': 'success'}]]}
     photo = s.saved_product_photo(pid)
     if photo:
         result = api.call('sendPhoto', chat_id=target, photo=photo, caption=text, reply_markup=markup)
