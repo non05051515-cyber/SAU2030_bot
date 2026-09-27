@@ -18,6 +18,7 @@ def db():
     c.execute('CREATE TABLE IF NOT EXISTS channel_catalog_queue (pid TEXT PRIMARY KEY, kind TEXT NOT NULL)')
     c.execute('CREATE TABLE IF NOT EXISTS channel_product_links (token TEXT PRIMARY KEY, pid TEXT NOT NULL)')
     c.execute('CREATE TABLE IF NOT EXISTS channel_pending_links (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL)')
+    c.execute('CREATE TABLE IF NOT EXISTS channel_message_drafts (cid INTEGER PRIMARY KEY, token TEXT NOT NULL, message_id INTEGER, status TEXT NOT NULL)')
     return c
 
 
@@ -148,20 +149,77 @@ def tick(api):
 
 def install(namespace):
     old_action = namespace['action']
+    old_delivery = namespace['handle_admin_delivery']
+
+    def clear_draft(cid):
+        with db() as c: c.execute('DELETE FROM channel_message_drafts WHERE cid=?', (cid,))
+
+    def message_input(api, message):
+        cid = message.get('chat', {}).get('id')
+        if cid != namespace['ADMIN_ID']: return old_delivery(api, message)
+        with db() as c:
+            draft = c.execute('SELECT token,status FROM channel_message_drafts WHERE cid=?', (cid,)).fetchone()
+        if not draft: return old_delivery(api, message)
+        if message.get('text', '').startswith('/') or message.get('text') in namespace.get('MENU', {}):
+            clear_draft(cid)
+            return old_delivery(api, message)
+        if draft[1] != 'waiting':
+            s.send(api, cid, 'استخدم أزرار التأكيد أو تعديل الرسالة أو إلغاء أسفل المعاينة.')
+            return True
+        mid = message.get('message_id')
+        if not mid: return True
+        preview = api.call('copyMessage', chat_id=cid, from_chat_id=cid, message_id=mid)
+        if not preview:
+            s.send(api, cid, 'تعذرت معاينة الرسالة. أرسل رسالة نصية أو صورة مع تعليق وحاول مجددًا.')
+            return True
+        with db() as c:
+            c.execute("UPDATE channel_message_drafts SET message_id=?,status='ready' WHERE cid=? AND token=?", (mid,cid,draft[0]))
+        s.send(api, cid, 'هذه معاينة رسالتك. نشرها في @SAU2030_k؟', s.kb([
+            [s.btn('✅ تأكيد ونشر', 'channel:message_send:' + draft[0], style='success')],
+            [s.btn('✏️ تعديل الرسالة', 'channel:message')],
+            [s.btn('❌ إلغاء', 'channel:list')]]))
+        return True
+
+    namespace['handle_admin_delivery'] = message_input
     def action(api, cid, value):
-        if not value.startswith('channel:'): return old_action(api, cid, value)
+        if not value.startswith('channel:'):
+            if cid == namespace['ADMIN_ID']: clear_draft(cid)
+            return old_action(api, cid, value)
         if cid != namespace['ADMIN_ID']: return
         parts = value.split(':', 2)
         verb = parts[1]
         if verb == 'list':
+            clear_draft(cid)
+            return s.send(api, cid, '📣 النشر في @SAU2030_k\n\nاختر نوع الإرسال:', s.kb([
+                [s.btn('🛍 إرسال منتج', 'channel:products', style='success')],
+                [s.btn('✉️ إرسال رسالة للقناة', 'channel:message', style='primary')],
+                [s.btn('↩️ لوحة الإدارة', 'admin')]]))
+        if verb == 'message':
+            with db() as c:
+                c.execute("INSERT OR REPLACE INTO channel_message_drafts VALUES (?,?,NULL,'waiting')", (cid,uuid.uuid4().hex))
+            return s.send(api, cid, '✉️ أرسل الآن الرسالة التي تريد نشرها في القناة.\nتقدر ترسل نصًا أو صورة مع تعليق. ستظهر معاينة قبل النشر.', s.kb([[s.btn('❌ إلغاء', 'channel:list')]]))
+        if verb == 'message_send':
+            token = parts[2] if len(parts)>2 else ''
+            with db() as c:
+                row = c.execute("SELECT message_id FROM channel_message_drafts WHERE cid=? AND token=? AND status='ready'", (cid,token)).fetchone()
+                if row: c.execute("UPDATE channel_message_drafts SET status='sending' WHERE cid=? AND token=?", (cid,token))
+            if not row: return s.send(api, cid, 'هذا التأكيد انتهى أو سبق استخدامه. اختر إرسال رسالة من جديد.')
+            result = api.call('copyMessage', chat_id=CHANNEL, from_chat_id=cid, message_id=row[0])
+            if result:
+                clear_draft(cid)
+                return s.send(api, cid, '✅ تم نشر رسالتك في @SAU2030_k.', s.kb([[s.btn('↩️ النشر في القناة', 'channel:list')]]))
+            with db() as c: c.execute("UPDATE channel_message_drafts SET status='ready' WHERE cid=? AND token=?", (cid,token))
+            return s.send(api, cid, '❌ تعذر تأكيد النشر. راجع القناة قبل إعادة المحاولة، وتأكد من صلاحية البوت للنشر.', s.kb([[s.btn('🔄 إعادة المحاولة', 'channel:message_send:'+token)], [s.btn('❌ إلغاء', 'channel:list')]]))
+        if verb == 'products':
+            clear_draft(cid)
             page = max(0, int(parts[2])) if len(parts) > 2 and parts[2].isdigit() else 0
             ids = [pid for pid in product_ids() if state(pid)['available']]
             rows = [[s.btn(s.name(pid, 0)[:55], 'channel:preview:' + pid)] for pid in ids[page*8:(page+1)*8]]
             nav = []
-            if page: nav.append(s.btn('⬅️ السابق', f'channel:list:{page-1}'))
-            if (page+1)*8 < len(ids): nav.append(s.btn('التالي ➡️', f'channel:list:{page+1}'))
+            if page: nav.append(s.btn('⬅️ السابق', f'channel:products:{page-1}'))
+            if (page+1)*8 < len(ids): nav.append(s.btn('التالي ➡️', f'channel:products:{page+1}'))
             if nav: rows.append(nav)
-            rows.append([s.btn('↩️ لوحة الإدارة', 'admin')])
+            rows.append([s.btn('↩️ خيارات النشر', 'channel:list')])
             return s.send(api, cid, '📣 النشر في @SAU2030_k\nالإشعارات تلقائية عند إضافة منتج متوفر أو زيادة كميته أو عودته للتوفر.\n\nاختر منتجًا لمعاينته ونشره الآن:', s.kb(rows))
         if len(parts) < 3: return
         pid = parts[2]
@@ -180,3 +238,4 @@ def install(namespace):
     s.broadcast_product_alert = lambda api, pid, kind='new': scan()
     namespace['broadcast_new_products'] = lambda api: scan()
     namespace['tick_channel_catalog'] = tick
+
