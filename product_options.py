@@ -59,7 +59,7 @@ def choose(s, api, cid, pid, value):
 
 
 def button(s, text, data, key, style=None):
-    return s.btn(text,data,s.ui_icon(key),style=style)
+    return s.btn(s.ui_label(key, text),data,s.ui_icon(key),style=style)
 
 
 def page(s, api, cid, pid):
