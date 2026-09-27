@@ -77,8 +77,12 @@ def page(s, api, cid, pid):
         rows = [choices[:3], choices[3:]+[button(s,'⭐ كمية مخصصة','customqty:'+pid,'ui_quantity_custom')]]
     with s.db() as c:
         subscribed = c.execute('SELECT 1 FROM stock_alerts WHERE cid=? AND pid=?',(cid,pid)).fetchone()
-    rows += [[button(s,'🔕 إيقاف تنبيه التوفر' if subscribed else '🔔 تفعيل تنبيه التوفر','stockalert:'+pid,'ui_stock_alert','primary')],
-             [button(s,'📃 ملاحظات التسليم','deliverynote:'+pid,'ui_delivery_note')]]
+    if s.can_order(pid):
+        rows.append([button(s,'🛒 شراء الآن','buy:'+pid,'ui_buy_now','success')])
+    else:
+        rows.append([button(s,'🔕 إيقاف تنبيه التوفر' if subscribed else '🔔 تفعيل تنبيه التوفر',
+                            'stockalert:'+pid,'ui_stock_alert','primary')])
+    rows.append([button(s,'📃 ملاحظات التسليم','deliverynote:'+pid,'ui_delivery_note')])
     v = s.VARIANTS.get(pid)
     cp = s.custom_product(pid)
     parent = v['category'] if v else cp[5] if cp else None
@@ -96,6 +100,7 @@ def page(s, api, cid, pid):
 def install(s, namespace):
     old_action = namespace['action']
     old_receipt = namespace['handle_receipt']
+    s.UI_ICON_LABELS.update({'ui_buy_now':'أيقونة شراء الآن'})
     s.UI_ICON_LABELS.update({'ui_quantity':'أيقونة الكميات','ui_quantity_custom':'أيقونة الكمية المخصصة',
                             'ui_stock_alert':'أيقونة تنبيه التوفر','ui_delivery_note':'أيقونة ملاحظات التسليم'})
     s.UI_ICON_LABELS.update({f'ui_quantity_{n}': f'أيقونة الكمية {n}' for n in (1,2,3,5,10)})
