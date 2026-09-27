@@ -847,9 +847,13 @@ def handle_admin_product(api, message):
                              (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
                 saved_product_ids.append(pid)
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-        for new_pid in saved_product_ids:
-            broadcast_product_alert(api, new_pid, 'new')
-        send(api, cid, '✅ تم إضافة القسم وكل المنتجات، وأصبحت ظاهرة للعملاء داخل قائمة المنتجات.', kb([[btn('📦 منتجاتي', 'admin:myproducts')], [btn('➕ إضافة قسم آخر', 'admin:addproduct')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
+            for new_pid in saved_product_ids:
+                conn.execute("INSERT OR REPLACE INTO channel_publish_choices VALUES (?,'pending')", (new_pid,))
+        send(api, cid, '✅ تم حفظ المنتجات وظهرت في المتجر.\\n\\n📣 هل تريد نشرها في القناة الآن أم لاحقًا؟',
+             kb([[btn('📣 نشر الآن', 'channel:publish_new:' + ','.join(saved_product_ids), style='success')],
+                 [btn('🕒 لاحقًا', 'channel:defer_new:' + ','.join(saved_product_ids))]]))
         return True
 
     with db() as conn:
