@@ -16,11 +16,11 @@ def approved(cid):
 
 
 def prompt(api, cid, message=None):
-    text = message or "🔒 للمتابعة إلى المتجر، انضم إلى مجموعتنا أولًا ثم اضغط «تحقق من الاشتراك».\\nبعد التحقق بنجاح لن يُطلب منك الانضمام مرة أخرى."
+    text = message or "🔒 للمتابعة إلى المتجر، انضم إلى مجموعتنا أولًا ثم اضغط «تحقّق وادخل المتجر».\nبعد التحقق بنجاح لن يُطلب منك الانضمام مرة أخرى."
     api.call("sendMessage", chat_id=cid, text=text, reply_markup={
         "inline_keyboard": [
             [{"text": "📢 الانضمام إلى المجموعة", "url": GROUP_URL}],
-            [{"text": "✅ تحقق من الاشتراك", "callback_data": "required_group:verify"}]
+            [{"text": "✅ تحقّق وادخل المتجر", "callback_data": "required_group:verify"}]
         ]
     })
 
@@ -28,7 +28,7 @@ def prompt(api, cid, message=None):
 def verify(api, cid):
     result = api.call("getChatMember", chat_id=GROUP_ID, user_id=cid)
     if not isinstance(result, dict) or "status" not in result:
-        prompt(api, cid, "⚠️ تعذر التحقق حاليًا. تأكد أن البوت مشرف في المجموعة ثم حاول مجددًا.")
+        prompt(api, cid, "⚠️ تعذر التحقق حاليًا. حاول مجددًا بعد قليل، أو تواصل مع الدعم.")
         return False
     status = result["status"]
     if status in ("creator", "administrator", "member") or (status == "restricted" and result.get("is_member")):
@@ -38,5 +38,5 @@ def verify(api, cid):
             db.execute("INSERT OR IGNORE INTO group_join_approved (cid) VALUES (?)", (cid,))
         api.call("sendMessage", chat_id=cid, text="✅ تم التحقق بنجاح! أهلاً بك في المتجر.")
         return True
-    prompt(api, cid, "❌ لم يتم العثور على عضويتك في المجموعة. انضم أولًا ثم اضغط تحقق من الاشتراك.")
+    prompt(api, cid, "❌ لم يتم العثور على عضويتك في المجموعة. انضم أولًا ثم اضغط «تحقّق وادخل المتجر».")
     return False
