@@ -13,6 +13,7 @@ _last_tick = 0
 
 def db():
     c = s.db()
+    c.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
     c.execute('CREATE TABLE IF NOT EXISTS channel_catalog_state (pid TEXT PRIMARY KEY, state TEXT NOT NULL)')
     c.execute('CREATE TABLE IF NOT EXISTS channel_catalog_meta (key TEXT PRIMARY KEY, value TEXT)')
     c.execute('CREATE TABLE IF NOT EXISTS channel_catalog_queue (pid TEXT PRIMARY KEY, kind TEXT NOT NULL)')
@@ -122,7 +123,8 @@ def scan():
             row = c.execute('SELECT state FROM channel_catalog_state WHERE pid=?', (pid,)).fetchone()
             old = json.loads(row[0]) if row else None
             increase = old and new['quantity'] is not None and old['quantity'] is not None and new['quantity'] > old['quantity']
-            if initialized and new['available'] and (old is None or not old['available'] or increase):
+            choice = c.execute('SELECT status FROM channel_publish_choices WHERE pid=?', (pid,)).fetchone()
+            if initialized and new['available'] and (old is None or not old['available'] or increase) and not (choice and choice[0] != 'published'):
                 c.execute('INSERT OR REPLACE INTO channel_catalog_queue VALUES (?,?)', (pid, 'new' if old is None else 'stock'))
             c.execute('INSERT OR REPLACE INTO channel_catalog_state VALUES (?,?)', (pid, json.dumps(new)))
         c.execute("INSERT OR REPLACE INTO channel_catalog_meta VALUES ('initialized','1')")
@@ -210,6 +212,31 @@ def install(namespace):
                 return s.send(api, cid, '✅ تم نشر رسالتك في @SAU2030_k.', s.kb([[s.btn('↩️ النشر في القناة', 'channel:list')]]))
             with db() as c: c.execute("UPDATE channel_message_drafts SET status='ready' WHERE cid=? AND token=?", (cid,token))
             return s.send(api, cid, '❌ تعذر تأكيد النشر. راجع القناة قبل إعادة المحاولة، وتأكد من صلاحية البوت للنشر.', s.kb([[s.btn('🔄 إعادة المحاولة', 'channel:message_send:'+token)], [s.btn('❌ إلغاء', 'channel:list')]]))
+        if verb in ('publish_new', 'defer_new'):
+            ids = parts[2].split(',') if len(parts) > 2 else []
+            ids = [pid for pid in ids if pid.startswith('custom_')]
+            if not ids: return s.send(api, cid, 'لا توجد منتجات للنشر.')
+            with db() as c:
+                pending = [pid for pid in ids if c.execute(
+                    "SELECT 1 FROM channel_publish_choices WHERE pid=? AND status='pending'", (pid,)).fetchone()]
+            if verb == 'defer_new':
+                with db() as c:
+                    for pid in pending:
+                        c.execute("UPDATE channel_publish_choices SET status='deferred' WHERE pid=?", (pid,))
+                        c.execute('DELETE FROM channel_catalog_queue WHERE pid=?', (pid,))
+                return s.send(api, cid, '🕒 تم حفظ المنتجات دون نشرها في القناة. يمكنك نشرها لاحقًا من لوحة الإدارة ← النشر في القناة.',
+                              s.kb([[s.btn('📦 منتجاتي', 'admin:myproducts')], [s.btn('↩️ لوحة الإدارة', 'admin')]]))
+            published = 0
+            for pid in pending:
+                if post(api, pid, kind='new'):
+                    published += 1
+                    with db() as c:
+                        c.execute("UPDATE channel_publish_choices SET status='published' WHERE pid=?", (pid,))
+                        c.execute('DELETE FROM channel_catalog_queue WHERE pid=?', (pid,))
+                        c.execute('INSERT OR REPLACE INTO channel_catalog_state VALUES (?,?)', (pid, json.dumps(state(pid))))
+            return s.send(api, cid, f'📣 تم نشر {published} من {len(pending)} منتج في القناة.' +
+                          (' تحقق من توفر المنتجات وصلاحيات النشر ثم أعد المحاولة للبقية.' if published < len(pending) else ''),
+                          s.kb([[s.btn('↩️ لوحة الإدارة', 'admin')]]))
         if verb == 'products':
             clear_draft(cid)
             page = max(0, int(parts[2])) if len(parts) > 2 and parts[2].isdigit() else 0
@@ -230,6 +257,7 @@ def install(namespace):
             result = post(api, pid)
             if result:
                 with db() as c:
+                    c.execute("UPDATE channel_publish_choices SET status='published' WHERE pid=?", (pid,))
                     c.execute('DELETE FROM channel_catalog_queue WHERE pid=?', (pid,))
                     c.execute('INSERT OR REPLACE INTO channel_catalog_state VALUES (?,?)', (pid, json.dumps(state(pid))))
             return s.send(api, cid, '✅ تم نشر المنتج في @SAU2030_k.' if result else '❌ تعذر النشر. تأكد من توفر المنتج وأن البوت مشرف في @SAU2030_k ولديه صلاحية النشر.')
