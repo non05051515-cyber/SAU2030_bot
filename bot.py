@@ -161,6 +161,7 @@ def main():
  offset=0;print('Bot running...')
  while True:
   try:
+   storefront.tick_customer_activity(a)
    if 'tick_channel_catalog' in globals(): tick_channel_catalog(a)
    if 'tick_auto_ads' in globals(): tick_auto_ads(a)
    if 'tick_product_broadcast' in globals(): tick_product_broadcast(a)
@@ -171,6 +172,7 @@ def main():
      if c:
       save_user(c)
       data=q.get('data','home')
+      storefront.track_customer_activity(c, value=data)
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
       elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
@@ -179,6 +181,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    storefront.track_customer_activity(c, message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
     if c!=ADMIN_ID and not required_group.approved(c):
      if txt.startswith('/start'):
@@ -202,6 +205,7 @@ def main():
     else:show_home(a,c)
   except KeyboardInterrupt:break
   except Exception as e:print('Error:',e);time.sleep(3)
+import storefront
 from storefront import install
 install(globals())
 
