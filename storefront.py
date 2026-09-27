@@ -45,6 +45,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS category_icons (pid TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS ui_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
@@ -320,20 +321,25 @@ def admin_button_labels(api, cid):
     labels = dict(UI_ICON_LABELS)
     labels.update({'ui_quantity': 'أزرار الكمية', 'ui_quantity_custom': 'كمية مخصصة',
                    'ui_stock_alert': 'تنبيه التوفر', 'ui_delivery_note': 'ملاحظات التسليم'})
+    labels.update({f'ui_quantity_{n}': f'الكمية {n}' for n in (1, 2, 3, 5, 10)})
+    labels.pop('ui_quantity', None)
     rows = [[btn(label, 'buttonlabel:' + key)] for key, label in labels.items()]
-    send(api, cid, '✏️ <b>تعديل اسم الزر بالكامل</b>\\n\\nاختر الزر، ثم أرسل الاسم الجديد مع الأيقونات التي تريدها. لن تُضاف أيقونة ثابتة تلقائيًا.',
-         kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+    send(api, cid, '✏️ <b>إدارة أزرار المتجر</b>\n\nاختر زرًا لتغيير نصه بالكامل، أو اختر قسمًا أو منتجًا لتغيير اسمه.',
+         kb([[btn('📁 أسماء الأقسام', 'buttonnames:categories'), btn('📦 أسماء المنتجات', 'admin:editname')]] +
+            rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def begin_button_label(api, cid, key):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
-    if key not in UI_ICON_LABELS and key not in ('ui_quantity','ui_quantity_custom','ui_stock_alert','ui_delivery_note'):
+    if key not in UI_ICON_LABELS and key not in ('ui_quantity','ui_quantity_custom','ui_stock_alert','ui_delivery_note') and key not in (f'ui_quantity_{n}' for n in (1,2,3,5,10)):
         return admin_button_labels(api, cid)
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'button_label', key))
-    send(api, cid, '✏️ أرسل الاسم الجديد كاملًا كما تريد ظهوره على الزر، مع أيقونة واحدة أو بدونها.\\nمثال: 🛍 ×١\\n\\nأرسل /reset لإرجاع الاسم الافتراضي.',
-         kb([[btn('❌ إلغاء', 'cancelbuttonlabel')]]))
+    send(api, cid, '✏️ أرسل نص الزر الجديد كاملًا؛ سيحل محل النص القديم.\nمثال: 🛍 ×1\n\nيمكنك أيضًا إزالة الأيقونة المتحركة المستقلة عن النص.',
+         kb([[btn('🗑 مسح الاسم والأيقونة', 'resetbuttonlabel:' + key)],
+             [btn('🗑 إزالة الأيقونة فقط', 'removebuttonicon:' + key)],
+             [btn('❌ إلغاء', 'cancelbuttonlabel')]]))
 
 
 def handle_button_label(api, message):
@@ -354,10 +360,59 @@ def handle_button_label(api, message):
             conn.execute('DELETE FROM ui_button_labels WHERE key=?', (row[0],))
         else:
             conn.execute('INSERT OR REPLACE INTO ui_button_labels VALUES (?,?)', (row[0], value))
+        conn.execute('DELETE FROM category_icons WHERE pid=?', (row[0],))
+        if row[0].startswith('ui_quantity_'):
+            conn.execute('INSERT INTO category_icons VALUES (?,?)', (row[0], ''))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
     send(api, cid, '✅ تم تحديث اسم الزر دون تغيير وظيفته.',
          kb([[btn('✏️ تعديل زر آخر', 'admin:buttonlabels')], [btn('↩️ لوحة الإدارة', 'admin')]]))
     return True
+
+
+def button_names_categories(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    with db() as conn:
+        custom = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+    categories = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + custom
+    rows = [[btn(name(pid, cid), 'txtpick:name:' + pid)] for pid, _ in categories]
+    send(api, cid, '📁 اختر القسم لتغيير الاسم الظاهر على زره:',
+         kb(rows + [[btn('↩️ إدارة الأزرار', 'admin:buttonlabels')]]))
+
+
+def reset_button_label(api, cid, key):
+    if cid != G['ADMIN_ID'] or key not in UI_ICON_LABELS:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM ui_button_labels WHERE key=?', (key,))
+        conn.execute('DELETE FROM category_icons WHERE pid=?', (key,))
+        if key.startswith('ui_quantity_'):
+            conn.execute('INSERT INTO category_icons VALUES (?,?)', (key, ''))
+        conn.execute("DELETE FROM admin_state WHERE cid=? AND action='button_label'", (cid,))
+    send(api, cid, '✅ تم مسح الاسم والأيقونة المخصصين. يمكنك كتابة اسم جديد من الصفر.',
+         kb([[btn('✏️ كتابة اسم جديد', 'buttonlabel:' + key)], [btn('↩️ إدارة الأزرار', 'admin:buttonlabels')]]))
+
+
+def remove_button_icon(api, cid, key):
+    if cid != G['ADMIN_ID'] or key not in UI_ICON_LABELS:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM category_icons WHERE pid=?', (key,))
+        if key.startswith('ui_quantity_'):
+            conn.execute('INSERT INTO category_icons VALUES (?,?)', (key, ''))
+    send(api, cid, '✅ أزيلت الأيقونة المتحركة من هذا الزر.',
+         kb([[btn('✏️ تغيير النص', 'buttonlabel:' + key)], [btn('↩️ إدارة الأزرار', 'admin:buttonlabels')]]))
+
+
+def remove_name_icon(api, cid, pid):
+    if cid != G['ADMIN_ID'] or not (pid in G['PRODUCTS'] or pid in VARIANTS or custom_category(pid) or custom_product(pid)):
+        return
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)', (pid, ''))
+    if pid in G['PRODUCTS']:
+        G['PRODUCTS'][pid]['custom_emoji_id'] = ''
+    send(api, cid, '✅ أزيلت الأيقونة المتحركة من الزر.',
+         kb([[btn('✏️ كتابة الاسم الجديد', 'txtpick:name:' + pid)], [btn('↩️ إدارة الأزرار', 'admin:buttonlabels')]]))
 
 
 def apply_icon_overrides():
@@ -508,7 +563,7 @@ def admin_text_menu(api, cid, field, category_id=None):
 def admin_text_editor(api, cid, field, pid, lang=None):
     if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
         return
-    if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid):
+    if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid) and not custom_category(pid):
         return
     if lang not in ('ar', 'en'):
         return send(api, cid, 'اختر لغة النص الذي تريد تعديله:', kb([[btn('العربية', f'txtedit:{field}:ar:{pid}'), btn('English', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
@@ -517,7 +572,9 @@ def admin_text_editor(api, cid, field, pid, lang=None):
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'product_text', json.dumps([pid, field, lang])))
     label = 'الاسم الجديد (حتى 120 حرفًا)' if field == 'name' else 'الوصف الجديد (حتى 1500 حرف، ويمكن استخدام عدة أسطر)'
-    send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.'), kb([[btn('إلغاء', 'admin')]]))
+    send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.') + '\nسيحل النص الجديد محل الاسم القديم بالكامل.',
+         kb(([[btn('🗑 إزالة الأيقونة المتحركة', 'removenameicon:' + pid)]] if field == 'name' else []) +
+            [[btn('إلغاء', 'admin')]]))
 
 
 def handle_info_icon(api,message):
@@ -1216,6 +1273,9 @@ def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
+    category = custom_category(pid)
+    if category:
+        return text_override(pid, 'name', prefs(cid)[0], category[1])
     cp = custom_product(pid)
     if cp:
         return text_override(pid, 'name', prefs(cid)[0], cp[1])
@@ -1251,10 +1311,10 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(name(pid, cid), 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -1457,7 +1517,7 @@ def category(api, cid, pid):
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
-        send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'grok' and choices:
@@ -1475,8 +1535,9 @@ def category(api, cid, pid):
                 label = status + '💰 ' + price(cid, v['id']) + ' • ' + name(v['id'], cid)
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
-            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
-        send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+            variant_icon = ui_icon(v['id'])
+            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else None)])
+        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -2016,6 +2077,14 @@ def action(api, cid, value):
         price_editor(api, cid, pid, currency)
     elif prefix == 'buttonlabel':
         begin_button_label(api, cid, arg)
+    elif prefix == 'buttonnames' and arg == 'categories':
+        button_names_categories(api, cid)
+    elif prefix == 'resetbuttonlabel':
+        reset_button_label(api, cid, arg)
+    elif prefix == 'removebuttonicon':
+        remove_button_icon(api, cid, arg)
+    elif prefix == 'removenameicon':
+        remove_name_icon(api, cid, arg)
     elif prefix == 'cancelbuttonlabel':
         if cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
@@ -2168,6 +2237,9 @@ def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
+    category = custom_category(pid)
+    if category:
+        return text_override(pid, 'name', prefs(cid)[0], category[1])
     cp = custom_product(pid)
     if cp:
         return text_override(pid, 'name', prefs(cid)[0], cp[1])
@@ -2193,10 +2265,10 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(p['name'], 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(name(pid, cid), 'product:' + pid, p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(category_name, 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn('🌐 Language / اللغة', 'settings:lang'), btn('💱 Currency / العملة', 'settings:currency')], [btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -2313,7 +2385,7 @@ def category(api, cid, pid):
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else None)])
-        send(api, cid, '<b>' + esc(custom_cat[1]) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'grok' and choices:
@@ -2324,8 +2396,8 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
             rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
-                             'item:' + v['id'], p.get('custom_emoji_id'), 'danger' if sold_out else None)])
-        send(api, cid, '<b>' + esc(p['name']) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+                             'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else None)])
+        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}

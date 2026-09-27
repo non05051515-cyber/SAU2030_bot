@@ -59,7 +59,10 @@ def choose(s, api, cid, pid, value):
 
 
 def button(s, text, data, key, style=None):
-    return s.btn(s.ui_label(key, text),data,s.ui_icon(key),style=style)
+    icon = s.ui_icon(key)
+    if key in {f'ui_quantity_{n}' for n in (1,2,3,5,10)} and icon is None:
+        icon = s.ui_icon('ui_quantity')
+    return s.btn(s.ui_label(key, text),data,icon,style=style)
 
 
 def page(s, api, cid, pid):
@@ -68,8 +71,8 @@ def page(s, api, cid, pid):
     qty = selected(s,cid,pid)
     rows = []
     if s.can_order(pid):
-        nums = {1:'١',2:'٢',3:'٣',5:'٥',10:'١٠'}
-        choices = [button(s,'🛍 ×'+nums[n],f'chooseqty:{pid}:{n}','ui_quantity',
+        nums = (1,2,3,5,10)
+        choices = [button(s,'🛍 ×'+str(n),f'chooseqty:{pid}:{n}',f'ui_quantity_{n}',
                           'primary' if qty==n else None) for n in nums]
         rows = [choices[:3], choices[3:]+[button(s,'⭐ كمية مخصصة','customqty:'+pid,'ui_quantity_custom')]]
     with s.db() as c:
@@ -95,9 +98,25 @@ def install(s, namespace):
     old_receipt = namespace['handle_receipt']
     s.UI_ICON_LABELS.update({'ui_quantity':'أيقونة الكميات','ui_quantity_custom':'أيقونة الكمية المخصصة',
                             'ui_stock_alert':'أيقونة تنبيه التوفر','ui_delivery_note':'أيقونة ملاحظات التسليم'})
+    s.UI_ICON_LABELS.update({f'ui_quantity_{n}': f'أيقونة الكمية {n}' for n in (1,2,3,5,10)})
 
     def action(api,cid,value):
         prefix,_,arg = value.partition(':')
+        button_actions = {
+            'buttonlabel': s.begin_button_label,
+            'resetbuttonlabel': s.reset_button_label,
+            'removebuttonicon': s.remove_button_icon,
+            'removenameicon': s.remove_name_icon,
+        }
+        if prefix in button_actions:
+            return button_actions[prefix](api, cid, arg)
+        if value == 'buttonnames:categories':
+            return s.button_names_categories(api, cid)
+        if value in ('admin:buttonlabels', 'cancelbuttonlabel'):
+            if cid == s.G['ADMIN_ID']:
+                with s.db() as c:
+                    c.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            return s.admin_button_labels(api, cid)
         with s.db() as c:
             c.execute('DELETE FROM quantity_input WHERE cid=?',(cid,))
         if prefix in ('item','claude','options') or value in s.LEGACY:
@@ -137,6 +156,8 @@ def install(s, namespace):
 
     def receipt(api,msg):
         cid=msg['chat']['id']
+        if s.handle_button_label(api, msg):
+            return True
         with s.db() as c:
             pending=c.execute('SELECT pid FROM quantity_input WHERE cid=?',(cid,)).fetchone()
         if pending:

@@ -103,6 +103,7 @@ def install(namespace):
             [sg['btn']('📊 الإحصائيات', 'admin:stats')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
+            [sg['btn']('⚙️ إدارة أزرار المتجر', 'admin:buttonlabels')],
             [sg['btn']('🏠 الرئيسية', 'home')],
         ]))
 
