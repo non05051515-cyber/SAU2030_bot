@@ -99,6 +99,7 @@ def install(namespace):
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
             [sg['btn']('🛍 إرسال منتج للجميع', 'admin:product_broadcast', style='primary')],
+            [sg['btn']('📣 نشر منتج في القناة', 'channel:list', style='success')],
             [sg['btn']('📊 الإحصائيات', 'admin:stats')],
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],

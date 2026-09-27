@@ -161,6 +161,7 @@ def main():
  offset=0;print('Bot running...')
  while True:
   try:
+   if 'tick_channel_catalog' in globals(): tick_channel_catalog(a)
    if 'tick_auto_ads' in globals(): tick_auto_ads(a)
    if 'tick_product_broadcast' in globals(): tick_product_broadcast(a)
    for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
@@ -171,18 +172,20 @@ def main():
       save_user(c)
       data=q.get('data','home')
       if data=='required_group:verify':
-       if required_group.verify(a,c):show_start(a,c)
+       if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
       elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
       else:required_group.prompt(a,c)
      continue
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    if txt.startswith('/start'):channel_catalog.remember(c,txt)
     if c!=ADMIN_ID and not required_group.approved(c):
      if txt.startswith('/start'):
       required_group.prompt(a,c)
      else:required_group.prompt(a,c)
      continue
+    if txt.startswith('/start') and channel_catalog.resume(a,c):continue
     if handle_admin_delivery(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
@@ -215,5 +218,8 @@ broadcast_admin.install(globals())
 chatgpt_extension.install(globals())
 tick_auto_ads = broadcast_admin.tick_auto_ads
 tick_product_broadcast = broadcast_admin.tick_product_broadcast
+
+import channel_catalog
+channel_catalog.install(globals())
 
 if __name__=='__main__':main()
