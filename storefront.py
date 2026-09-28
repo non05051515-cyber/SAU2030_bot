@@ -583,8 +583,7 @@ def admin_info_menu(api,cid,category_id=None):
         cats=[(pid,p['name']) for pid,p in G['PRODUCTS'].items()]+custom_cats
         rows=[[btn(label,'infocat:'+pid)] for pid,label in cats]
     else:
-        ids=[pid for pid,v in VARIANTS.items() if v['category']==category_id]+custom_ids
-        if not ids and category_id in G['PRODUCTS']: ids=[category_id]
+        ids=admin_category_product_ids(category_id)
         rows=[[btn(name(pid,cid),'infopick:'+pid)] for pid in ids]
     send(api,cid,'🎛 <b>بيانات المنتج الظاهرة</b>\nاختر القسم ثم المنتج:',kb(rows+[[btn('↩️ لوحة الإدارة','admin')]]))
 
@@ -799,9 +798,7 @@ def admin_photo_menu(api, cid, category_id=None):
     if category_id is None:
         rows = [[btn(label, 'photocat:' + pid)] for pid, label in cats]
     else:
-        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id] + custom_ids
-        if not ids and category_id in G['PRODUCTS']:
-            ids = [category_id]
+        ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid), 'photopick:' + pid)] for pid in ids]
     send(api, cid, '🖼️ صورة المنتج\nاختر القسم ثم المنتج:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
