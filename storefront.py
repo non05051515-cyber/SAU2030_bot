@@ -606,20 +606,26 @@ def admin_text_menu(api, cid, field, category_id=None):
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
         custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
-        # Include older YouTube products saved under a separate custom category.
         if category_id == 'youtube':
-            custom_ids += [r[0] for r in conn.execute('''SELECT p.pid FROM admin_products p
-                JOIN admin_categories c ON c.cid=p.category_id
-                WHERE lower(c.name) LIKE '%youtube%' OR c.name LIKE '%يوتيوب%' ''').fetchall()
-                if r[0] not in custom_ids]
+            # Older YouTube items may belong to custom categories whose names
+            # were accidentally entered as product names. Search both names.
+            youtube_ids = conn.execute('''SELECT DISTINCT p.pid FROM admin_products p
+                LEFT JOIN admin_categories c ON c.cid=p.category_id
+                WHERE lower(p.name) LIKE '%youtube%'
+                   OR p.name LIKE '%يوتيوب%'
+                   OR lower(COALESCE(c.name,'')) LIKE '%youtube%'
+                   OR COALESCE(c.name,'') LIKE '%يوتيوب%' ''').fetchall()
+            custom_ids += [row[0] for row in youtube_ids if row[0] not in custom_ids]
     if category_id is None:
-        cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + custom_cats
+        cats = [(pid, ('YouTube' if pid == 'youtube' else name(pid, cid))) for pid in G['PRODUCTS']]
+        cats += [(pid, label) for pid, label in custom_cats
+                 if not ('youtube' in label.lower() or 'يوتيوب' in label)]
         rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
     else:
         ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id] + custom_ids
         if not ids and category_id in G['PRODUCTS']:
             ids = [category_id]
-        rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in ids]
+        rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in dict.fromkeys(ids)]
     send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
