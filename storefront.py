@@ -305,6 +305,7 @@ def customer_link(cid):
 
 
 UI_ICON_LABELS = {
+    'ui_category_description': 'تعديل وصف القسم',
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
     'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
@@ -627,6 +628,66 @@ def admin_text_menu(api, cid, field, category_id=None):
     send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
+def category_description_html(pid, cid):
+    # Category copy is independent of product descriptions, even when IDs match.
+    with db() as conn:
+        row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?",
+                           (pid, prefs(cid)[0])).fetchone()
+    return row[0] if row else None
+
+
+def category_heading(pid, cid):
+    description = category_description_html(pid, cid)
+    return '<b>' + esc(name(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
+
+
+def admin_category_description(api, cid, pid=None, lang=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        cats = list(G['PRODUCTS']) + [r[0] for r in conn.execute('SELECT cid FROM admin_categories ORDER BY rowid')]
+    if pid is None:
+        rows = [[btn(name(key, cid), 'catdesc:' + key)] for key in dict.fromkeys(cats)]
+        return send(api, cid, '✏️ اختر القسم لتعديل الوصف الذي يظهر فوق المنتجات:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+    if pid not in cats:
+        return admin_category_description(api, cid)
+    if lang not in ('ar', 'en'):
+        return send(api, cid, 'اختر لغة وصف القسم:', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English', 'catdesclang:en:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+    BROADCAST_PENDING.discard(cid)
+    with db() as conn:
+        conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'category_description', json.dumps([pid, lang])))
+        row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
+    current = row[0] if row else esc('اختر المنتج:' if lang == 'ar' else 'Choose a product:')
+    send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\nالوصف الحالي:\n' + current + '\n\nأرسل الوصف الجديد (حتى 1500 حرف). يمكنك استخدام أسطر وأيقونات متحركة.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
+
+
+def handle_category_description(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='category_description'", (cid,)).fetchone()
+    if not row:
+        return False
+    text = (message.get('text') or '').strip()
+    if text.startswith('/') or text in G.get('MENU', {}):
+        with db() as conn:
+            conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        return False
+    if not text or len(text.encode('utf-16-le')) // 2 > 1500:
+        send(api, cid, 'أرسل نصًا غير فارغ لا يتجاوز 1500 حرف.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
+        return True
+    pid, lang = json.loads(row[0])
+    formatted = description_message_html(message, text)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', lang, formatted))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    send(api, cid, '✅ تم حفظ وصف القسم.\n\n' + formatted, kb([[btn('معاينة القسم', 'product:' + pid)], [btn('تعديل قسم آخر', 'admin:categorydesc')], [btn('لوحة الإدارة', 'admin')]]))
+    return True
+
+
 def admin_text_editor(api, cid, field, pid, lang=None):
     if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
         return
@@ -689,6 +750,8 @@ def handle_info_warranty(api,message):
     admin_info_editor(api,cid,pid); return True
 
 def handle_admin_text(api, message):
+    if handle_category_description(api, message):
+        return True
     cid = message.get('chat', {}).get('id')
     if cid != G.get('ADMIN_ID'):
         return False
@@ -786,7 +849,7 @@ def admin_prices(api, cid, category_id=None):
     if cid != G['ADMIN_ID']:
         return
     with db() as conn:
-        conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
+        conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price', 'category_description')", (cid,))
     if category_id is None:
         with db() as conn:
             custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
@@ -915,7 +978,7 @@ def show_extended_category(api, cid, category_id):
     rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
-    send(api, cid, '<b>' + esc(name(category_id, cid)) + '</b>\n\nاختر المنتج:', kb(rows + [nav(cid)]))
+    send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
     return True
 
 
@@ -1104,6 +1167,7 @@ def admin_panel(api, cid):
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
+                             [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
 
 
@@ -1659,7 +1723,7 @@ def category(api, cid, pid):
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
-        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
@@ -1677,7 +1741,7 @@ def category(api, cid, pid):
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = ui_icon(v['id'])
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else 'success')])
-        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -2121,8 +2185,14 @@ def action(api, cid, value):
         item(api, cid, arg)
     elif value in LEGACY:
         item(api, cid, LEGACY[value])
+    elif prefix == 'catdesc':
+        admin_category_description(api, cid, arg)
+    elif prefix == 'catdesclang':
+        lang, _, pid = arg.partition(':')
+        admin_category_description(api, cid, pid, lang)
     elif prefix == 'admin':
-        if arg == 'orders': admin_orders(api, cid)
+        if arg == 'categorydesc': admin_category_description(api, cid)
+        elif arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'stats': admin_stats(api, cid)
         elif arg == 'icons': admin_icons(api, cid)
@@ -2527,7 +2597,7 @@ def category(api, cid, pid):
             sold_out = not available or int(stock or 0) <= 0
             label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
-        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
@@ -2537,7 +2607,7 @@ def category(api, cid, pid):
             status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
             rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
                              'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
-        send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -2968,8 +3038,14 @@ def action(api, cid, value):
         item(api, cid, arg)
     elif value in LEGACY:
         item(api, cid, LEGACY[value])
+    elif prefix == 'catdesc':
+        admin_category_description(api, cid, arg)
+    elif prefix == 'catdesclang':
+        lang, _, pid = arg.partition(':')
+        admin_category_description(api, cid, pid, lang)
     elif prefix == 'admin':
-        if arg == 'orders': admin_orders(api, cid)
+        if arg == 'categorydesc': admin_category_description(api, cid)
+        elif arg == 'orders': admin_orders(api, cid)
         elif arg == 'activity': admin_activity(api, cid)
         elif arg == 'stats': admin_stats(api, cid)
         elif arg == 'icons': admin_icons(api, cid)

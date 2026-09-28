@@ -75,7 +75,7 @@ def install(namespace):
         PRODUCT_BROADCAST.pop(cid, None)
         clear_draft(cid)
         with sg['db']() as conn:
-            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method')", (cid,))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method','category_description')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
             activity_count = sg['total_activity_count'](conn)
@@ -106,6 +106,7 @@ def install(namespace):
             [sg['btn']('📣 إعلان تلقائي للقروب', 'admin:autoad', style='success')],
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
             [sg['btn']('⚙️ إدارة أزرار المتجر', 'admin:buttonlabels')],
+            [sg['btn'](sg['ui_label']('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', sg['ui_icon']('ui_category_description'))],
             [sg['btn']('🏠 الرئيسية', 'home')],
         ]))
 
