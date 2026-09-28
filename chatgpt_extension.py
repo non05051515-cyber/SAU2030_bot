@@ -190,16 +190,51 @@ def install(namespace):
         text = s.tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:',
                     f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
         rows = [[s.btn(s.tr(cid,'المنتجات','Products'),'products',s.ui_icon('ui_products'),style='primary'), s.btn(s.tr(cid,'شحن الرصيد','Top up'),'wallet:topup',s.ui_icon('ui_topup'),style='success')],
-                [s.btn(s.tr(cid, '🎟 كود الخصم', '🎟 Discount code'), 'coupon:*')],
-                [s.btn(s.tr(cid,'الإحالات','Referrals'),'referrals',s.ui_icon('ui_referrals')), s.btn(s.tr(cid,'حسابي','My account'),'wallet',s.ui_icon('ui_account'))],
+                [s.btn(s.tr(cid,'طلباتي','My orders'),'myorders',s.ui_icon('ui_account')), s.btn(s.tr(cid,'الإعدادات','Settings'),'settings:main')],
                 [s.btn(s.tr(cid,'تواصل مع الدعم','Contact support'),'support',s.ui_icon('ui_support'),style='danger'), s.btn(s.tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',s.ui_icon('ui_report'))],
-                [s.btn(s.tr(cid,'العملة','Currency'),'settings:currency',s.ui_icon('ui_currency')), s.btn('Language / اللغة','settings:lang',s.ui_icon('ui_language'))],
                 [s.btn(s.tr(cid, 'تحت الصيانة (التحدث مع Ai)', 'Under maintenance (Chat with AI)'), 'chatgpt:maintenance', s.ui_icon('ui_chatgpt'), style='success')]]
         if cid == s.G.get("ADMIN_ID"):
             rows.append([s.btn('لوحة الطلبات', 'admin', s.ui_icon('ui_admin'), style='danger')])
         s.send(api, cid, text, s.kb(rows))
 
+    def settings_page(api, cid):
+        rows = [
+            [s.btn(s.tr(cid, 'اللغة', 'Language'), 'settings:lang', s.ui_icon('ui_language')),
+             s.btn(s.tr(cid, 'العملة', 'Currency'), 'settings:currency', s.ui_icon('ui_currency'))],
+            [s.btn(s.tr(cid, 'كود الخصم', 'Discount code'), 'coupon:*'),
+             s.btn(s.tr(cid, 'الإحالات', 'Referrals'), 'referrals', s.ui_icon('ui_referrals'))],
+            [s.btn(s.tr(cid, 'رجوع', 'Back'), 'home')]
+        ]
+        s.send(api, cid, s.tr(cid, '<b>الإعدادات</b>\\nاختر الخيار المطلوب:', '<b>Settings</b>\\nChoose an option:').replace('\\n', '\n'), s.kb(rows))
+
+    def my_orders(api, cid):
+        with s.db() as conn:
+            orders = conn.execute(
+                'SELECT id,pid,method,usd,sar,status,created_at FROM orders WHERE cid=? ORDER BY rowid DESC LIMIT 15',
+                (cid,)
+            ).fetchall()
+        if not orders:
+            message = s.tr(cid, 'ليس لديك طلبات حتى الآن.', 'You have no orders yet.')
+        else:
+            labels_ar = {'paid': 'مكتمل', 'review': 'قيد المراجعة', 'rejected': 'مرفوض', 'pending': 'قيد الانتظار'}
+            labels_en = {'paid': 'Completed', 'review': 'Under review', 'rejected': 'Rejected', 'pending': 'Pending'}
+            labels = labels_ar if s.prefs(cid)[0] == 'ar' else labels_en
+            lines = [s.tr(cid, '<b>طلباتي الأخيرة</b>', '<b>My recent orders</b>')]
+            for oid, pid, method, usd, sar, status, created in orders:
+                title = s.name(pid, cid)
+                lines.append(
+                    f'\\n<b>{s.esc(str(title))}</b>\\n'
+                    f'#{s.esc(str(oid))} | {s.esc(labels.get(status, status))}\\n'
+                    f'{s.esc(str(created))}'
+                )
+            message = '\\n'.join(lines).replace('\\n', '\n')
+        s.send(api, cid, message, s.kb([[s.btn(s.tr(cid, 'رجوع', 'Back'), 'home')]]))
+
     def action(api, cid, value):
+        if value == "settings:main":
+            return settings_page(api, cid)
+        if value == "myorders":
+            return my_orders(api, cid)
         if value in ("chatgpt", "chatgpt:start"):
             return start_chat(api, cid)
         if value == "chatgpt:end":
