@@ -888,7 +888,7 @@ def add_to_category(api, cid, category_id=None):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
                      (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
-    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد:',
+    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي</b>:',
          kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
@@ -943,14 +943,22 @@ def handle_admin_product(api, message):
         payload['count'] = count
         payload['index'] = 0
         next_action = 'add_product_name'
-        prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + '</b>.'
+        prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + ' بالعربي</b>.'
     elif action_name == 'add_product_name':
         payload['current'] = {'name': raw[:100]}
         next_action = 'add_product_desc'
-        prompt = '📝 أرسل <b>وصف المنتج</b> لـ <b>' + esc(payload['current']['name']) + '</b>.'
+        prompt = '📝 أرسل <b>وصف المنتج بالعربي</b> لـ <b>' + esc(payload['current']['name']) + '</b>.'
     elif action_name == 'add_product_desc':
         payload['current']['description'] = raw[:1500]
         payload['current']['description_html'] = description_message_html(message, raw[:1500])
+        next_action = 'add_product_name_en'
+        prompt = '🌐 أرسل <b>اسم المنتج بالإنجليزي</b>.'
+    elif action_name == 'add_product_name_en':
+        payload['current']['name_en'] = raw[:100]
+        next_action = 'add_product_desc_en'
+        prompt = '🌐 أرسل <b>وصف المنتج بالإنجليزي</b>.'
+    elif action_name == 'add_product_desc_en':
+        payload['current']['description_en'] = raw[:1500]
         next_action = 'add_product_price'
         prompt = '💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
     elif action_name == 'add_product_price':
@@ -979,7 +987,7 @@ def handle_admin_product(api, message):
         payload['index'] = int(payload.get('index', 0)) + 1
         if payload['index'] < int(payload['count']):
             next_action = 'add_product_name'
-            prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + '</b>.'
+            prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + ' بالعربي</b>.'
         else:
             lines = ['✅ <b>راجع القسم قبل الحفظ</b>', '', '📁 ' + esc(payload['category_name'])]
             for i, product in enumerate(payload['products'], 1):
@@ -1009,6 +1017,8 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
                              (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
                 saved_product_ids.append(pid)
+                conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'name', 'en', product['name_en']))
+                conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'description', 'en', product['description_en']))
                 if 'description_html' in product:
                     conn.execute('INSERT OR REPLACE INTO description_emoji VALUES (?,?,?,?)',
                                  (pid, '*', product.get('description', ''), product['description_html']))
