@@ -1571,7 +1571,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
         caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
-            caption += '\n' + tr(cid, '✉️ تسليم يدوي — تواصل مع الدعم قبل الشراء', '✉️ Manual delivery — contact support before buying')
+            caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
         rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
         if not available:
@@ -1829,7 +1829,7 @@ def payments(api, cid, pid):
     if not can_order(pid):
         send(api, cid, tr(cid, 'الطلب غير متاح لهذا الخيار حاليًا. تواصل مع الدعم: ', 'Ordering is unavailable for this option. Contact support: ') + SUPPORT, kb([nav(cid, back(pid))]))
         return
-    warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
+    warning = tr(cid, 'يتم تنفيذ الطلب بعد مراجعة الدفع وتأكيد التوفر، ثم إرسال بيانات المنتج إليك.', 'Your order is fulfilled after payment review and availability confirmation, then the product details are sent to you.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
          kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
@@ -2439,7 +2439,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
         caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
-            caption += '\n' + tr(cid, '✉️ تسليم يدوي — تواصل مع الدعم قبل الشراء', '✉️ Manual delivery — contact support before buying')
+            caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
         rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
         if not available:
@@ -2686,7 +2686,7 @@ def payments(api, cid, pid):
     if not can_order(pid):
         send(api, cid, tr(cid, 'الطلب غير متاح لهذا الخيار حاليًا. تواصل مع الدعم: ', 'Ordering is unavailable for this option. Contact support: ') + SUPPORT, kb([nav(cid, back(pid))]))
         return
-    warning = tr(cid, 'التنفيذ بعد مراجعة الدفع وتأكيد التوفر. تواصل مع الدعم قبل التحويل.', 'Fulfilment follows payment review and availability confirmation. Contact support before transferring.')
+    warning = tr(cid, 'يتم تنفيذ الطلب بعد مراجعة الدفع وتأكيد التوفر، ثم إرسال بيانات المنتج إليك.', 'Your order is fulfilled after payment review and availability confirmation, then the product details are sent to you.')
     send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
          kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
