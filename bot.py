@@ -2,6 +2,7 @@
 import json,os,time,urllib.request
 import required_group
 import customer_inbox
+import telegram_payments
 from pathlib import Path
 BASE=Path(__file__).resolve().parent;CONFIG=json.loads((BASE/'catalog.json').read_text(encoding='utf-8'));ADMIN_ID=8386371522
 USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={};PENDING_ADMIN_DELIVERY={};PAYMENT_REVIEWS={}
@@ -173,14 +174,17 @@ def main():
  offset=0;print('Bot running...')
  while True:
   try:
-   for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
+   for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query','pre_checkout_query']) or []:
     offset=u['update_id']+1
+    if 'pre_checkout_query' in u:
+     telegram_payments.precheckout(a,u['pre_checkout_query']);continue
     if 'callback_query' in u:
      q=u['callback_query'];a.call('answerCallbackQuery',callback_query_id=q['id']);c=q.get('message',{}).get('chat',{}).get('id')
      if c:
       save_user(c)
       data=q.get('data','home')
       if customer_inbox.action(a,c,data):continue
+      if telegram_payments.action(a,c,data):continue
       storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
@@ -190,6 +194,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    if telegram_payments.paid(a,m):continue
     customer_inbox.capture(m)
     storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
