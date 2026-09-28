@@ -622,9 +622,7 @@ def admin_text_menu(api, cid, field, category_id=None):
                  if not ('youtube' in label.lower() or 'يوتيوب' in label)]
         rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
     else:
-        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id] + custom_ids
-        if not ids and category_id in G['PRODUCTS']:
-            ids = [category_id]
+        ids = category_product_ids(category_id) + custom_ids
         rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in dict.fromkeys(ids)]
     send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
@@ -1406,7 +1404,7 @@ def custom_product(pid):
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid == 'youtube':
-        return 'YouTube'
+        return text_override(pid, 'name', prefs(cid)[0], 'YouTube')
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     category = custom_category(pid)
@@ -1526,16 +1524,24 @@ def visibility_categories(api, cid):
     send(api, cid, '👁 <b>إظهار وإخفاء المنتجات</b>\n\nاختر القسم:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
+def category_product_ids(category_id):
+    """Return original and added products, including hidden/out-of-stock items."""
+    with db() as conn:
+        custom_ids = [row[0] for row in conn.execute(
+            'SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid',
+            (category_id,))]
+    originals = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
+    if not originals and category_id in G['PRODUCTS']:
+        originals = [category_id]
+    return list(dict.fromkeys(originals + custom_ids))
+
+
 def visibility_products(api, cid, category_id):
     if cid != G['ADMIN_ID']:
         return
-    if category_id in G['PRODUCTS']:
-        ids = [v['id'] for v in VARIANTS.values() if v['category'] == category_id] or [category_id]
-    elif custom_category(category_id):
-        with db() as conn:
-            ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
-    else:
+    if category_id not in G['PRODUCTS'] and not custom_category(category_id):
         return visibility_categories(api, cid)
+    ids = category_product_ids(category_id)
     rows = [[btn(('👁 ' if product_visible(pid) else '🙈 ') + name(pid, cid), 'vistoggle:' + pid)] for pid in ids]
     send(api, cid, '👁 ظاهر في المتجر | 🙈 مخفي من المتجر\nالمنتج المخفي يبقى هنا حتى تستطيع إظهاره مجددًا.',
          kb(rows + [[btn('↩️ الأقسام', 'admin:visibility')]]))
@@ -2370,7 +2376,7 @@ def custom_product(pid):
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     if pid == 'youtube':
-        return 'YouTube'
+        return text_override(pid, 'name', prefs(cid)[0], 'YouTube')
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     category = custom_category(pid)
