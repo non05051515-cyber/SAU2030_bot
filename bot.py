@@ -158,14 +158,20 @@ def main():
  a.call('setMyCommands',commands=[{'command':'start','description':'Start | ابدأ'},{'command':'products','description':'Products | المنتجات'},{'command':'currency','description':'Currency | العملة'},{'command':'language','description':'Language | اللغة'}])
  a.call('setChatMenuButton',menu_button={'type':'commands'})
  if 'broadcast_new_products' in globals():broadcast_new_products(a)
+ # Keep maintenance/broadcast work off the message polling path.
+ # One worker preserves the original ordering and prevents overlapping ticks.
+ def maintenance_loop():
+  while True:
+   for name, fn in [('customer_activity',storefront.tick_customer_activity),('stock_alerts',globals().get('tick_stock_alerts')),('channel_catalog',globals().get('tick_channel_catalog')),('auto_ads',globals().get('tick_auto_ads')),('product_broadcast',globals().get('tick_product_broadcast'))]:
+    if fn:
+     try:fn(a)
+     except Exception as e:print('Maintenance error',name,type(e).__name__,str(e),flush=True)
+   time.sleep(2)
+ import threading
+ threading.Thread(target=maintenance_loop,name='bot-maintenance',daemon=True).start()
  offset=0;print('Bot running...')
  while True:
   try:
-   storefront.tick_customer_activity(a)
-   if 'tick_stock_alerts' in globals(): tick_stock_alerts(a)
-   if 'tick_channel_catalog' in globals(): tick_channel_catalog(a)
-   if 'tick_auto_ads' in globals(): tick_auto_ads(a)
-   if 'tick_product_broadcast' in globals(): tick_product_broadcast(a)
    for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query']) or []:
     offset=u['update_id']+1
     if 'callback_query' in u:
