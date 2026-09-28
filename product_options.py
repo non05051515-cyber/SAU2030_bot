@@ -139,6 +139,8 @@ def install(s, namespace):
         if prefix in ('item','claude','options') or value in s.LEGACY:
             return page(s,api,cid,s.LEGACY.get(value,s.LEGACY.get(arg,arg)))
         if prefix=='product' and s.amount(arg,'SAR') is not None and not any(v['category']==arg for v in s.VARIANTS.values()):
+            if s.category_visible(arg) and s.category_description_html(arg, cid) is not None:
+                s.send(api, cid, s.category_heading(arg, cid))
             return page(s,api,cid,arg)
         if prefix=='chooseqty':
             pid,_,qty = arg.rpartition(':')
