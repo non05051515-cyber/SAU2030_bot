@@ -306,7 +306,7 @@ def customer_link(cid):
 
 UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
-    'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '⚡ VEXA VOLT',
+    'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
     'ui_broadcast_product': 'زر الذهاب للمنتج في الإعلان',
