@@ -173,7 +173,7 @@ def main():
      if c:
       save_user(c)
       data=q.get('data','home')
-      storefront.track_customer_activity(c, value=data)
+      storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
       elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
@@ -182,7 +182,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
-    storefront.track_customer_activity(c, message=m)
+    storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
     if c!=ADMIN_ID and not required_group.approved(c):
      if txt.startswith('/start'):
