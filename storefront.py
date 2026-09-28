@@ -883,7 +883,7 @@ def add_to_category(api, cid, category_id=None):
                        [[btn('↩️ لوحة التحكم', 'admin')]]))
     if category_id not in G['PRODUCTS'] and not custom_category(category_id):
         return add_to_category(api, cid)
-    payload = {'category_id': category_id, 'category_name': name(category_id, cid),
+    payload = {'category_id': category_id, 'category_name': ('YouTube' if category_id == 'youtube' else name(category_id, cid)),
                'count': 1, 'index': 0, 'products': []}
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
@@ -1393,6 +1393,8 @@ def custom_product(pid):
 
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
+    if pid == 'youtube':
+        return 'YouTube'
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     category = custom_category(pid)
@@ -2355,6 +2357,8 @@ def custom_product(pid):
 
 def name(pid, cid=0):
     pid = LEGACY.get(pid, pid)
+    if pid == 'youtube':
+        return 'YouTube'
     if pid in VARIANTS:
         return text_override(pid, 'name', prefs(cid)[0], VARIANTS[pid]['name'][prefs(cid)[0]])
     category = custom_category(pid)
