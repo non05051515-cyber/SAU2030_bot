@@ -1140,6 +1140,9 @@ ACTIVITY_LABELS = {
 
 
 def track_customer_activity(cid, value=None, message=None):
+    # Record the Telegram sender, never the chat containing the interaction.
+    if not isinstance(cid, int) or cid <= 0:
+        return
     if cid == G.get('ADMIN_ID'):
         if value != 'admin:activity':
             ACTIVITY_VIEW.clear()
