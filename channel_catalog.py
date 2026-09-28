@@ -6,7 +6,7 @@ import urllib.request
 import uuid
 import storefront as s
 
-CHANNEL = '@SAU2030_k'
+CHANNEL = '@VEXA2030'
 BOT = 'SAU2030_bot'
 _last_tick = 0
 
@@ -176,7 +176,7 @@ def install(namespace):
             return True
         with db() as c:
             c.execute("UPDATE channel_message_drafts SET message_id=?,status='ready' WHERE cid=? AND token=?", (mid,cid,draft[0]))
-        s.send(api, cid, 'هذه معاينة رسالتك. نشرها في @SAU2030_k؟', s.kb([
+        s.send(api, cid, 'هذه معاينة رسالتك. نشرها في @VEXA2030؟', s.kb([
             [s.btn('✅ تأكيد ونشر', 'channel:message_send:' + draft[0], style='success')],
             [s.btn('✏️ تعديل الرسالة', 'channel:message')],
             [s.btn('❌ إلغاء', 'channel:list')]]))
@@ -192,7 +192,7 @@ def install(namespace):
         verb = parts[1]
         if verb == 'list':
             clear_draft(cid)
-            return s.send(api, cid, '📣 النشر في @SAU2030_k\n\nاختر نوع الإرسال:', s.kb([
+            return s.send(api, cid, '📣 النشر في @VEXA2030\n\nاختر نوع الإرسال:', s.kb([
                 [s.btn('🛍 إرسال منتج', 'channel:products', style='success')],
                 [s.btn('✉️ إرسال رسالة للقناة', 'channel:message', style='primary')],
                 [s.btn('↩️ لوحة الإدارة', 'admin')]]))
@@ -209,7 +209,7 @@ def install(namespace):
             result = api.call('copyMessage', chat_id=CHANNEL, from_chat_id=cid, message_id=row[0])
             if result:
                 clear_draft(cid)
-                return s.send(api, cid, '✅ تم نشر رسالتك في @SAU2030_k.', s.kb([[s.btn('↩️ النشر في القناة', 'channel:list')]]))
+                return s.send(api, cid, '✅ تم نشر رسالتك في @VEXA2030.', s.kb([[s.btn('↩️ النشر في القناة', 'channel:list')]]))
             with db() as c: c.execute("UPDATE channel_message_drafts SET status='ready' WHERE cid=? AND token=?", (cid,token))
             return s.send(api, cid, '❌ تعذر تأكيد النشر. راجع القناة قبل إعادة المحاولة، وتأكد من صلاحية البوت للنشر.', s.kb([[s.btn('🔄 إعادة المحاولة', 'channel:message_send:'+token)], [s.btn('❌ إلغاء', 'channel:list')]]))
         if verb in ('publish_new', 'defer_new'):
@@ -247,12 +247,12 @@ def install(namespace):
             if (page+1)*8 < len(ids): nav.append(s.btn('التالي ➡️', f'channel:products:{page+1}'))
             if nav: rows.append(nav)
             rows.append([s.btn('↩️ خيارات النشر', 'channel:list')])
-            return s.send(api, cid, '📣 النشر في @SAU2030_k\nالإشعارات تلقائية عند إضافة منتج متوفر أو زيادة كميته أو عودته للتوفر.\n\nاختر منتجًا لمعاينته ونشره الآن:', s.kb(rows))
+            return s.send(api, cid, '📣 النشر في @VEXA2030\nلن يتم إرسال أي منتج تلقائيًا.\n\nاختر منتجًا لمعاينته ونشره يدويًا:', s.kb(rows))
         if len(parts) < 3: return
         pid = parts[2]
         if verb == 'preview':
             if not post(api, pid, target=cid): return s.send(api, cid, 'هذا المنتج غير متوفر للنشر.')
-            return s.send(api, cid, 'نشر هذا الإعلان في @SAU2030_k؟', s.kb([[s.btn('✅ نشر في القناة', 'channel:send:' + pid)], [s.btn('↩️ رجوع', 'channel:list')]]))
+            return s.send(api, cid, 'نشر هذا الإعلان في @VEXA2030؟', s.kb([[s.btn('✅ نشر في القناة', 'channel:send:' + pid)], [s.btn('↩️ رجوع', 'channel:list')]]))
         if verb == 'send':
             result = post(api, pid)
             if result:
@@ -260,10 +260,11 @@ def install(namespace):
                     c.execute("UPDATE channel_publish_choices SET status='published' WHERE pid=?", (pid,))
                     c.execute('DELETE FROM channel_catalog_queue WHERE pid=?', (pid,))
                     c.execute('INSERT OR REPLACE INTO channel_catalog_state VALUES (?,?)', (pid, json.dumps(state(pid))))
-            return s.send(api, cid, '✅ تم نشر المنتج في @SAU2030_k.' if result else '❌ تعذر النشر. تأكد من توفر المنتج وأن البوت مشرف في @SAU2030_k ولديه صلاحية النشر.')
+            return s.send(api, cid, '✅ تم نشر المنتج في @VEXA2030.' if result else '❌ تعذر النشر. تأكد من توفر المنتج وأن البوت مشرف في @VEXA2030 ولديه صلاحية النشر.')
     namespace['action'] = action
     # Automatic catalogue notices belong only in the requested channel.
-    s.broadcast_product_alert = lambda api, pid, kind='new': scan()
-    namespace['broadcast_new_products'] = lambda api: scan()
-    namespace['tick_channel_catalog'] = tick
+    s.broadcast_product_alert = lambda api, pid, kind='new': None
+    namespace['broadcast_new_products'] = lambda api: None
+    # Publication is manual only; never schedule automatic posts.
+    namespace['tick_channel_catalog'] = lambda api: None
 
