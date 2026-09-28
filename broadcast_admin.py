@@ -107,6 +107,7 @@ def install(namespace):
             [sg['btn']('➕ إضافة أيقونة', 'admin:icons', style='success')],
             [sg['btn']('⚙️ إدارة أزرار المتجر', 'admin:buttonlabels')],
             [sg['btn'](sg['ui_label']('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', sg['ui_icon']('ui_category_description'))],
+            [sg['btn'](sg['ui_label']('ui_welcome', 'تعديل الرسالة الترحيبية'), 'admin:welcome', sg['ui_icon']('ui_welcome'))],
             [sg['btn']('🏠 الرئيسية', 'home')],
         ]))
 
