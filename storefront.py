@@ -1155,6 +1155,7 @@ def admin_panel(api, cid):
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
+                             [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
