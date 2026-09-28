@@ -606,6 +606,12 @@ def admin_text_menu(api, cid, field, category_id=None):
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
         custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
+        # Include older YouTube products saved under a separate custom category.
+        if category_id == 'youtube':
+            custom_ids += [r[0] for r in conn.execute('''SELECT p.pid FROM admin_products p
+                JOIN admin_categories c ON c.cid=p.category_id
+                WHERE lower(c.name) LIKE '%youtube%' OR c.name LIKE '%يوتيوب%' ''').fetchall()
+                if r[0] not in custom_ids]
     if category_id is None:
         cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + custom_cats
         rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
