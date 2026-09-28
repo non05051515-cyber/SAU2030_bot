@@ -119,13 +119,9 @@ def install(namespace):
         return sg['send'](api, cid, '🛍 <b>إرسال منتج للجميع</b>\n\nاختر القسم:', sg['kb'](rows + [[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
 
     def products_in_category(category):
-        if category in sg['G']['PRODUCTS']:
-            ids = [v['id'] for v in sg['VARIANTS'].values() if v['category'] == category]
-            return ids or [category]
-        if not sg['custom_category'](category):
+        if category not in sg['G']['PRODUCTS'] and not sg['custom_category'](category):
             return []
-        with sg['db']() as conn:
-            return [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category,))]
+        return sg['admin_category_product_ids'](category)
 
     def product_card(api, cid, pid, photo=None):
         title = sg['esc'](sg['name'](pid, cid))
