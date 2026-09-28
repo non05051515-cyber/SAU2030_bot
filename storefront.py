@@ -463,9 +463,7 @@ def admin_stock(api, cid, category_id=None):
     if category_id is None:
         rows = [[btn(p['name'], 'stockcat:' + pid)] for pid, p in G['PRODUCTS'].items()]
     else:
-        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
-        if not ids and category_id in G['PRODUCTS']:
-            ids = [category_id]
+        ids = admin_category_product_ids(category_id)
         rows = [[btn(('✅ ' if in_stock(pid) else '🔴 ') + name(pid, cid), 'stockpick:' + pid,
                      style=None if in_stock(pid) else 'danger')] for pid in ids]
     send(api, cid, '📦 <b>تعديل توفر المنتج</b>\nاختر القسم ثم المنتج:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
