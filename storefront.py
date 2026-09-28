@@ -1570,7 +1570,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         elif not in_stock(pid):
             status = tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
         else:
-            status = tr(cid, '✅ متوفر لدى المورد — يُؤكد قبل الطلب', '✅ Supplier stock — confirm before ordering')
+            status = tr(cid, '🟢 متوفر', '🟢 Available')
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
         caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
@@ -2438,7 +2438,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         elif not in_stock(pid):
             status = tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
         else:
-            status = tr(cid, '✅ متوفر لدى المورد — يُؤكد قبل الطلب', '✅ Supplier stock — confirm before ordering')
+            status = tr(cid, '🟢 متوفر', '🟢 Available')
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
         caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
