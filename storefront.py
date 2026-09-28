@@ -1190,7 +1190,7 @@ def activity_page(cid):
 
 
 def activity_keyboard():
-    return kb([[btn('🔄 تحديث', 'admin:activity')], [btn('↩️ لوحة الإدارة', 'admin')]])
+    return kb([[btn('🔄 تحديث', 'admin:activity')], [btn('🗑 تصفير النشاط', 'admin:activity_reset')], [btn('↩️ لوحة الإدارة', 'admin')]])
 
 
 def admin_activity(api, cid):
