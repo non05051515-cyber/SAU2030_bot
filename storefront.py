@@ -130,7 +130,7 @@ def nav(cid, parent='products'):
 
 
 def menu(cid=0):
-    rows = [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '💬 الدعم', '💬 Support')}],
+    rows = [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT')}],
                          [{'text': tr(cid, '👛 المحفظة', '👛 Wallet')}, {'text': '🔗 API'}, {'text': tr(cid, '🛡 الضمان', '🛡 Warranty')}],
                          [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}],
                          [{'text': tr(cid, '💎 الإحالات', '💎 Referrals')}]]
@@ -306,7 +306,7 @@ def customer_link(cid):
 
 UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
-    'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '💬 الدعم',
+    'ui_referrals': '💎 الإحالات', 'ui_account': '👤 حسابي', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
     'ui_broadcast_product': 'زر الذهاب للمنتج في الإعلان',
@@ -1576,7 +1576,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
         if not available:
             rows[0][0]['style'] = 'danger'
-        rows.append([btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')])
+        rows.append([btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')])
         markup = kb(rows)
         override = saved_product_photo(pid)
         if override is not None:
@@ -1653,7 +1653,7 @@ def category(api, cid, pid):
     description = product_description(pid, cid)
     text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
-    rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
+    rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
 
 
@@ -1671,7 +1671,7 @@ def item(api, cid, pid):
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
         text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
-        rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
+        rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
@@ -1691,7 +1691,7 @@ def item(api, cid, pid):
         if v.get('category') == 'chatgpt':
             order_label = tr(cid, '🛒 شراء الآن • ', '🛒 Buy now • ') + price(cid, pid)
         rows.append([btn(order_label, 'buy:' + pid, style='primary' if v.get('category') == 'chatgpt' else None)])
-    rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
+    rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + v['category'])]
     card(api, cid, v.get('image'), name(pid, cid), text, kb(rows), pid=pid)
 
 
@@ -2283,7 +2283,7 @@ def install(namespace):
                       'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty, 'handle_info_icon': handle_info_icon})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
-                         '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
+                         '🛍 Products': 'products', '⚡ VEXA VOLT': 'support', '⚡ VEXA VOLT': 'support',
                          '👛 المحفظة': 'wallet', '👛 Wallet': 'wallet', '🔗 API': 'api',
                          '🛡 الضمان': 'warranty', '🛡 Warranty': 'warranty',
                          '🌐 اللغة': 'settings:lang', '🌐 Language': 'settings:lang',
@@ -2444,7 +2444,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
         if not available:
             rows[0][0]['style'] = 'danger'
-        rows.append([btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')])
+        rows.append([btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')])
         markup = kb(rows)
         override = saved_product_photo(pid)
         if override is not None:
@@ -2513,7 +2513,7 @@ def category(api, cid, pid):
     description = product_description(pid, cid)
     text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
-    rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid)]
+    rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
 
 
@@ -2531,7 +2531,7 @@ def item(api, cid, pid):
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
         text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
-        rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + category_id)]
+        rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
         return
     lang = prefs(cid)[0]
@@ -2548,7 +2548,7 @@ def item(api, cid, pid):
     rows = []
     if can_order(pid):
         rows.append([btn(tr(cid, '🛒 طلب قطعة واحدة', '🛒 Order one item'), 'buy:' + pid)])
-    rows += [[btn(tr(cid, '💬 الدعم', '💬 Support'), 'support')], nav(cid, 'product:' + v['category'])]
+    rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + v['category'])]
     card(api, cid, v.get('image'), name(pid, cid), text, kb(rows), pid=pid)
 
 
@@ -3118,7 +3118,7 @@ def install(namespace):
                       'handle_admin_product': handle_admin_product, 'handle_info_warranty': handle_info_warranty, 'handle_info_icon': handle_info_icon})
     menu_actions = namespace.setdefault('MENU_ACTIONS', namespace.get('MENU', {}))
     menu_actions.update({'🚀 ابدأ': 'start', '🚀 Start': 'start', '🛍 المنتجات': 'products',
-                         '🛍 Products': 'products', '💬 الدعم': 'support', '💬 Support': 'support',
+                         '🛍 Products': 'products', '⚡ VEXA VOLT': 'support', '⚡ VEXA VOLT': 'support',
                          '👛 المحفظة': 'wallet', '👛 Wallet': 'wallet', '🔗 API': 'api',
                          '🛡 الضمان': 'warranty', '🛡 Warranty': 'warranty',
                          '🌐 اللغة': 'settings:lang', '🌐 Language': 'settings:lang',
