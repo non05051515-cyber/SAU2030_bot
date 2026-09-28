@@ -259,6 +259,16 @@ def install(namespace):
         if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
+        if cid == admin_id and value == 'admin:activity_reset':
+            return sg['send'](api, cid, '⚠️ هل تريد حذف سجل نشاط العملاء وتصفير عداده؟ لن تتأثر الطلبات أو حسابات العملاء.', sg['kb']([[sg['btn']('✅ تأكيد التصفير', 'admin:activity_reset_confirm', style='danger')], [sg['btn']('❌ إلغاء', 'admin:activity')]]))
+        if cid == admin_id and value == 'admin:activity_reset_confirm':
+            with sg['db']() as conn:
+                conn.execute('DELETE FROM activity')
+                conn.execute("DELETE FROM sqlite_sequence WHERE name='activity'")
+                conn.execute('DELETE FROM activity_totals')
+                conn.execute('INSERT INTO activity_totals(id,total) VALUES (1,0)')
+            sg['ACTIVITY_VIEW'].clear()
+            return sg['send'](api, cid, '✅ تم تصفير نشاط العملاء. سيبدأ تسجيل التفاعلات الجديدة من الصفر.', sg['kb']([[sg['btn']('👀 نشاط العملاء', 'admin:activity')], [sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
         if cid == admin_id and value == 'admin:users':
             users = sorted(set(_users()))
             with sg['db']() as conn:
