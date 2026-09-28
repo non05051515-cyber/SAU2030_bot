@@ -165,7 +165,7 @@ def install(namespace):
         if message.get('text', '').startswith('/') or message.get('text') in namespace.get('MENU', {}):
             clear_draft(cid)
             return old_delivery(api, message)
-        if draft[1] != 'waiting':
+        if draft[1] not in ('waiting', 'group_waiting'):
             s.send(api, cid, 'استخدم أزرار التأكيد أو تعديل الرسالة أو إلغاء أسفل المعاينة.')
             return True
         mid = message.get('message_id')
@@ -175,11 +175,12 @@ def install(namespace):
             s.send(api, cid, 'تعذرت معاينة الرسالة. أرسل رسالة نصية أو صورة مع تعليق وحاول مجددًا.')
             return True
         with db() as c:
-            c.execute("UPDATE channel_message_drafts SET message_id=?,status='ready' WHERE cid=? AND token=?", (mid,cid,draft[0]))
-        s.send(api, cid, 'هذه معاينة رسالتك. نشرها في @VEXA2030؟', s.kb([
-            [s.btn('✅ تأكيد ونشر', 'channel:message_send:' + draft[0], style='success')],
-            [s.btn('✏️ تعديل الرسالة', 'channel:message')],
-            [s.btn('❌ إلغاء', 'channel:list')]]))
+            c.execute("UPDATE channel_message_drafts SET message_id=?,status=? WHERE cid=? AND token=?", (mid,'group_ready' if draft[1] == 'group_waiting' else 'ready',cid,draft[0]))
+        is_group = draft[1] == 'group_waiting'
+        s.send(api, cid, 'هذه معاينة رسالتك. نشرها في المجموعة @SAU2030_k؟' if is_group else 'هذه معاينة رسالتك. نشرها في @VEXA2030؟', s.kb([
+            [s.btn('✅ تأكيد ونشر', ('channel:group_send:' if is_group else 'channel:message_send:') + draft[0], style='success')],
+            [s.btn('✏️ تعديل الرسالة', 'channel:group_message' if is_group else 'channel:message')],
+            [s.btn('❌ إلغاء', 'channel:group' if is_group else 'channel:list')]]))
         return True
 
     namespace['handle_admin_delivery'] = message_input
@@ -190,6 +191,25 @@ def install(namespace):
         if cid != namespace['ADMIN_ID']: return
         parts = value.split(':', 2)
         verb = parts[1]
+        if verb == 'group':
+            clear_draft(cid)
+            return s.send(api, cid, '👥 النشر في المجموعة @SAU2030_k', s.kb([[s.btn('✉️ إرسال رسالة للمجموعة', 'channel:group_message', style='primary')], [s.btn('↩️ لوحة الإدارة', 'admin')]]))
+        if verb == 'group_message':
+            with db() as c:
+                c.execute("INSERT OR REPLACE INTO channel_message_drafts VALUES (?,?,NULL,'group_waiting')", (cid,uuid.uuid4().hex))
+            return s.send(api, cid, 'أرسل الرسالة أو الصورة التي تريد نشرها في المجموعة. ستظهر معاينة قبل النشر.', s.kb([[s.btn('❌ إلغاء', 'channel:group')]]))
+        if verb == 'group_send':
+            token = parts[2] if len(parts)>2 else ''
+            with db() as c:
+                row = c.execute("SELECT message_id FROM channel_message_drafts WHERE cid=? AND token=? AND status='group_ready'", (cid,token)).fetchone()
+                if row: c.execute("UPDATE channel_message_drafts SET status='group_sending' WHERE cid=? AND token=?", (cid,token))
+            if not row: return s.send(api, cid, 'انتهى التأكيد أو سبق استخدامه.')
+            result = api.call('copyMessage', chat_id='@SAU2030_k', from_chat_id=cid, message_id=row[0])
+            if result:
+                clear_draft(cid)
+                return s.send(api, cid, '✅ تم نشر الرسالة في المجموعة.', s.kb([[s.btn('↩️ المجموعة', 'channel:group')]]))
+            with db() as c: c.execute("UPDATE channel_message_drafts SET status='group_ready' WHERE cid=? AND token=?", (cid,token))
+            return s.send(api, cid, '❌ تعذر النشر. تأكد أن البوت مشرف بالمجموعة ولديه صلاحية إرسال الرسائل.', s.kb([[s.btn('🔄 إعادة المحاولة', 'channel:group_send:'+token)], [s.btn('❌ إلغاء', 'channel:group')]]))
         if verb == 'list':
             clear_draft(cid)
             return s.send(api, cid, '📣 النشر في @VEXA2030\n\nاختر نوع الإرسال:', s.kb([
