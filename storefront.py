@@ -879,7 +879,7 @@ def add_to_category(api, cid, category_id=None):
             custom = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         categories = list(G['PRODUCTS']) + [row[0] for row in custom]
         return send(api, cid, '📁 اختر القسم الذي تريد إضافة منتج جديد إليه:',
-                    kb([[btn(name(key, cid), 'addtocategory:' + key)] for key in categories] +
+                    kb([[btn(('▶️ YouTube' if key == 'youtube' else name(key, cid)), 'addtocategory:' + key)] for key in categories] +
                        [[btn('↩️ لوحة التحكم', 'admin')]]))
     if category_id not in G['PRODUCTS'] and not custom_category(category_id):
         return add_to_category(api, cid)
