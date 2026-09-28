@@ -50,7 +50,7 @@ def choose(s, api, cid, pid, value):
     except (ValueError, TypeError):
         qty = 0
     if not s.can_order(pid) or not 1 <= qty <= min(limit(s,pid), 10000):
-        return s.send(api,cid,f'أدخل كمية صحيحة من ١ إلى {min(limit(s,pid),10000)} حسب المتوفر.',
+        return s.send(api,cid,f'الكمية المتوفرة حاليًا: {min(limit(s,pid),10000)}. اختر كمية لا تتجاوز المخزون الفعلي.',
                       s.kb([[s.btn('↩️ رجوع للمنتج','options:'+pid)]]))
     with s.db() as c:
         c.execute('INSERT OR REPLACE INTO selected_quantities VALUES (?,?,?)',(cid,pid,qty))
@@ -71,10 +71,16 @@ def page(s, api, cid, pid):
     qty = selected(s,cid,pid)
     rows = []
     if s.can_order(pid):
-        nums = (1,2,3,5,10)
+        # Do not offer quantities that exceed the product's actual inventory.
+        available = min(limit(s, pid), 10000)
+        nums = [n for n in (1, 2, 3, 5, 10) if n <= available]
         choices = [button(s,'🛍 ×'+str(n),f'chooseqty:{pid}:{n}',f'ui_quantity_{n}',
                           'primary' if qty==n else None) for n in nums]
-        rows = [choices[:3], choices[3:]+[button(s,'⭐ كمية مخصصة','customqty:'+pid,'ui_quantity_custom')]]
+        rows = [choices[:3]]
+        if len(choices) > 3:
+            rows.append(choices[3:])
+        if available > 1:
+            rows.append([button(s,'⭐ كمية مخصصة','customqty:'+pid,'ui_quantity_custom')])
     with s.db() as c:
         subscribed = c.execute('SELECT 1 FROM stock_alerts WHERE cid=? AND pid=?',(cid,pid)).fetchone()
     if s.can_order(pid):
