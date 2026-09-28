@@ -229,4 +229,7 @@ channel_catalog.install(globals())
 import product_options
 product_options.install(storefront, globals())
 
+import welcome_editor
+welcome_editor.install(globals())
+
 if __name__=='__main__':main()
