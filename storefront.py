@@ -1642,8 +1642,6 @@ def category(api, cid, pid):
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
-    if pid == 'grok' and choices:
-        return grok_cards(api, cid, choices)
     if pid == 'chatgpt' and choices:
         return chatgpt_cards(api, cid, choices)
     if choices:
@@ -2510,8 +2508,6 @@ def category(api, cid, pid):
         send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n' + tr(cid, 'اختر المنتج:', 'Choose a product:'), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
-    if pid == 'grok' and choices:
-        return grok_cards(api, cid, choices)
     if choices:
         rows = []
         for v in choices:
