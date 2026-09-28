@@ -78,7 +78,7 @@ def install(namespace):
             conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
-            activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
+            activity_count = sg['total_activity_count'](conn)
         text = (f'🧾 <b>لوحة إدارة VEXA</b>\n\n'
                 f'الطلبات: <b>{orders_count}</b>\n'
                 f'بانتظار المراجعة: <b>{review_count}</b>\n'
