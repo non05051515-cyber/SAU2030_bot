@@ -600,12 +600,9 @@ def admin_info_editor(api,cid,pid):
           [btn('↩️ منتج آخر','admin:info')],[btn('↩️ لوحة الإدارة','admin')]]
     send(api,cid,'🎛 <b>'+esc(name(pid,cid))+'</b>\n\nحدد المعلومات التي تريد ظهورها للعميل.\nالضمان الحالي: <b>'+esc(w or 'غير محدد')+'</b>',kb(rows))
 
-def admin_text_menu(api, cid, field, category_id=None):
-    if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
-        return
+def admin_category_product_ids(category_id):
+    """Use one complete product list for text and price administration."""
     with db() as conn:
-        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-        custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
         custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
         if category_id == 'youtube':
             # Older YouTube items may belong to custom categories whose names
@@ -617,13 +614,22 @@ def admin_text_menu(api, cid, field, category_id=None):
                    OR lower(COALESCE(c.name,'')) LIKE '%youtube%'
                    OR COALESCE(c.name,'') LIKE '%يوتيوب%' ''').fetchall()
             custom_ids += [row[0] for row in youtube_ids if row[0] not in custom_ids]
+    return list(dict.fromkeys(category_product_ids(category_id) + custom_ids))
+
+
+def admin_text_menu(api, cid, field, category_id=None):
+    if cid != G['ADMIN_ID'] or field not in ('name', 'description'):
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
     if category_id is None:
         cats = [(pid, ('YouTube' if pid == 'youtube' else name(pid, cid))) for pid in G['PRODUCTS']]
         cats += [(pid, label) for pid, label in custom_cats
                  if not ('youtube' in label.lower() or 'يوتيوب' in label)]
         rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
     else:
-        ids = category_product_ids(category_id) + custom_ids
+        ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in dict.fromkeys(ids)]
     send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
@@ -856,11 +862,7 @@ def admin_prices(api, cid, category_id=None):
         rows = [[btn(p['name'], 'pricecat:' + pid)] for pid, p in G['PRODUCTS'].items()]
         rows += [[btn(label, 'pricecat:' + pid)] for pid, label in custom_categories]
     else:
-        ids = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
-        with db() as conn:
-            ids += [row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
-        if not ids and category_id in G['PRODUCTS']:
-            ids = [category_id]
+        ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'SAR'), 'pricepick:' + pid)] for pid in ids]
     send(api, cid, '✏️ اختر القسم أو المنتج لتعديل سعر البيع:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 

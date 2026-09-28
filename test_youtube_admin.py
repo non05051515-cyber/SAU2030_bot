@@ -35,6 +35,32 @@ class YouTubeAdminTests(unittest.TestCase):
             for pid in ('youtube', 'added_yt'):
                 self.assertEqual(self.callbacks().count('txtpick:' + field + ':' + pid), 1)
 
+    def test_prices_include_original_and_added_even_when_hidden(self):
+        with self.s.db() as db:
+            db.execute("INSERT INTO product_visibility VALUES ('youtube',0)")
+        self.bot.action(self.api, self.admin, 'pricecat:youtube')
+        for pid in ('youtube', 'added_yt'):
+            self.assertEqual(self.callbacks().count('pricepick:' + pid), 1)
+        other_price = self.s.amount('added_yt', 'SAR')
+        self.bot.action(self.api, self.admin, 'pricepick:youtube')
+        self.assertIn('priceedit:SAR:youtube', self.callbacks())
+        self.bot.action(self.api, self.admin, 'priceedit:SAR:youtube')
+        self.assertTrue(self.bot.handle_receipt(self.api, {
+            'chat': {'id': self.admin}, 'text': '14.99'}))
+        self.assertEqual(str(self.s.amount('youtube', 'SAR')), '14.99')
+        self.assertEqual(self.s.amount('added_yt', 'SAR'), other_price)
+
+    def test_price_and_description_lists_match_legacy_youtube_categories(self):
+        with self.s.db() as db:
+            db.execute("INSERT INTO admin_categories VALUES ('legacy_yt','YouTube Family','now')")
+            db.execute("UPDATE admin_products SET category_id='legacy_yt' WHERE pid='added_yt'")
+        self.bot.action(self.api, self.admin, 'txtcat:description:youtube')
+        described = {value.removeprefix('txtpick:description:') for value in self.callbacks() if value.startswith('txtpick:description:')}
+        self.bot.action(self.api, self.admin, 'pricecat:youtube')
+        priced = {value.removeprefix('pricepick:') for value in self.callbacks() if value.startswith('pricepick:')}
+        self.assertEqual(priced, described)
+        self.assertEqual(priced, {'youtube', 'added_yt'})
+
     def test_hide_restore_each_product_independently(self):
         for pid, other in (('youtube', 'added_yt'), ('added_yt', 'youtube')):
             self.bot.action(self.api, self.admin, 'vistoggle:' + pid)
