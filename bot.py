@@ -1,6 +1,7 @@
 """VEXA STORE Telegram bot — Arabic / English."""
 import json,os,time,urllib.request
 import required_group
+import customer_inbox
 from pathlib import Path
 BASE=Path(__file__).resolve().parent;CONFIG=json.loads((BASE/'catalog.json').read_text(encoding='utf-8'));ADMIN_ID=8386371522
 USERS_FILE=Path('/data/users.json');LANG_FILE=Path('/data/languages.json');PENDING_RECEIPTS={};PENDING_ADMIN_DELIVERY={};PAYMENT_REVIEWS={}
@@ -179,6 +180,7 @@ def main():
      if c:
       save_user(c)
       data=q.get('data','home')
+      if customer_inbox.action(a,c,data):continue
       storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
@@ -188,6 +190,7 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    customer_inbox.capture(m)
     storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
     if c!=ADMIN_ID and not required_group.approved(c):
@@ -197,6 +200,7 @@ def main():
      continue
     if txt.startswith('/start') and channel_catalog.resume(a,c):continue
     if handle_admin_delivery(a,m):continue
+    if customer_inbox.handle(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
     if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
