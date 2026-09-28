@@ -267,12 +267,25 @@ def now_saudi():
     return datetime.now(timezone(timedelta(hours=3))).strftime('%Y-%m-%d %H:%M')
 
 
+def total_activity_count(conn):
+    """Lifetime activity count, including events pruned from the detail log.
+
+    Initialize from SQLite's AUTOINCREMENT sequence, which preserves the
+    highest allocated activity ID even after old rows are deleted.
+    """
+    conn.execute('CREATE TABLE IF NOT EXISTS activity_totals (id INTEGER PRIMARY KEY CHECK(id=1), total INTEGER NOT NULL)')
+    conn.execute('INSERT OR IGNORE INTO activity_totals(id,total) VALUES (1, MAX(COALESCE((SELECT seq FROM sqlite_sequence WHERE name="activity"), 0), (SELECT COUNT(*) FROM activity)))')
+    return conn.execute('SELECT total FROM activity_totals WHERE id=1').fetchone()[0]
+
+
 def log_activity(cid, action_name, pid):
     if cid == G.get('ADMIN_ID'):
         return
     with db() as conn:
+        total_activity_count(conn)
         conn.execute('INSERT INTO activity(cid,action,pid,created_at) VALUES (?,?,?,?)',
                      (cid, action_name, pid, now_saudi()))
+        conn.execute('UPDATE activity_totals SET total=total+1 WHERE id=1')
         conn.execute('DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT 500)')
 
 
@@ -1058,7 +1071,7 @@ def admin_panel(api, cid):
         conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
         orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
         review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
-        activity_count = conn.execute('SELECT COUNT(*) FROM activity').fetchone()[0]
+        activity_count = total_activity_count(conn)
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
