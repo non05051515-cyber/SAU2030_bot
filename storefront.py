@@ -1928,7 +1928,9 @@ def payments(api, cid, pid):
          kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
              [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
              [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
-             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))]] + payment_methods.rows(sys.modules[__name__], pid) + [nav(cid, back(pid))]))
+             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))],
+             [btn('⭐ نجوم تيليجرام', 'paystars:' + pid)],
+             [btn('🎁 هدايا تيليجرام', 'paygifts:' + pid)]] + payment_methods.rows(sys.modules[__name__], pid) + [nav(cid, back(pid))]))
 
 
 def payment(api, cid, pid, method):
