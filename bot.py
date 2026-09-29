@@ -41,7 +41,7 @@ class API:
    else: detail=''
    try:self._errors.value={'code':getattr(e,'code',None),'description':json.loads(detail).get('description','')}
    except Exception:self._errors.value={'code':getattr(e,'code',None),'description':detail}
-   print('Telegram API error:',type(e).__name__,getattr(e,'code',''),detail,flush=True);time.sleep(1)
+   print('Telegram API error:',m,type(e).__name__,repr(e),detail[:300],flush=True);time.sleep(1)
 def send(a,c,t,k=None):
  d={'chat_id':c,'text':t,'parse_mode':'HTML'}
  if k:d['reply_markup']=k
@@ -176,10 +176,19 @@ def main():
    time.sleep(2)
  import threading
  threading.Thread(target=maintenance_loop,name='bot-maintenance',daemon=True).start()
- offset=0;print('Bot running...')
+ offset=0;print('Bot running...',flush=True)
+ last_poll_log=0
  while True:
   try:
-   for u in a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query','pre_checkout_query']) or []:
+   updates=a.call('getUpdates',offset=offset,timeout=25,allowed_updates=['message','callback_query','pre_checkout_query'])
+   if updates is None:
+    print('Polling failed; retrying',flush=True)
+    time.sleep(2)
+    continue
+   if updates or time.time()-last_poll_log>120:
+    print('Polling alive; updates:',len(updates),'offset:',offset,flush=True)
+    last_poll_log=time.time()
+   for u in updates:
     offset=u['update_id']+1
     if 'pre_checkout_query' in u:
      telegram_payments.precheckout(a,u['pre_checkout_query']);continue
