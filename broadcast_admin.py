@@ -290,15 +290,15 @@ def install(namespace):
                 conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
                 departed_ids = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1').fetchall()}
                 recent_rows = conn.execute('SELECT cid, MAX(created_at) FROM activity GROUP BY cid ORDER BY MAX(created_at) DESC LIMIT 15').fetchall()
-            total = len(users)
-            available = max(total - len(departed_ids.intersection(users)), 0)
+            customers = set(users) - {admin_id}
+            available = len(customers - departed_ids)
             recent = [(uid, ts) for uid, ts in recent_rows if uid != admin_id]
-            lines = ['👥 <b>مستخدمو البوت</b>', '', f'إجمالي المستخدمين: <b>{total}</b>', f'🟢 المتاحون: <b>{available}</b>', f'🚪 غادروا/حظروا البوت: <b>{len(departed_ids.intersection(users))}</b>']
+            lines = ['👥 <b>عملاء البوت</b>', '', f'🟢 عدد العملاء القابلين للمراسلة (آخر حالة معروفة): <b>{available}</b>']
             if recent:
                 lines += ['', '🕒 <b>آخر نشاط مسجل:</b>']
                 for uid, ts in recent[:10]:
                     lines.append(f'• <code>{uid}</code> — {sg["esc"](ts)}')
-            lines += ['', 'ℹ️ تيليجرام لا يتيح للبوت معرفة من هو Online الآن؛ هذه القائمة تعتمد على آخر تفاعل مسجل.']
+            lines += ['', 'ℹ️ العدد يستبعد حساب الإدارة والحسابات التي ثبت حظرها أو تعطيلها؛ لا يتيح تيليجرام فحص كل الحسابات مباشرة.']
             return sg['send'](api, cid, '\n'.join(lines), sg['kb']([[sg['btn']('🔄 تحديث', 'admin:users')], [sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
         if cid == admin_id and value == 'admin:stats':
             try:
@@ -310,8 +310,12 @@ def install(namespace):
                 conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
                 departed = conn.execute('SELECT COUNT(*) FROM user_delivery_status WHERE departed=1').fetchone()[0]
                 row = conn.execute('SELECT sent,failed,created_at FROM broadcast_stats WHERE id=1').fetchone()
-            total = len(users)
-            available = max(total - departed, 0)
+            customers = users - {admin_id}
+            with sg['db']() as conn:
+                excluded = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
+            total = len(customers)
+            departed = len(customers & excluded)
+            available = len(customers - excluded)
             sent, failed, created = row if row else (0, 0, 'لا توجد رسالة جماعية بعد')
             text = (f'📊 <b>إحصائيات البوت</b>\n\n'
                     f'👥 إجمالي المستخدمين: <b>{total}</b>\n'
