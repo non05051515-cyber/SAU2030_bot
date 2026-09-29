@@ -7,6 +7,7 @@ from pathlib import Path
 
 PENDING = set()
 BROADCAST_DRAFTS = {}
+BROADCAST_LOCK = threading.Lock()
 AUTO_AD_STATE = {}
 USERS_FILE = Path('/data/users.json')
 PRODUCT_BROADCAST = {}
@@ -395,33 +396,48 @@ def install(namespace):
                 sg['send'](api, cid, 'أرسل نصًا أو صورة مع تعليق للنسخة الإنجليزية.')
                 return True
             pending['en'] = message['message_id']
-            users = [u for u in _users() if u != admin_id]
-            ok = failed = 0
-            # Resolve the customer's explicit store-language selection, not Telegram's UI language.
-            languages = namespace['LANGS']
-            for user_id in users:
-                try:
-                    selected = languages.get(str(user_id), 'ar')
-                    source_id = pending['en'] if selected == 'en' else pending['ar']
-                    result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                      message_id=source_id)
-                    if result:
-                        ok += 1
-                    else:
-                        failed += 1
-                    with sg['db']() as conn:
-                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
-                except Exception:
-                    failed += 1
-                    with sg['db']() as conn:
-                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, sg['now_saudi']()))
-            with sg['db']() as conn:
-                conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
+            if not BROADCAST_LOCK.acquire(blocking=False):
+                return sg['send'](api, cid, '⏳ يوجد إرسال جماعي جارٍ. انتظر اكتماله.') or True
+            arabic_id, english_id = pending['ar'], pending['en']
             PENDING.discard(cid)
             BROADCAST_DRAFTS.pop(cid, None)
-            sg['send'](api, cid,
-                       f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
-                       sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            sg['send'](api, cid, '⏳ بدأ الإرسال بالخلفية. البوت سيبقى متاحًا للعملاء، وستصلك الإحصائية بعد الانتهاء.')
+            def deliver():
+                ok = failed = skipped = 0
+                try:
+                    with sg['db']() as conn:
+                        prepare_broadcast_tables(conn)
+                        excluded = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
+                    users = [u for u in _users() if u != admin_id and u not in excluded]
+                    skipped = len(_users()) - 1 - len(users)
+                    for user_id in users:
+                        try:
+                            selected = namespace['LANGS'].get(str(user_id), 'ar')
+                            source_id = english_id if selected == 'en' else arabic_id
+                            result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid, message_id=source_id)
+                            error = getattr(api, 'last_error', None)
+                            if result:
+                                ok += 1
+                            else:
+                                failed += 1
+                            # Exclude only permanent Telegram 403 errors, not transient failures.
+                            departed = int(not result and error and error.get('code') == 403 and
+                                           ('blocked by the user' in error.get('description', '') or
+                                            'user is deactivated' in error.get('description', '')))
+                            with sg['db']() as conn:
+                                conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, departed, sg['now_saudi']()))
+                        except Exception as exc:
+                            failed += 1
+                            print('Broadcast delivery error:', type(exc).__name__, str(exc)[:150], flush=True)
+                        time.sleep(0.04)
+                except Exception as exc:
+                    print('Broadcast worker error:', type(exc).__name__, str(exc)[:150], flush=True)
+                finally:
+                    with sg['db']() as conn:
+                        conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
+                    sg['send'](api, cid, f'✅ <b>اكتمل الإرسال</b>\\n\\nوصلت: <b>{ok}</b>\\nتعذر: <b>{failed}</b>\\nمستبعدون سابقًا: <b>{skipped}</b>', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+                    BROADCAST_LOCK.release()
+            threading.Thread(target=deliver, name='language-broadcast', daemon=True).start()
             return True
         return old_receipt(api, message)
 
