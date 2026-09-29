@@ -49,6 +49,8 @@ def install(namespace):
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_drafts (cid INTEGER PRIMARY KEY, token TEXT NOT NULL, pid TEXT NOT NULL, photo TEXT, awaiting_photo INTEGER NOT NULL DEFAULT 0)')
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_jobs (token TEXT PRIMARY KEY, pid TEXT NOT NULL, photo TEXT, status TEXT NOT NULL)')
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_recipients (token TEXT NOT NULL, cid INTEGER NOT NULL, status TEXT NOT NULL DEFAULT "pending", PRIMARY KEY(token,cid))')
+        conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
+        conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
 
     def draft(cid):
         with sg['db']() as conn:
@@ -169,22 +171,34 @@ def install(namespace):
             with sg['db']() as conn:
                 conn.execute('UPDATE product_broadcast_jobs SET status="running" WHERE token=?', (token,))
                 recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid', (token,))]
-            for user_id in recipients:
+                total = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=?', (token,)).fetchone()[0]
+            print('Product broadcast started:', token, 'remaining:', len(recipients), flush=True)
+            for index, user_id in enumerate(recipients, 1):
                 try:
                     result = product_card(api, user_id, pid, photo)
                 except Exception as exc:
-                    print('Product delivery error:', type(exc).__name__, flush=True)
+                    print('Product delivery error:', type(exc).__name__, str(exc)[:200], flush=True)
                     result = None
                 with sg['db']() as conn:
                     conn.execute('UPDATE product_broadcast_recipients SET status=? WHERE token=? AND cid=?', ('sent' if result else 'failed', token, user_id))
                     conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
+                if index % 50 == 0:
+                    print('Product broadcast progress:', token, index, '/', len(recipients), flush=True)
+                    try:
+                        sg['send'](api, admin_id, f'⏳ جاري إرسال المنتج: تمت معالجة <b>{total - len(recipients) + index}</b> من <b>{total}</b> مستخدم.')
+                    except Exception as exc:
+                        print('Product broadcast progress notification:', type(exc).__name__, flush=True)
                 time.sleep(0.05)
             with sg['db']() as conn:
                 ok = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="sent"', (token,)).fetchone()[0]
                 failed = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="failed"', (token,)).fetchone()[0]
                 conn.execute('UPDATE product_broadcast_jobs SET status="done" WHERE token=?', (token,))
                 conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
-            sg['send'](api, admin_id, f'✅ اكتمل إرسال المنتج.\nوصل إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            print('Product broadcast completed:', token, 'sent:', ok, 'failed:', failed, flush=True)
+            try:
+                sg['send'](api, admin_id, f'✅ اكتمل إرسال المنتج.\\nوصل إلى: <b>{ok}</b>\\nتعذر الإرسال إلى: <b>{failed}</b>', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            except Exception as exc:
+                print('Product broadcast completion notification:', type(exc).__name__, flush=True)
 
     global DELIVERY_WORKER
     DELIVERY_WORKER = deliver_queued
