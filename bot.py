@@ -1,5 +1,5 @@
 """VEXA STORE Telegram bot — Arabic / English."""
-import json,os,time,urllib.request
+import json,os,time,urllib.request,threading
 import required_group
 import customer_inbox
 import telegram_payments
@@ -27,8 +27,11 @@ def set_lang(cid,v):
 def tr(cid,a,e):return e if lang(cid)=='en' else a
 def btn(t,c):return {'text':t,'callback_data':c}
 class API:
- def __init__(self,t):self.u=f'https://api.telegram.org/bot{t}/'
+ def __init__(self,t):self.u=f'https://api.telegram.org/bot{t}/';self._errors=threading.local()
+ @property
+ def last_error(self):return getattr(self._errors,'value',None)
  def call(self,m,**d):
+  self._errors.value=None
   try:
    with urllib.request.urlopen(urllib.request.Request(self.u+m,json.dumps(d).encode(),{'Content-Type':'application/json'}),timeout=40) as r:return json.load(r).get('result')
   except Exception as e:
@@ -36,6 +39,8 @@ class API:
     try: detail=e.read().decode('utf-8','replace')
     except Exception: detail=''
    else: detail=''
+   try:self._errors.value={'code':getattr(e,'code',None),'description':json.loads(detail).get('description','')}
+   except Exception:self._errors.value={'code':getattr(e,'code',None),'description':detail}
    print('Telegram API error:',type(e).__name__,getattr(e,'code',''),detail,flush=True);time.sleep(1)
 def send(a,c,t,k=None):
  d={'chat_id':c,'text':t,'parse_mode':'HTML'}
