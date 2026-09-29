@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 PENDING = set()
+BROADCAST_DRAFTS = {}
 AUTO_AD_STATE = {}
 USERS_FILE = Path('/data/users.json')
 PRODUCT_BROADCAST = {}
@@ -73,6 +74,7 @@ def install(namespace):
         if cid != admin_id:
             return namespace['show_home'](api, cid)
         PENDING.discard(cid)
+        BROADCAST_DRAFTS.pop(cid, None)
         AUTO_AD_STATE.pop(cid, None)
         PRODUCT_BROADCAST.pop(cid, None)
         clear_draft(cid)
@@ -341,13 +343,15 @@ def install(namespace):
             return sg['send'](api,cid,f'✅ تم تشغيل الإعلان كل <b>{hours} ساعة</b>.',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('↩️ لوحة الإدارة','admin')]]))
         if cid == admin_id and value == 'admin:broadcast':
             PENDING.add(cid)
+            BROADCAST_DRAFTS[cid] = {'step': 'ar'}
             return sg['send'](
                 api, cid,
-                '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
+                '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الرسالة بالعربية أولًا، ثم النسخة الإنجليزية.\nيمكنك إرسال نص أو صورة مع تعليق، وستُرسل النسخة المناسبة حسب لغة العميل داخل البوت.',
                 sg['kb']([[sg['btn']('❌ إلغاء', 'admin:broadcast_cancel')]])
             )
         if cid == admin_id and value == 'admin:broadcast_cancel':
             PENDING.discard(cid)
+            BROADCAST_DRAFTS.pop(cid, None)
             return admin_panel(api, cid)
         return old_action(api, cid, value)
 
@@ -382,21 +386,31 @@ def install(namespace):
             if text.startswith('/'):
                 PENDING.discard(cid)
                 return False
+            pending = BROADCAST_DRAFTS.setdefault(cid, {'step': 'ar'})
+            if pending['step'] == 'ar':
+                pending.update(step='en', ar=message['message_id'])
+                sg['send'](api, cid, '🇺🇸 أرسل الآن النسخة الإنجليزية من نفس الإعلان. لن يُرسل شيء للعملاء حتى تصل النسختان.', sg['kb']([[sg['btn']('❌ إلغاء', 'admin:broadcast_cancel')]]))
+                return True
+            if not message.get('text') and not message.get('caption') and not message.get('photo'):
+                sg['send'](api, cid, 'أرسل نصًا أو صورة مع تعليق للنسخة الإنجليزية.')
+                return True
+            pending['en'] = message['message_id']
             users = [u for u in _users() if u != admin_id]
-            ok = 0
-            failed = 0
+            ok = failed = 0
+            # Resolve the customer's explicit store-language selection, not Telegram's UI language.
+            languages = namespace['LANGS']
             for user_id in users:
                 try:
+                    selected = languages.get(str(user_id), 'ar')
+                    source_id = pending['en'] if selected == 'en' else pending['ar']
                     result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                      message_id=message['message_id'])
+                                      message_id=source_id)
                     if result:
                         ok += 1
-                        with sg['db']() as conn:
-                            conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0, sg['now_saudi']()))
                     else:
                         failed += 1
-                        with sg['db']() as conn:
-                            conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 1, sg['now_saudi']()))
+                    with sg['db']() as conn:
+                        conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
                 except Exception:
                     failed += 1
                     with sg['db']() as conn:
@@ -404,6 +418,7 @@ def install(namespace):
             with sg['db']() as conn:
                 conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, sg['now_saudi']()))
             PENDING.discard(cid)
+            BROADCAST_DRAFTS.pop(cid, None)
             sg['send'](api, cid,
                        f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
                        sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
