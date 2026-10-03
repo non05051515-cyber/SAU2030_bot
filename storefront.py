@@ -3204,6 +3204,11 @@ def action(api, cid, value):
     elif prefix == 'priceedit':
         currency, _, pid = arg.partition(':')
         price_editor(api, cid, pid, currency)
+    elif prefix == 'iconmenu':
+        if arg == 'products': admin_icon_products(api, cid)
+        elif arg == 'categories': admin_icon_categories(api, cid)
+        elif arg == 'buttons': admin_icon_buttons(api, cid)
+        else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
     elif prefix == 'cancelicon':
