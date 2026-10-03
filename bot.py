@@ -199,7 +199,11 @@ def main():
     if 'pre_checkout_query' in u:
      telegram_payments.precheckout(a,u['pre_checkout_query']);continue
     if 'callback_query' in u:
-     q=u['callback_query'];a.call('answerCallbackQuery',callback_query_id=q['id']);c=q.get('message',{}).get('chat',{}).get('id')
+     q=u['callback_query']
+     # Acknowledge the Telegram button press without blocking the actual action.
+     # This removes one full network round-trip from every button click.
+     threading.Thread(target=a.call,args=('answerCallbackQuery',),kwargs={'callback_query_id':q['id']},daemon=True).start()
+     c=q.get('message',{}).get('chat',{}).get('id')
      if c:
       save_user(c)
       data=q.get('data','home')
