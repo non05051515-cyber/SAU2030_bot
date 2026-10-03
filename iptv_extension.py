@@ -12,10 +12,10 @@ DEVICE_LABELS = {
 DEVICE_ICON_KEYS = {key: 'iptvact_' + key for key in DEVICE_LABELS}
 
 IPTV_VARIANTS = [
-    {'id':'iptv_1m','category':'iptv','name':{'ar':'IPTV — شهر','en':'IPTV — 1 Month'},'description':{'ar':'اشتراك IPTV لمدة شهر.','en':'IPTV subscription for 1 month.'},'fixed_sar':'5','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
-    {'id':'iptv_3m','category':'iptv','name':{'ar':'IPTV — 3 أشهر','en':'IPTV — 3 Months'},'description':{'ar':'اشتراك IPTV لمدة 3 أشهر.','en':'IPTV subscription for 3 months.'},'fixed_sar':'10','source_usd':'0','source_stock':3,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
-    {'id':'iptv_6m','category':'iptv','name':{'ar':'IPTV — 6 أشهر','en':'IPTV — 6 Months'},'description':{'ar':'اشتراك IPTV لمدة 6 أشهر.','en':'IPTV subscription for 6 months.'},'fixed_sar':'15','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
-    {'id':'iptv_1y','category':'iptv','name':{'ar':'IPTV — سنة','en':'IPTV — 1 Year'},'description':{'ar':'اشتراك IPTV لمدة سنة.','en':'IPTV subscription for 1 year.'},'fixed_sar':'25','source_usd':'0','source_stock':2,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
+    {'id':'iptv_1m','category':'iptv','name':{'ar':'IPTV — شهر','en':'IPTV — 1 Month'},'description':{'ar':'اشتراك IPTV لمدة شهر.\nيعمل على الأجهزة المدعومة.','en':'IPTV subscription for 1 month.\nWorks on supported devices.'},'fixed_sar':'5','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
+    {'id':'iptv_3m','category':'iptv','name':{'ar':'IPTV — 3 أشهر','en':'IPTV — 3 Months'},'description':{'ar':'اشتراك IPTV لمدة 3 أشهر.\nيعمل على الأجهزة المدعومة.','en':'IPTV subscription for 3 months.\nWorks on supported devices.'},'fixed_sar':'10','source_usd':'0','source_stock':3,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
+    {'id':'iptv_6m','category':'iptv','name':{'ar':'IPTV — 6 أشهر','en':'IPTV — 6 Months'},'description':{'ar':'اشتراك IPTV لمدة 6 أشهر.\nيعمل على الأجهزة المدعومة.','en':'IPTV subscription for 6 months.\nWorks on supported devices.'},'fixed_sar':'15','source_usd':'0','source_stock':5,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
+    {'id':'iptv_1y','category':'iptv','name':{'ar':'IPTV — سنة','en':'IPTV — 1 Year'},'description':{'ar':'اشتراك IPTV لمدة سنة كاملة.\nيعمل على الأجهزة المدعومة.','en':'IPTV subscription for 1 full year.\nWorks on supported devices.'},'fixed_sar':'25','source_usd':'0','source_stock':2,'source_checked_at':'2026-09-18','promotions':[],'image':'assets/iptv.jpg'},
 ]
 for variant in IPTV_VARIANTS:
     s.VARIANTS[variant['id']] = variant
