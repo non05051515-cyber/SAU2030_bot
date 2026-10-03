@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -482,11 +483,58 @@ def install(namespace):
             AUTO_AD_STATE.pop(cid,None)
             return sg['send'](api,cid,f'✅ تم تشغيل الإعلان كل <b>{hours} ساعة</b>.',sg['kb']([[sg['btn']('⏹ إيقاف','admin:autoad_stop',style='danger')],[sg['btn']('↩️ لوحة الإدارة','admin')]]))
         if cid == admin_id and value == 'admin:broadcast':
-            PENDING.add(cid)
-            BROADCAST_DRAFTS[cid] = {'step': 'ar'}
+            PENDING.discard(cid)
+            BROADCAST_DRAFTS[cid] = {'step': 'target'}
             return sg['send'](
                 api, cid,
-                '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الرسالة بالعربية أولًا، ثم النسخة الإنجليزية.\nيمكنك إرسال نص أو صورة مع تعليق، وستُرسل النسخة المناسبة حسب لغة العميل داخل البوت.',
+                '📢 <b>إرسال رسالة جماعية</b>\n\nاختر الجمهور الذي تريد إرسال الإعلان له:',
+                sg['kb']([
+                    [sg['btn']('👥 جميع المستخدمين', 'broadcasttarget:all', style='primary')],
+                    [sg['btn']('▶️ ضغطوا Start', 'broadcasttarget:start')],
+                    [sg['btn']('⚡ أي نشاط داخل البوت', 'broadcasttarget:any')],
+                    [sg['btn']('❌ إلغاء', 'admin:broadcast_cancel')]
+                ])
+            )
+        if cid == admin_id and value.startswith('broadcasttarget:'):
+            mode = value.split(':', 1)[1]
+            if mode == 'all':
+                PENDING.add(cid)
+                BROADCAST_DRAFTS[cid] = {'step': 'ar', 'target_mode': 'all', 'minutes': None}
+                return sg['send'](
+                    api, cid,
+                    '👥 <b>الإرسال لجميع المستخدمين</b>\n\nأرسل الآن النسخة العربية من الإعلان.',
+                    sg['kb']([[sg['btn']('❌ إلغاء', 'admin:broadcast_cancel')]])
+                )
+            if mode in ('start', 'any'):
+                BROADCAST_DRAFTS[cid] = {'step': 'time', 'target_mode': mode}
+                label = 'ضغطوا Start' if mode == 'start' else 'لديهم أي نشاط'
+                return sg['send'](
+                    api, cid,
+                    '🎯 <b>' + label + '</b>\n\nاختر الفترة الزمنية:',
+                    sg['kb']([
+                        [sg['btn']('10 دقائق', 'broadcasttime:10'), sg['btn']('30 دقيقة', 'broadcasttime:30')],
+                        [sg['btn']('ساعة', 'broadcasttime:60'), sg['btn']('3 ساعات', 'broadcasttime:180')],
+                        [sg['btn']('6 ساعات', 'broadcasttime:360'), sg['btn']('12 ساعة', 'broadcasttime:720')],
+                        [sg['btn']('24 ساعة', 'broadcasttime:1440')],
+                        [sg['btn']('↩️ رجوع', 'admin:broadcast')]
+                    ])
+                )
+        if cid == admin_id and value.startswith('broadcasttime:'):
+            try:
+                minutes = int(value.split(':', 1)[1])
+            except Exception:
+                return admin_panel(api, cid)
+            pending = BROADCAST_DRAFTS.get(cid) or {}
+            mode = pending.get('target_mode')
+            if mode not in ('start', 'any'):
+                return action(api, cid, 'admin:broadcast')
+            pending.update(step='ar', minutes=minutes)
+            BROADCAST_DRAFTS[cid] = pending
+            PENDING.add(cid)
+            hours_label = (str(minutes) + ' دقيقة') if minutes < 60 else (('ساعة' if minutes == 60 else str(minutes // 60) + ' ساعات'))
+            return sg['send'](
+                api, cid,
+                '✅ تم تحديد الجمهور خلال آخر <b>' + hours_label + '</b>.\n\nأرسل الآن النسخة العربية من الإعلان.',
                 sg['kb']([[sg['btn']('❌ إلغاء', 'admin:broadcast_cancel')]])
             )
         if cid == admin_id and value == 'admin:broadcast_cancel':
@@ -558,6 +606,7 @@ def install(namespace):
             if not BROADCAST_LOCK.acquire(blocking=False):
                 return sg['send'](api, cid, '⏳ يوجد إرسال جماعي جارٍ. انتظر اكتماله.') or True
             arabic_id, english_id = pending['ar'], pending['en']
+            broadcast_target = {'target_mode': pending.get('target_mode', 'all'), 'minutes': pending.get('minutes')}
             PENDING.discard(cid)
             BROADCAST_DRAFTS.pop(cid, None)
             sg['send'](api, cid, '⏳ بدأ الإرسال بالخلفية. البوت سيبقى متاحًا للعملاء، وستصلك الإحصائية بعد الانتهاء.')
@@ -567,8 +616,27 @@ def install(namespace):
                     with sg['db']() as conn:
                         prepare_broadcast_tables(conn)
                         excluded = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
-                    users = [u for u in _users() if u != admin_id and u not in excluded]
-                    skipped = len(_users()) - 1 - len(users)
+                    target_mode = broadcast_target.get('target_mode', 'all')
+                    minutes = broadcast_target.get('minutes')
+                    all_users = [u for u in _users() if u != admin_id]
+                    if target_mode == 'all':
+                        target_users = set(all_users)
+                    else:
+                        cutoff = (datetime.now() - timedelta(minutes=int(minutes or 0))).strftime('%Y-%m-%d %H:%M')
+                        with sg['db']() as conn:
+                            if target_mode == 'start':
+                                rows = conn.execute(
+                                    'SELECT DISTINCT cid FROM activity WHERE action=? AND created_at>=?',
+                                    ('start', cutoff)
+                                ).fetchall()
+                            else:
+                                rows = conn.execute(
+                                    'SELECT DISTINCT cid FROM activity WHERE created_at>=?',
+                                    (cutoff,)
+                                ).fetchall()
+                        target_users = {row[0] for row in rows}
+                    users = [u for u in all_users if u in target_users and u not in excluded]
+                    skipped = len([u for u in all_users if u in target_users]) - len(users)
 
                     def deliver_message(user_id):
                         try:
