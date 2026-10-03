@@ -3415,6 +3415,8 @@ def pay_with_wallet(api, cid, pid):
         return
     order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
     send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+    if fulfill_paid_order(api, order_id):
+        return
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -3452,6 +3454,8 @@ def check_crypto_order(api, cid, order_id):
     if changed:
         saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
         send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+        if fulfill_paid_order(api, saved_order_id):
+            return
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
