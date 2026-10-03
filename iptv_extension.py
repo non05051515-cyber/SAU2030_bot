@@ -50,19 +50,9 @@ def amount(pid, currency='SAR', source_price=None):
 
 
 def category(api, cid, pid):
-    if pid != 'iptv':
-        return _original_category(api, cid, pid)
-    if not s.category_visible(pid):
-        return s.products(api, cid)
-    product = s.G['PRODUCTS'].get('iptv')
-    if not product:
-        return s.products(api, cid)
-    if s.category_description_html(pid, cid) is not None:
-        s.send(api, cid, s.category_heading(pid, cid))
-    # Reuse the card layout with IPTV artwork and no introductory heading.
-    choices = [s.VARIANTS[variant_id] for variant_id in IPTV_IDS
-               if variant_id in s.VARIANTS and s.product_visible(variant_id)]
-    return s.grok_cards(api, cid, choices, show_heading=False, default_image="assets/iptv.jpg")
+    # IPTV now uses the exact same stacked product-button layout as every
+    # other category: name | USD price | stock, green/red by availability.
+    return _original_category(api, cid, pid)
 
 def iptv_item(api, cid, pid):
     if not s.product_visible(pid):
