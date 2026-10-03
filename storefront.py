@@ -366,6 +366,7 @@ UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
     'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
+    'ui_community': '📢 مجتمع VEXA STORE',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
     'ui_broadcast_product': 'زر الذهاب للمنتج في الإعلان',
     'ui_broadcast_buy': 'زر شراء مباشرة في الإعلان',
@@ -1888,7 +1889,7 @@ def admin_icons(api, cid):
     send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر أين تريد إضافة الأيقونة:',
          kb([[btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
              [btn('📁 أسماء الأقسام', 'iconmenu:categories')],
-             [btn('🔘 أزرار المتجر', 'iconmenu:buttons')],
+             [btn('🏠 أيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
              [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
@@ -2289,17 +2290,17 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
-    rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'))])
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
+    rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style='primary') for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style='primary') for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -3334,7 +3335,7 @@ def start(api, cid):
     reset_navigation_state(cid)
     send(api, cid, tr(cid, '👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.',
                      '👋 <b>Welcome to VEXA STORE</b>\n\nDigital services and subscriptions.'),
-         kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'))], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'))]]))
+         kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'), style='primary')], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'), style='primary')]]))
 
 
 def home(api, cid):
@@ -3343,17 +3344,17 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
-    rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'))])
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency'),style='primary'), btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
+    rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style='primary') for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style='primary') for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
