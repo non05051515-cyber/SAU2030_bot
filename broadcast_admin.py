@@ -116,6 +116,7 @@ def install(namespace):
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
             [sg['btn']('➕ إضافة منتج داخل قسم', 'admin:addtocategory', style='success')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
+            [sg['btn']('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
             [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
@@ -350,7 +351,7 @@ def install(namespace):
         if cid == admin_id and not value.startswith(('txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:')):
             with sg['db']() as conn:
                 conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('product_text','product_photo')", (cid,))
-        if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
+        if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos', 'admin:supplierapi') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'stockqty:', 'suppliercat:', 'supplierpick:', 'supplierset:', 'suppliertoggle:', 'suppliertest:', 'supplierdelete:', 'supplierpandora:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
         if cid == admin_id and value == 'admin:activity_reset':
