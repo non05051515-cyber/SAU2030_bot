@@ -1633,15 +1633,11 @@ def compact_name(pid, cid=0):
         'iptv_6m':'6M',
         'iptv_1y':'1Y',
     }
-    preset = (en if language == 'en' else ar).get(pid)
-    if preset:
-        return preset
-
     full = name(pid, cid)
     label = full.strip()
     low_full = full.lower().replace('-', ' ').replace('_', ' ')
 
-    # Preserve distinctive ChatGPT product identifiers so similar plans remain clear.
+    # Always prefer the current edited product name over old catalog presets.
     if 'apple pay' in low_full or 'applepay' in low_full:
         if language == 'ar':
             return 'Apple Pay • شهر خاص' if ('خاص' in full or 'private' in low_full) else 'Apple Pay • شهر'
@@ -1651,6 +1647,10 @@ def compact_name(pid, cid=0):
         if language == 'ar':
             return tag + ' • شهر واحد'
         return tag + ' • 1M'
+
+    preset = (en if language == 'en' else ar).get(pid)
+    if preset:
+        return preset
     category_id = VARIANTS.get(pid, {}).get('category')
     cp = custom_product(pid)
     if not category_id and cp:
