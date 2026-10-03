@@ -698,10 +698,16 @@ def handle_category_description(api, message):
         return True
     pid, lang = json.loads(row[0])
     formatted = description_message_html(message, text)
+    translated_en = auto_translate(text, 'en')[:1500] if lang == 'ar' else None
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', lang, formatted))
+        if translated_en:
+            conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', 'en', esc(translated_en)))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    send(api, cid, '✅ تم حفظ وصف القسم.\n\n' + formatted, kb([[btn('معاينة القسم', 'product:' + pid)], [btn('تعديل قسم آخر', 'admin:categorydesc')], [btn('لوحة الإدارة', 'admin')]]))
+    msg = '✅ تم حفظ وصف القسم.'
+    if translated_en:
+        msg += '\n🌐 وتم تحديث الإنجليزية تلقائيًا.'
+    send(api, cid, msg + '\n\n' + formatted, kb([[btn('معاينة القسم', 'product:' + pid)], [btn('تعديل قسم آخر', 'admin:categorydesc')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -711,7 +717,7 @@ def admin_text_editor(api, cid, field, pid, lang=None):
     if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid) and not custom_category(pid):
         return
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة النص الذي تريد تعديله:', kb([[btn('العربية', f'txtedit:{field}:ar:{pid}'), btn('English', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
+        return send(api, cid, 'اختر لغة النص الذي تريد تعديله:\n\n🇸🇦 عند تعديل العربية سيتم تحديث الإنجليزية تلقائيًا.', kb([[btn('🇸🇦 العربية + تحديث English', f'txtedit:{field}:ar:{pid}'), btn('🇺🇸 English يدوي', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
@@ -786,13 +792,22 @@ def handle_admin_text(api, message):
     if not text or len(text) > limit or (field == 'name' and '\n' in text):
         send(api, cid, f'أرسل نصًا غير فارغ لا يتجاوز {limit} حرفًا.' + (' الاسم يكون في سطر واحد.' if field == 'name' else ''), kb([[btn('إلغاء', 'admin')]]))
         return True
+    translated_en = auto_translate(text, 'en')[:limit] if lang == 'ar' else None
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, text))
+        if translated_en:
+            conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, 'en', translated_en))
         if field == 'description':
             conn.execute('INSERT OR REPLACE INTO description_emoji VALUES (?,?,?,?)',
                          (pid, lang, text, description_message_html(message, text)))
+            if translated_en:
+                conn.execute('DELETE FROM description_emoji WHERE pid=? AND lang=?', (pid, 'en'))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    send(api, cid, '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج') + '\n\n' + (description_message_html(message, text) if field == 'description' else esc(text)), kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
+    confirmation = '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج')
+    if translated_en:
+        confirmation += '\n🌐 وتم تحديث النسخة الإنجليزية تلقائيًا.'
+    confirmation += '\n\n' + (description_message_html(message, text) if field == 'description' else esc(text))
+    send(api, cid, confirmation, kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
