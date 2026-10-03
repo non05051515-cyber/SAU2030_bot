@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 PENDING = set()
@@ -180,22 +181,41 @@ def install(namespace):
                 recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid', (token,))]
                 total = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=?', (token,)).fetchone()[0]
             print('Product broadcast started:', token, 'remaining:', len(recipients), flush=True)
-            for index, user_id in enumerate(recipients, 1):
+
+            def deliver_product(user_id):
                 try:
                     result = product_card(api, user_id, pid, photo)
                 except Exception as exc:
                     print('Product delivery error:', type(exc).__name__, str(exc)[:200], flush=True)
                     result = None
+                error = getattr(api, 'last_error', None)
+                departed = int(not result and error and error.get('code') == 403 and
+                               ('blocked by the user' in error.get('description', '') or
+                                'user is deactivated' in error.get('description', '')))
                 with sg['db']() as conn:
-                    conn.execute('UPDATE product_broadcast_recipients SET status=? WHERE token=? AND cid=?', ('sent' if result else 'failed', token, user_id))
-                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, 0 if result else 1, sg['now_saudi']()))
-                if index % 50 == 0:
-                    print('Product broadcast progress:', token, index, '/', len(recipients), flush=True)
+                    conn.execute('UPDATE product_broadcast_recipients SET status=? WHERE token=? AND cid=?',
+                                 ('sent' if result else 'failed', token, user_id))
+                    conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at',
+                                 (user_id, departed, sg['now_saudi']()))
+                return bool(result)
+
+            # Telegram has a global bot send limit. Start requests at about 25/sec,
+            # but keep several requests in flight so network latency does not make
+            # broadcasts crawl one user at a time.
+            with ThreadPoolExecutor(max_workers=16, thread_name_prefix='product-broadcast') as pool:
+                futures = []
+                next_slot = time.monotonic()
+                for user_id in recipients:
+                    now = time.monotonic()
+                    if now < next_slot:
+                        time.sleep(next_slot - now)
+                    futures.append(pool.submit(deliver_product, user_id))
+                    next_slot = max(next_slot + 0.04, time.monotonic())
+                for future in as_completed(futures):
                     try:
-                        sg['send'](api, admin_id, f'⏳ جاري إرسال المنتج: تمت معالجة <b>{total - len(recipients) + index}</b> من <b>{total}</b> مستخدم.')
+                        future.result()
                     except Exception as exc:
-                        print('Product broadcast progress notification:', type(exc).__name__, flush=True)
-                time.sleep(0.05)
+                        print('Product broadcast future:', type(exc).__name__, str(exc)[:150], flush=True)
             with sg['db']() as conn:
                 ok = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="sent"', (token,)).fetchone()[0]
                 failed = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="failed"', (token,)).fetchone()[0]
@@ -418,26 +438,42 @@ def install(namespace):
                         excluded = {row[0] for row in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
                     users = [u for u in _users() if u != admin_id and u not in excluded]
                     skipped = len(_users()) - 1 - len(users)
-                    for user_id in users:
+
+                    def deliver_message(user_id):
                         try:
                             selected = namespace['LANGS'].get(str(user_id), 'ar')
                             source_id = english_id if selected == 'en' else arabic_id
                             result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid, message_id=source_id)
                             error = getattr(api, 'last_error', None)
-                            if result:
-                                ok += 1
-                            else:
-                                failed += 1
-                            # Exclude only permanent Telegram 403 errors, not transient failures.
                             departed = int(not result and error and error.get('code') == 403 and
                                            ('blocked by the user' in error.get('description', '') or
                                             'user is deactivated' in error.get('description', '')))
                             with sg['db']() as conn:
-                                conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at', (user_id, departed, sg['now_saudi']()))
+                                conn.execute('INSERT INTO user_delivery_status(cid,departed,updated_at) VALUES (?,?,?) ON CONFLICT(cid) DO UPDATE SET departed=excluded.departed, updated_at=excluded.updated_at',
+                                             (user_id, departed, sg['now_saudi']()))
+                            return bool(result)
                         except Exception as exc:
-                            failed += 1
                             print('Broadcast delivery error:', type(exc).__name__, str(exc)[:150], flush=True)
-                        time.sleep(0.04)
+                            return False
+
+                    with ThreadPoolExecutor(max_workers=16, thread_name_prefix='message-broadcast') as pool:
+                        futures = []
+                        next_slot = time.monotonic()
+                        for user_id in users:
+                            now = time.monotonic()
+                            if now < next_slot:
+                                time.sleep(next_slot - now)
+                            futures.append(pool.submit(deliver_message, user_id))
+                            next_slot = max(next_slot + 0.04, time.monotonic())
+                        for future in as_completed(futures):
+                            try:
+                                if future.result():
+                                    ok += 1
+                                else:
+                                    failed += 1
+                            except Exception as exc:
+                                failed += 1
+                                print('Broadcast future error:', type(exc).__name__, str(exc)[:150], flush=True)
                 except Exception as exc:
                     print('Broadcast worker error:', type(exc).__name__, str(exc)[:150], flush=True)
                 finally:
