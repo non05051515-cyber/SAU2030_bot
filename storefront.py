@@ -1954,9 +1954,9 @@ def compact_name(pid, cid=0):
     # never get pushed off the Telegram button.
     if 'youtube' in low_full:
         if 'family invitation' in low_full or 'دعوة' in full or 'عائل' in full:
-            return 'دعوة عائلية • شهر' if language == 'ar' else 'Family Invitation • 1M'
+            return 'دعوة عائلية • شهر' if language == 'ar' else 'Family Invite • 1M'
         if 'private full account' in low_full or 'full account' in low_full or 'حساب كامل' in full or 'حساب خاص' in full:
-            return 'حساب كامل خاص • شهر' if language == 'ar' else 'Private Full Account • 1M'
+            return 'حساب خاص • شهر' if language == 'ar' else 'Private • 1M'
         if 'premium' in low_full:
             return 'YouTube Premium • شهر' if language == 'ar' else 'YouTube Premium • 1M'
 
@@ -1992,8 +1992,8 @@ def compact_name(pid, cid=0):
     label = label or full
     # Telegram renders inline-button text on one line. Limit only the product
     # name segment so the USD price and stock segment remain fully visible.
-    if len(label) > 28:
-        label = label[:27].rstrip(' -—|•:') + '…'
+    if len(label) > 22:
+        label = label[:21].rstrip(' -—|•:') + '…'
     return label
 
 
