@@ -236,8 +236,7 @@ def auto_translate(text, target='en'):
     try:
         import chatgpt_extension
         language = 'English' if target == 'en' else 'Arabic'
-        prompt = 'Translate the following digital-store product text to ' + language + '. Return only the translation and preserve product names, numbers, punctuation, and line breaks:\n\n' + text
-        translated = chatgpt_extension.ask_model(G.get('ADMIN_ID', 0), prompt)
+        translated = chatgpt_extension.translate_text(text, target)
         return (translated or text).strip()
     except Exception as exc:
         print('Auto translation error:', type(exc).__name__, flush=True)
