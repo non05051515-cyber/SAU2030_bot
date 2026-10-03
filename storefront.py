@@ -674,9 +674,22 @@ def category_description_html(pid, cid):
     return row[0] if row else None
 
 
+def category_label(pid, cid=0):
+    """Category labels must not be replaced by a product-name override."""
+    if pid == 'youtube':
+        return 'YouTube'
+    custom = custom_category(pid)
+    if custom:
+        return custom[1]
+    product = G['PRODUCTS'].get(pid)
+    if product:
+        return product.get('name', pid)
+    return name(pid, cid)
+
+
 def category_heading(pid, cid):
     description = category_description_html(pid, cid)
-    return '<b>' + esc(name(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
+    return '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
 
 
 def admin_category_description(api, cid, pid=None, lang=None):
@@ -686,7 +699,7 @@ def admin_category_description(api, cid, pid=None, lang=None):
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         cats = list(G['PRODUCTS']) + [r[0] for r in conn.execute('SELECT cid FROM admin_categories ORDER BY rowid')]
     if pid is None:
-        rows = [[btn(name(key, cid), 'catdesc:' + key)] for key in dict.fromkeys(cats)]
+        rows = [[btn(category_label(key, cid), 'catdesc:' + key)] for key in dict.fromkeys(cats)]
         return send(api, cid, '✏️ اختر القسم لتعديل الوصف الذي يظهر فوق المنتجات:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
     if pid not in cats:
         return admin_category_description(api, cid)
@@ -698,7 +711,7 @@ def admin_category_description(api, cid, pid=None, lang=None):
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'category_description', json.dumps([pid, lang])))
         row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
     current = row[0] if row else esc('اختر المنتج:' if lang == 'ar' else 'Choose a product:')
-    send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\nالوصف الحالي:\n' + current + '\n\nأرسل الوصف الجديد (حتى 1500 حرف). يمكنك استخدام أسطر وأيقونات متحركة.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
+    send(api, cid, '<b>' + esc(category_label(pid, cid)) + '</b>\n\nالوصف الحالي:\n' + current + '\n\nأرسل الوصف الجديد (حتى 1500 حرف). يمكنك استخدام أسطر وأيقونات متحركة.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
 
 
 def handle_category_description(api, message):
@@ -2029,7 +2042,7 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn('YouTube' if pid == 'youtube' else name(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
@@ -3074,7 +3087,7 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn('YouTube' if pid == 'youtube' else name(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
