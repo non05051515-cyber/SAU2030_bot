@@ -2316,7 +2316,7 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style='primary') for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style='primary') for category_id, category_name in custom_categories if category_visible(category_id)]
@@ -3496,7 +3496,7 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style='primary') for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style='primary') for category_id, category_name in custom_categories if category_visible(category_id)]
