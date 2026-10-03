@@ -1163,7 +1163,7 @@ def admin_panel(api, cid):
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
-                             [btn('🎞 أيقونة متحركة للمنتج', 'admin:icons', style='success')],
+                             [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
@@ -1310,23 +1310,76 @@ def tick_customer_activity(api):
 def admin_icons(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
+    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر أين تريد إضافة الأيقونة:',
+         kb([[btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
+             [btn('📁 أسماء الأقسام', 'iconmenu:categories')],
+             [btn('🔘 أزرار المتجر', 'iconmenu:buttons')],
+             [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def admin_icon_products(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    buttons = []
+    seen = set()
+
+    # Every sellable catalog product/variant.
+    for pid in VARIANTS:
+        if pid in seen:
+            continue
+        seen.add(pid)
+        buttons.append(btn(name(pid, cid), 'seticon:' + pid, ui_icon(pid)))
+
+    # Products created from the admin panel.
+    with db() as conn:
+        custom_products = conn.execute('SELECT pid,name FROM admin_products ORDER BY rowid').fetchall()
+    for pid, product_name in custom_products:
+        if pid in seen:
+            continue
+        seen.add(pid)
+        buttons.append(btn(product_name, 'seticon:' + pid, ui_icon(pid)))
+
+    # Standalone built-in products that are not represented by variants.
+    for pid, product in G['PRODUCTS'].items():
+        if pid in seen:
+            continue
+        try:
+            children = products_in_category(pid)
+        except Exception:
+            children = [pid]
+        if children == [pid]:
+            seen.add(pid)
+            buttons.append(btn('YouTube' if pid == 'youtube' else name(pid, cid),
+                               'seticon:' + pid, ui_icon(pid) or product.get('custom_emoji_id')))
+
+    rows = [[button] for button in buttons]
+    send(api, cid, '📦 <b>أسماء المنتجات</b>\n\nاختر المنتج الذي تريد وضع أيقونة متحركة بجانب اسمه:',
+         kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
+
+
+def admin_icon_categories(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
     buttons = []
     for pid, product in G['PRODUCTS'].items():
-        buttons.append(btn('YouTube' if pid == 'youtube' else product['name'], 'seticon:' + pid, ui_icon(pid) or product.get('custom_emoji_id')))
+        buttons.append(btn('YouTube' if pid == 'youtube' else product['name'],
+                           'seticon:' + pid, ui_icon(pid) or product.get('custom_emoji_id')))
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-        custom_products = conn.execute('SELECT pid,name FROM admin_products ORDER BY rowid').fetchall()
     for category_id, category_name in custom_categories:
-        buttons.append(btn('📁 ' + category_name, 'seticon:' + category_id, ui_icon(category_id)))
-    for product_id, product_name in custom_products:
-        buttons.append(btn('📦 ' + product_name, 'seticon:' + product_id, ui_icon(product_id)))
-    for key, label in UI_ICON_LABELS.items():
-        icon = ui_icon(key)
-        buttons.append(btn(label, 'seticon:' + key, icon))
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    send(api, cid, '🎞 <b>أيقونة متحركة بجانب اسم المنتج</b>\n\nاختر المنتج أو القسم، ثم أرسل إيموجي تيليجرام المخصص المتحرك نفسه. سيُحفظ كـ Custom Emoji ويظهر متحركًا داخل الزر بجانب الاسم.',
-         kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+        buttons.append(btn(category_name, 'seticon:' + category_id, ui_icon(category_id)))
+    rows = [[button] for button in buttons]
+    send(api, cid, '📁 <b>أسماء الأقسام</b>\n\nاختر القسم الذي تريد إضافة أيقونة متحركة له:',
+         kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
 
+
+def admin_icon_buttons(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    buttons = [btn(label, 'seticon:' + key, ui_icon(key)) for key, label in UI_ICON_LABELS.items()]
+    rows = [[button] for button in buttons]
+    send(api, cid, '🔘 <b>أزرار المتجر</b>\n\nاختر الزر الذي تريد إضافة أيقونة متحركة له:',
+         kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
 
 def begin_icon_setup(api, cid, pid):
     if cid != G['ADMIN_ID']:
@@ -2300,6 +2353,11 @@ def action(api, cid, value):
         if cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_button_labels(api, cid)
+    elif prefix == 'iconmenu':
+        if arg == 'products': admin_icon_products(api, cid)
+        elif arg == 'categories': admin_icon_categories(api, cid)
+        elif arg == 'buttons': admin_icon_buttons(api, cid)
+        else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
     elif prefix == 'cancelicon':
