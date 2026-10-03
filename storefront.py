@@ -54,6 +54,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
+    conn.execute('CREATE TABLE IF NOT EXISTS product_stock_overrides (pid TEXT PRIMARY KEY, stock INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_visibility (pid TEXT PRIMARY KEY, visible INTEGER NOT NULL CHECK(visible IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
@@ -484,18 +485,23 @@ def admin_stock(api, cid, category_id=None):
 
 
 def stock_editor(api, cid, pid, value=None):
-    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS']):
+    if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid)):
         return
+    pid = LEGACY.get(pid, pid)
     saved = value in ('0', '1')
     if saved:
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO product_availability VALUES (?,?)', (pid, int(value)))
-    status = '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية'
-    text = ('✅ تم حفظ الحالة\n\n' if saved else '') + '<b>' + esc(name(pid, cid)) + '</b>\n\n' + status
+            if custom_product(pid):
+                conn.execute('UPDATE admin_products SET available=? WHERE pid=?', (int(value), pid))
+    status = '✅ متوفر' if in_stock(pid) else '🔴 غير متوفر'
+    qty = product_stock(pid)
+    text = ('✅ تم حفظ الحالة\n\n' if saved else '') + '<b>' + esc(name(pid, cid)) + '</b>\n\n' + status + '\n📦 الكمية الحالية: <b>' + esc(qty) + '</b>'
     if VARIANTS.get(pid, {}).get('review_required'):
         text += '\n⚠️ المنتج قيد المراجعة؛ تغيير التوفر لا يلغي إيقاف الطلب للمراجعة.'
     send(api, cid, text, kb([[btn('✅ متوفر', 'stockset:1:' + pid, style='success'),
-                              btn('🔴 نفدت الكمية', 'stockset:0:' + pid, style='danger')],
+                              btn('🔴 غير متوفر', 'stockset:0:' + pid, style='danger')],
+                             [btn('📦 تعديل الكمية', 'stockqty:' + pid, style='primary')],
                              [btn('↩️ منتج آخر', 'admin:stock')], [btn('لوحة الإدارة', 'admin')]]))
 
 
@@ -565,10 +571,15 @@ def info_display(pid):
     return row or (1,1,0,'')
 
 def product_stock(pid):
+    pid = LEGACY.get(pid, pid)
+    with db() as conn:
+        row = conn.execute('SELECT stock FROM product_stock_overrides WHERE pid=?', (pid,)).fetchone()
+    if row is not None:
+        return int(row[0] or 0)
     cp=custom_product(pid)
     if cp: return int(cp[6] or 0)
-    v=VARIANTS.get(LEGACY.get(pid,pid),{})
-    for key in ('stock','quantity','available_quantity'):
+    v=VARIANTS.get(pid,{})
+    for key in ('stock','quantity','available_quantity','source_stock'):
         if key in v:
             try:return int(v[key])
             except:return v[key]
@@ -778,6 +789,33 @@ def handle_admin_text(api, message):
     cid = message.get('chat', {}).get('id')
     if cid != G.get('ADMIN_ID'):
         return False
+    with db() as conn:
+        qty_row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='stock_quantity'", (cid,)).fetchone()
+    if qty_row:
+        raw_qty = (message.get('text') or '').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+        if raw_qty.startswith('/'):
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            return False
+        try:
+            qty = int(raw_qty)
+            if qty < 0 or qty > 1000000:
+                raise ValueError()
+        except Exception:
+            send(api, cid, 'أرسل كمية صحيحة كرقم، مثال: <code>4</code>.')
+            return True
+        pid = LEGACY.get(qty_row[0], qty_row[0])
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO product_stock_overrides VALUES (?,?)', (pid, qty))
+            if custom_product(pid):
+                conn.execute('UPDATE admin_products SET stock=? WHERE pid=?', (qty, pid))
+            conn.execute('INSERT OR REPLACE INTO product_availability VALUES (?,?)', (pid, 1 if qty > 0 else 0))
+            if custom_product(pid):
+                conn.execute('UPDATE admin_products SET available=? WHERE pid=?', (1 if qty > 0 else 0, pid))
+            conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        send(api, cid, '✅ تم تحديث الكمية إلى <b>' + esc(qty) + '</b>.')
+        stock_editor(api, cid, pid)
+        return True
     with db() as conn:
         row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='product_text'", (cid,)).fetchone()
     if not row:
@@ -2468,6 +2506,12 @@ def action(api, cid, value):
         value, _, pid = arg.partition(':')
         if value in ('0', '1'):
             stock_editor(api, cid, pid, value)
+    elif prefix == 'stockqty' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        if pid in VARIANTS or pid in G['PRODUCTS'] or custom_product(pid):
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'stock_quantity', pid))
+            send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n📦 الكمية الحالية: <b>' + esc(product_stock(pid)) + '</b>\n\nأرسل الكمية الجديدة كرقم، مثال: <code>4</code>.', kb([[btn('❌ إلغاء', 'stockpick:' + pid)]]))
     elif prefix == 'txtcat':
         field, _, category_id = arg.partition(':')
         admin_text_menu(api, cid, field, category_id)
