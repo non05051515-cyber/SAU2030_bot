@@ -106,7 +106,7 @@ def install(namespace):
                 f'بانتظار المراجعة: <b>{review_count}</b>\n'
                 f'سجل الاختيارات: <b>{activity_count}</b>')
         sg['send'](api, cid, text, sg['kb']([
-            [sg['btn']('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
+            [sg['btn']('🔔 الطلبات الجديدة / التسليم', 'admin:orders', style='primary')],
             [sg['btn']('👥 مستخدمو البوت', 'admin:users', style='success')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
             [sg['btn']('👁 عرض/إخفاء المنتجات', 'admin:visibility', style='primary')],
@@ -116,7 +116,6 @@ def install(namespace):
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
             [sg['btn']('➕ إضافة منتج داخل قسم', 'admin:addtocategory', style='success')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
-            [sg['btn']('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
             [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
