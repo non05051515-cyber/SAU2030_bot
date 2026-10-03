@@ -1283,6 +1283,7 @@ def admin_product_detail(api, cid, pid):
     text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 ' + price(cid, pid, 'USD') + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
     send(api, cid, text, kb([[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                              [btn('💵 تعديل السعر', 'pricepick:' + pid)],
+                             [btn('🔌 ربط API بالمنتج', 'supplierpick:' + pid, style='primary')],
                              [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
                              [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                              [btn('↩️ القسم', 'mycategory:' + category_id)]]))
