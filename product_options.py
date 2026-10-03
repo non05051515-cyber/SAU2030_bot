@@ -113,6 +113,51 @@ def install(s, namespace):
 
     def action(api,cid,value):
         prefix,_,arg = value.partition(':')
+        # Supplier API admin routes are handled here at the outer action layer
+        # so no extension can swallow them and return to the admin panel.
+        if cid == s.G['ADMIN_ID'] and value == 'admin:supplierapi':
+            return s.supplier_api_menu(api, cid)
+        if cid == s.G['ADMIN_ID'] and prefix == 'suppliercat':
+            return s.supplier_api_menu(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'supplierpick':
+            return s.supplier_api_editor(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'supplierpandora':
+            endpoint, api_key, service_id, enabled, provider, variant_id = s.supplier_api_row(arg)
+            endpoint = 'https://api.pandoradigital.shop/api/v1'
+            provider = 'pandora'
+            with s.db() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
+                             (arg, endpoint, api_key, service_id, enabled, provider, variant_id))
+            s.send(api, cid, '✅ تم اختيار <b>Pandora Digital</b> لهذا المنتج.')
+            return s.supplier_api_editor(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'supplierset':
+            field, _, pid = arg.partition(':')
+            if field in ('endpoint','key','service','variant'):
+                action_name = {'endpoint':'supplier_endpoint','key':'supplier_key','service':'supplier_service','variant':'supplier_variant'}[field]
+                with s.db() as conn:
+                    conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, action_name, pid))
+                prompt = {'endpoint':'أرسل رابط API الكامل.',
+                          'key':'أرسل مفتاح API. لن يظهر كاملًا بعد الحفظ.',
+                          'service':'أرسل Product ID لدى المورد.',
+                          'variant':'أرسل Variant ID لدى المورد.'}[field]
+                return s.send(api, cid, '🔌 <b>' + s.esc(s.name(pid, cid)) + '</b>\n\n' + prompt,
+                              s.kb([[s.btn('❌ إلغاء', 'supplierpick:' + pid)]]))
+        if cid == s.G['ADMIN_ID'] and prefix == 'suppliertest':
+            return s.supplier_test_connection(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'suppliertoggle':
+            endpoint, api_key, service_id, enabled, provider, variant_id = s.supplier_api_row(arg)
+            if not endpoint or not api_key or (provider == 'pandora' and (not service_id or not variant_id)):
+                s.send(api, cid, '⚠️ أضف رابط API والمفتاح وProduct ID وVariant ID أولًا.' if provider == 'pandora' else '⚠️ أضف رابط API والمفتاح أولًا.')
+                return s.supplier_api_editor(api, cid, arg)
+            with s.db() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
+                             (arg, endpoint, api_key, service_id, 0 if enabled else 1, provider, variant_id))
+            return s.supplier_api_editor(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'supplierdelete':
+            with s.db() as conn:
+                conn.execute('DELETE FROM supplier_api WHERE pid=?', (arg,))
+            s.send(api, cid, '✅ تم حذف ربط API لهذا المنتج.')
+            return s.supplier_api_editor(api, cid, arg)
         if value == 'admin:addtocategory':
             return s.add_to_category(api, cid)
         if prefix == 'addtocategory':
