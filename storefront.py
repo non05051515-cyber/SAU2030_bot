@@ -2208,7 +2208,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         if v.get('manual_delivery'):
             caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
-        rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
+        rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='success'), details]] if available else [[btn(tr(cid, '🔴 غير متوفر', '🔴 Unavailable'), 'item:' + pid, style='danger')]]
         if not available:
             rows[0][0]['style'] = 'danger'
         rows.append([btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')])
@@ -2262,7 +2262,7 @@ def category(api, cid, pid):
             qty = int(stock or 0)
             label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
-            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
+            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -2280,7 +2280,7 @@ def category(api, cid, pid):
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
-            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else 'success')])
+            rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
@@ -3159,7 +3159,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         if v.get('manual_delivery'):
             caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
-        rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='primary'), details]] if available else [[details]]
+        rows = [[btn(tr(cid, '🛒 شراء الآن', '🛒 Buy now'), 'buy:' + pid, style='success'), details]] if available else [[btn(tr(cid, '🔴 غير متوفر', '🔴 Unavailable'), 'item:' + pid, style='danger')]]
         if not available:
             rows[0][0]['style'] = 'danger'
         rows.append([btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')])
@@ -3214,7 +3214,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out:
                 label = '🔴 ' + label
-            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
+            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -3225,7 +3225,7 @@ def category(api, cid, pid):
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | 💵 ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
-                             'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), 'danger' if sold_out else 'success')])
+                             'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
