@@ -1554,35 +1554,103 @@ def reset_navigation_state(cid):
 
 
 def compact_name(pid, cid=0):
-    """Short button label while keeping the full product name in details."""
-    full = name(pid, cid)
-    low = full.lower()
+    """Short button label for every product; full name stays inside product details."""
+    pid = LEGACY.get(pid, pid)
     language = prefs(cid)[0]
-    category_id = VARIANTS.get(LEGACY.get(pid, pid), {}).get('category')
-    cp = custom_product(LEGACY.get(pid, pid))
+
+    ar = {
+        'pd_01':'Pro X5 • شهر',
+        'pd_02':'Plus • شهر تجديد',
+        'pd_03':'Go • شهر',
+        'pd_04':'Plus • Apple Pay • شهر',
+        'pd_05':'CODEX 500M • 6 أيام',
+        'pd_06':'CODEX 100M • 3 أيام',
+        'pd_07':'CODEX 50M • يومان',
+        'pd_08':'CODEX 10M • يوم',
+        'pd_09':'Pro • شهر تجديد',
+        'pd_10':'API 500M • 6 أيام',
+        'pd_11':'API 100M • 3 أيام',
+        'pd_12':'API 50M • يومان',
+        'pd_13':'API 10M • يوم',
+        'pd_14':'Pro فردي • 6 أشهر',
+        'pd_15':'Pro • شهر + 1600',
+        'pd_16':'Pro • شهر',
+        'pd_17':'7 أيام',
+        'pd_18':'SuperGrok • 3 أشهر',
+        'pd_19':'X Premium+ • شهر',
+        'pd_20':'Heavy • شهر',
+        'pd_21':'SuperGrok • 7 أيام',
+        'pd_22':'18 شهر',
+        'pd_23':'Edu Pro • 500 مقعد',
+        'pd_24':'Premium 4K • شهر',
+        'iptv_1m':'شهر',
+        'iptv_3m':'3 أشهر',
+        'iptv_6m':'6 أشهر',
+        'iptv_1y':'سنة',
+    }
+    en = {
+        'pd_01':'Pro X5 • 1M',
+        'pd_02':'Plus • Recharge 1M',
+        'pd_03':'Go • 1M',
+        'pd_04':'Plus • Apple Pay • 1M',
+        'pd_05':'CODEX 500M • 6D',
+        'pd_06':'CODEX 100M • 3D',
+        'pd_07':'CODEX 50M • 2D',
+        'pd_08':'CODEX 10M • 1D',
+        'pd_09':'Pro • Recharge 1M',
+        'pd_10':'API 500M • 6D',
+        'pd_11':'API 100M • 3D',
+        'pd_12':'API 50M • 2D',
+        'pd_13':'API 10M • 1D',
+        'pd_14':'Pro Individual • 6M',
+        'pd_15':'Pro • 1M + 1600',
+        'pd_16':'Pro • 1M',
+        'pd_17':'7D',
+        'pd_18':'SuperGrok • 3M',
+        'pd_19':'X Premium+ • 1M',
+        'pd_20':'Heavy • 1M',
+        'pd_21':'SuperGrok • 7D',
+        'pd_22':'18M',
+        'pd_23':'Edu Pro • 500 Seats',
+        'pd_24':'Premium 4K • 1M',
+        'iptv_1m':'1M',
+        'iptv_3m':'3M',
+        'iptv_6m':'6M',
+        'iptv_1y':'1Y',
+    }
+    preset = (en if language == 'en' else ar).get(pid)
+    if preset:
+        return preset
+
+    full = name(pid, cid)
+    label = full.strip()
+    category_id = VARIANTS.get(pid, {}).get('category')
+    cp = custom_product(pid)
     if not category_id and cp:
         category_id = cp[5]
-    if category_id == 'chatgpt' or 'chatgpt' in low:
-        if language == 'ar':
-            if 'خاص' in full or 'private' in low:
-                return 'شهر خاص'
-            if 'ubi' in low:
-                return 'شهر واحد'
-            if 'تجديد' in full or 'recharge' in low:
-                return 'شهر تجديد'
-            if 'plus' in low and ('شهر' in full or '1 month' in low or '1m' in low):
-                return 'شهر واحد'
-        else:
-            if 'خاص' in full or 'private' in low:
-                return 'Private 1M'
-            if 'ubi' in low:
-                return '1 Month'
-            if 'تجديد' in full or 'recharge' in low:
-                return 'Recharge 1M'
-            if 'plus' in low and ('month' in low or '1m' in low):
-                return '1 Month'
-    return full
 
+    # Remove a repeated category/brand prefix from custom and future products.
+    if category_id:
+        try:
+            category_label = name(category_id, cid).strip()
+            if category_label and label.lower().startswith(category_label.lower()):
+                label = label[len(category_label):].lstrip(' -—|•:').strip()
+        except Exception:
+            pass
+
+    replacements = (
+        [('لمدة ', ''), ('شهر واحد', 'شهر'), ('تجديد رسمي', 'تجديد'),
+         ('رمز تفعيل', 'كود'), ('حساب خاص', 'خاص'), ('حساب فردي', 'فردي'),
+         ('اشتراك ', ''), ('بضمان كامل', 'ضمان كامل')]
+        if language == 'ar' else
+        [(' official recharge', ' Recharge'), ('Official Recharge', 'Recharge'),
+         ('1 Month', '1M'), ('1 month', '1M'), ('6 Months', '6M'),
+         ('3 Months', '3M'), ('7 Days', '7D'), ('Individual Account', 'Individual')]
+    )
+    for old, new in replacements:
+        label = label.replace(old, new)
+    label = ' '.join(label.split()).strip(' -—|•:')
+    return label or full
 
 def start(api, cid):
     reset_navigation_state(cid)
@@ -2706,7 +2774,10 @@ def category(api, cid, pid):
             if not product_visible(product_id):
                 continue
             sold_out = not available or int(stock or 0) <= 0
-            label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
+            qty = int(stock or 0)
+            label = compact_name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
+            if sold_out:
+                label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
