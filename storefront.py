@@ -1980,6 +1980,18 @@ def compact_name(pid, cid=0):
     label = ' '.join(label.split()).strip(' -—|•:')
     return label or full
 
+
+def product_button_icon(pid, cid=0):
+    """Return the product button custom icon, except products that should have no leading icon."""
+    try:
+        low = name(pid, cid).lower().replace('-', ' ').replace('_', ' ')
+        if 'upi' in low:
+            return None
+    except Exception:
+        pass
+    return ui_icon(pid)
+
+
 def start(api, cid):
     reset_navigation_state(cid)
     send(api, cid,
@@ -2216,7 +2228,7 @@ def category(api, cid, pid):
             qty = int(stock or 0)
             label = compact_name(product_id, cid) + ' | 💰 ' + price(cid, product_id) + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
-            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
+            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -2233,7 +2245,7 @@ def category(api, cid, pid):
                 label = status + '💰 ' + price(cid, v['id']) + ' • ' + name(v['id'], cid)
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
-            variant_icon = ui_icon(v['id'])
+            variant_icon = product_button_icon(v['id'], cid)
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
@@ -3167,7 +3179,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | 💰 ' + price(cid, product_id) + ' | ' + compact_stock(qty)
             if sold_out:
                 label = '🔴 ' + label
-            rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
+            rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
@@ -3178,7 +3190,7 @@ def category(api, cid, pid):
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | 💰 ' + price(cid, v['id']) + ' | ' + compact_stock(qty),
-                             'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
+                             'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
