@@ -55,7 +55,12 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_stock_overrides (pid TEXT PRIMARY KEY, stock INTEGER NOT NULL DEFAULT 0)')
-    conn.execute('CREATE TABLE IF NOT EXISTS supplier_api (pid TEXT PRIMARY KEY, endpoint TEXT NOT NULL DEFAULT "", api_key TEXT NOT NULL DEFAULT "", service_id TEXT NOT NULL DEFAULT "", enabled INTEGER NOT NULL DEFAULT 0, provider TEXT NOT NULL DEFAULT "generic")')
+    conn.execute('CREATE TABLE IF NOT EXISTS supplier_api (pid TEXT PRIMARY KEY, endpoint TEXT NOT NULL DEFAULT "", api_key TEXT NOT NULL DEFAULT "", service_id TEXT NOT NULL DEFAULT "", enabled INTEGER NOT NULL DEFAULT 0, provider TEXT NOT NULL DEFAULT "generic", variant_id TEXT NOT NULL DEFAULT "")')
+    try:
+        conn.execute('ALTER TABLE supplier_api ADD COLUMN variant_id TEXT NOT NULL DEFAULT ""')
+    except Exception:
+        pass
+    conn.execute('CREATE TABLE IF NOT EXISTS supplier_orders (order_id TEXT PRIMARY KEY, supplier_order_id TEXT NOT NULL DEFAULT "", status TEXT NOT NULL DEFAULT "", delivery TEXT NOT NULL DEFAULT "", last_error TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL DEFAULT "")')
     try:
         conn.execute('ALTER TABLE supplier_api ADD COLUMN provider TEXT NOT NULL DEFAULT "generic"')
     except Exception:
@@ -795,7 +800,7 @@ def handle_admin_text(api, message):
     if cid != G.get('ADMIN_ID'):
         return False
     with db() as conn:
-        supplier_state = conn.execute("SELECT action,value FROM admin_state WHERE cid=? AND action IN ('supplier_endpoint','supplier_key','supplier_service')", (cid,)).fetchone()
+        supplier_state = conn.execute("SELECT action,value FROM admin_state WHERE cid=? AND action IN ('supplier_endpoint','supplier_key','supplier_service','supplier_variant')", (cid,)).fetchone()
     if supplier_state:
         action_name, pid = supplier_state
         raw = (message.get('text') or '').strip()
@@ -806,7 +811,7 @@ def handle_admin_text(api, message):
         if not raw:
             send(api, cid, 'أرسل قيمة صحيحة.')
             return True
-        endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
         if action_name == 'supplier_endpoint':
             if not (raw.startswith('https://') or raw.startswith('http://')):
                 send(api, cid, 'أرسل رابط API يبدأ بـ <code>https://</code> أو <code>http://</code>.')
@@ -814,11 +819,13 @@ def handle_admin_text(api, message):
             endpoint = raw[:500]
         elif action_name == 'supplier_key':
             api_key = raw[:500]
-        else:
+        elif action_name == 'supplier_service':
             service_id = raw[:200]
+        else:
+            variant_id = raw[:200]
         with db() as conn:
-            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider) VALUES (?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,api_key=excluded.api_key,service_id=excluded.service_id,enabled=excluded.enabled,provider=excluded.provider',
-                         (LEGACY.get(pid,pid), endpoint, api_key, service_id, enabled, provider))
+            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,api_key=excluded.api_key,service_id=excluded.service_id,enabled=excluded.enabled,provider=excluded.provider,variant_id=excluded.variant_id',
+                         (LEGACY.get(pid,pid), endpoint, api_key, service_id, enabled, provider, variant_id))
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         send(api, cid, '✅ تم حفظ إعداد API.')
         supplier_api_editor(api, cid, pid)
@@ -1269,8 +1276,8 @@ def admin_panel(api, cid):
 def supplier_api_row(pid):
     pid = LEGACY.get(pid, pid)
     with db() as conn:
-        row = conn.execute('SELECT endpoint,api_key,service_id,enabled,COALESCE(provider,"generic") FROM supplier_api WHERE pid=?', (pid,)).fetchone()
-    return row or ('', '', '', 0, 'generic')
+        row = conn.execute('SELECT endpoint,api_key,service_id,enabled,COALESCE(provider,"generic"),COALESCE(variant_id,"") FROM supplier_api WHERE pid=?', (pid,)).fetchone()
+    return row or ('', '', '', 0, 'generic', '')
 
 
 def supplier_api_menu(api, cid, category_id=None):
@@ -1288,16 +1295,135 @@ def supplier_api_menu(api, cid, category_id=None):
     ids = admin_category_product_ids(category_id)
     rows = []
     for pid in dict.fromkeys(ids):
-        endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
         mark = '🟢 ' if enabled and endpoint and api_key else '⚪️ '
         rows.append([btn(mark + name(pid, cid), 'supplierpick:' + pid)])
     send(api, cid, '🔌 اختر المنتج الذي تريد ربطه بالمورد:', kb(rows + [[btn('↩️ الأقسام', 'admin:supplierapi')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
+def _supplier_json_request(url, api_key, method='GET', payload=None, extra_headers=None, timeout=20):
+    headers = {'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'}
+    if payload is not None:
+        headers['Content-Type'] = 'application/json'
+    if extra_headers:
+        headers.update(extra_headers)
+    data = json.dumps(payload).encode('utf-8') if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode('utf-8')
+    return json.loads(raw) if raw else {}
+
+
+def supplier_delivery_text(items, cid):
+    clean = [str(x).strip() for x in (items or []) if str(x).strip()]
+    if not clean:
+        return ''
+    title = tr(cid, '✅ <b>تم تسليم طلبك تلقائيًا</b>', '✅ <b>Your order was delivered automatically</b>')
+    body = '\n'.join('• <code>' + esc(x) + '</code>' for x in clean)
+    return title + '\n\n' + body
+
+
+def pandora_fulfill_order(api, internal_order_id):
+    with db() as conn:
+        order = conn.execute('SELECT cid,pid,status FROM orders WHERE id=?', (internal_order_id,)).fetchone()
+        snap = conn.execute('SELECT quantity FROM quantity_snapshots WHERE scope=? AND key=?', ('order', internal_order_id)).fetchone()
+        existing = conn.execute('SELECT supplier_order_id,status,delivery FROM supplier_orders WHERE order_id=?', (internal_order_id,)).fetchone()
+    if not order:
+        return False
+    cid, pid, order_status = order
+    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if not (enabled and provider == 'pandora' and endpoint and api_key and product_id and variant_id):
+        return False
+    quantity = int(snap[0]) if snap and snap[0] else 1
+
+    try:
+        supplier_order_id = existing[0] if existing and existing[0] else ''
+        result = None
+
+        if supplier_order_id:
+            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
+        else:
+            quote = _supplier_json_request(
+                endpoint.rstrip('/') + '/quotes', api_key, 'POST',
+                {'product_id': product_id, 'variant_id': variant_id, 'quantity': quantity}
+            )
+            if not quote.get('can_purchase', False):
+                raise RuntimeError('Supplier cannot fulfill now')
+            unit_price = quote.get('unit_price')
+            price_version = quote.get('price_version')
+            if unit_price is None or not price_version:
+                raise RuntimeError('Invalid quote response')
+            try:
+                expected_unit_price = float(unit_price)
+            except Exception:
+                expected_unit_price = unit_price
+            payload = {
+                'product_id': product_id,
+                'variant_id': variant_id,
+                'quantity': quantity,
+                'expected_unit_price': expected_unit_price,
+                'price_version': price_version,
+                'client_order_reference': internal_order_id
+            }
+            idem = 'vexa-' + internal_order_id
+            result = _supplier_json_request(
+                endpoint.rstrip('/') + '/orders', api_key, 'POST', payload,
+                {'Idempotency-Key': idem}
+            )
+            supplier_order_id = str(result.get('id') or '')
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?)',
+                             (internal_order_id, supplier_order_id, str(result.get('status') or ''), '', '', now_saudi()))
+
+        # Short polling window for orders that finish just after creation.
+        for _ in range(5):
+            delivery = (result or {}).get('delivery') or {}
+            items = delivery.get('items') or []
+            status = str((result or {}).get('status') or '')
+            if items:
+                text = supplier_delivery_text(items, cid)
+                with db() as conn:
+                    conn.execute('UPDATE supplier_orders SET status=?,delivery=?,last_error="",updated_at=? WHERE order_id=?',
+                                 (status or 'delivered', json.dumps(items, ensure_ascii=False), now_saudi(), internal_order_id))
+                    conn.execute('UPDATE orders SET status="paid" WHERE id=?', (internal_order_id,))
+                send(api, cid, text, menu(cid))
+                send(api, G['ADMIN_ID'], '✅ <b>تسليم تلقائي عبر Pandora</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالعميل: <code>' + esc(cid) + '</code>\nالمنتج: ' + esc(name(pid, cid)))
+                return True
+            if not supplier_order_id or status.lower() in ('failed','rejected','cancelled'):
+                break
+            time.sleep(1.2)
+            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
+
+        with db() as conn:
+            conn.execute('UPDATE supplier_orders SET status=?,last_error=?,updated_at=? WHERE order_id=?',
+                         (str((result or {}).get('status') or 'pending'), 'delivery_pending', now_saudi(), internal_order_id))
+        send(api, cid, tr(cid, '✅ تم استلام طلبك وهو قيد التجهيز التلقائي. سيتم متابعته من الإدارة إذا تأخر التسليم.', '✅ Your order was received and is being processed automatically. Administration will follow up if delivery is delayed.'))
+        send(api, G['ADMIN_ID'], '⚠️ <b>طلب Pandora بانتظار التسليم</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nSupplier order: <code>' + esc(supplier_order_id or 'unknown') + '</code>')
+        return True
+    except Exception as exc:
+        with db() as conn:
+            conn.execute('INSERT INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status,last_error=excluded.last_error,updated_at=excluded.updated_at',
+                         (internal_order_id, existing[0] if existing else '', 'error', '', type(exc).__name__, now_saudi()))
+        send(api, G['ADMIN_ID'], '❌ <b>فشل تنفيذ طلب Pandora تلقائيًا</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالخطأ: <code>' + esc(type(exc).__name__) + '</code>')
+        send(api, cid, tr(cid, '✅ تم الدفع، لكن تعذر التسليم التلقائي الآن. تم تحويل الطلب للإدارة لإكماله بدون إعادة الدفع.', '✅ Payment was received, but automatic delivery failed. The order was sent to administration; you do not need to pay again.'))
+        return True
+
+
+def fulfill_paid_order(api, order_id):
+    with db() as conn:
+        row = conn.execute('SELECT pid FROM orders WHERE id=?', (order_id,)).fetchone()
+    if not row:
+        return False
+    endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(row[0])
+    if enabled and provider == 'pandora':
+        return pandora_fulfill_order(api, order_id)
+    return False
+
+
 def supplier_test_connection(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return
-    endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
+    endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not endpoint or not api_key:
         return send(api, cid, '⚠️ أضف رابط API والمفتاح أولًا.')
     try:
@@ -1317,17 +1443,18 @@ def supplier_api_editor(api, cid, pid):
     pid = LEGACY.get(pid, pid)
     if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid):
         return supplier_api_menu(api, cid)
-    endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
+    endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
     masked = ('••••••' + api_key[-4:]) if api_key else 'غير مضاف'
     text = ('🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n'
             'المورد: <b>' + esc('Pandora Digital' if provider == 'pandora' else 'Generic API') + '</b>\n'
             'الحالة: <b>' + ('🟢 مفعّل' if enabled else '⚪️ غير مفعّل') + '</b>\n'
             '🌐 رابط API: <code>' + esc(endpoint or 'غير مضاف') + '</code>\n'
             '🔑 المفتاح: <code>' + esc(masked) + '</code>\n'
-            '🆔 معرف المنتج/الخدمة: <code>' + esc(service_id or 'غير مضاف') + '</code>')
+            '🆔 Product ID: <code>' + esc(service_id or 'غير مضاف') + '</code>\n'
+            '🧩 Variant ID: <code>' + esc(variant_id or 'غير مضاف') + '</code>')
     rows = [[btn('🧩 Pandora Digital', 'supplierpandora:' + pid, style='primary')],
             [btn('🌐 رابط API', 'supplierset:endpoint:' + pid), btn('🔑 مفتاح API', 'supplierset:key:' + pid)],
-            [btn('🆔 معرف المنتج', 'supplierset:service:' + pid)],
+            [btn('🆔 Product ID', 'supplierset:service:' + pid), btn('🧩 Variant ID', 'supplierset:variant:' + pid)],
             [btn('🧪 اختبار الاتصال', 'suppliertest:' + pid)],
             [btn('✅ تفعيل الربط' if not enabled else '⏸ إيقاف الربط', 'suppliertoggle:' + pid, style='success' if not enabled else 'danger')],
             [btn('🗑 حذف الربط', 'supplierdelete:' + pid, style='danger')],
@@ -2322,6 +2449,8 @@ def pay_with_wallet(api, cid, pid):
         return
     order_id = add_order(cid, pid, 'wallet', 'paid', usd=paid_usd, sar=cost)
     send(api, G['ADMIN_ID'], f'🛒 <b>طلب مدفوع من المحفظة #{order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+    if fulfill_paid_order(api, order_id):
+        return
     send(api, cid, tr(cid, '✅ تم الدفع من المحفظة وإرسال الطلب للإدارة.', '✅ Paid from your wallet and the order was sent to administration.') + f'\n\n{tr(cid, "الرصيد المتبقي", "Remaining balance")}: {remaining:.2f} SAR', menu(cid))
 
 
@@ -2359,6 +2488,8 @@ def check_crypto_order(api, cid, order_id):
     if changed:
         saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
         send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
+        if fulfill_paid_order(api, saved_order_id):
+            return
     send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
 
 
@@ -2575,6 +2706,8 @@ def action(api, cid, value):
             customer = row[0]
             if decision == 'accept':
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                if fulfill_paid_order(api, oid):
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
@@ -2623,36 +2756,36 @@ def action(api, cid, value):
         supplier_api_editor(api, cid, arg)
     elif prefix == 'supplierpandora' and cid == G['ADMIN_ID']:
         pid = LEGACY.get(arg, arg)
-        endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
         endpoint = 'https://api.pandoradigital.shop/api/v1'
         provider = 'pandora'
         with db() as conn:
-            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider) VALUES (?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
-                         (pid, endpoint, api_key, service_id, enabled, provider))
+            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
+                         (pid, endpoint, api_key, service_id, enabled, provider, variant_id))
         send(api, cid, '✅ تم اختيار <b>Pandora Digital</b> لهذا المنتج.\n\nأضف الآن مفتاح API ثم معرف المنتج لدى Pandora.')
         supplier_api_editor(api, cid, pid)
     elif prefix == 'supplierset' and cid == G['ADMIN_ID']:
         field, _, pid = arg.partition(':')
-        if field in ('endpoint', 'key', 'service'):
-            action_name = {'endpoint':'supplier_endpoint','key':'supplier_key','service':'supplier_service'}[field]
+        if field in ('endpoint', 'key', 'service', 'variant'):
+            action_name = {'endpoint':'supplier_endpoint','key':'supplier_key','service':'supplier_service','variant':'supplier_variant'}[field]
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, action_name, pid))
             prompt = {'endpoint':'أرسل رابط API الكامل، مثال: <code>https://example.com/api/order</code>',
                       'key':'أرسل مفتاح API. لن يظهر كاملًا بعد الحفظ.',
-                      'service':'أرسل معرف المنتج أو الخدمة لدى المورد.'}[field]
+                      'service':'أرسل Product ID لدى المورد.','variant':'أرسل Variant ID لدى المورد.'}[field]
             send(api, cid, '🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n' + prompt, kb([[btn('❌ إلغاء', 'supplierpick:' + pid)]]))
     elif prefix == 'suppliertest' and cid == G['ADMIN_ID']:
         supplier_test_connection(api, cid, arg)
     elif prefix == 'suppliertoggle' and cid == G['ADMIN_ID']:
         pid = LEGACY.get(arg, arg)
-        endpoint, api_key, service_id, enabled, provider = supplier_api_row(pid)
-        if not endpoint or not api_key:
-            send(api, cid, '⚠️ أضف رابط API والمفتاح أولًا.')
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
+        if not endpoint or not api_key or (provider == 'pandora' and (not service_id or not variant_id)):
+            send(api, cid, '⚠️ أضف رابط API والمفتاح وProduct ID وVariant ID أولًا.' if provider == 'pandora' else '⚠️ أضف رابط API والمفتاح أولًا.')
             supplier_api_editor(api, cid, pid)
         else:
             with db() as conn:
-                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider) VALUES (?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
-                             (pid, endpoint, api_key, service_id, 0 if enabled else 1, provider))
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
+                             (pid, endpoint, api_key, service_id, 0 if enabled else 1, provider, variant_id))
             supplier_api_editor(api, cid, pid)
     elif prefix == 'supplierdelete' and cid == G['ADMIN_ID']:
         pid = LEGACY.get(arg, arg)
@@ -3491,6 +3624,8 @@ def action(api, cid, value):
             customer = row[0]
             if decision == 'accept':
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                if fulfill_paid_order(api, oid):
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
