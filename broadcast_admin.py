@@ -50,7 +50,15 @@ def install(namespace):
 
     def prepare_broadcast_tables(conn):
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_drafts (cid INTEGER PRIMARY KEY, token TEXT NOT NULL, pid TEXT NOT NULL, photo TEXT, awaiting_photo INTEGER NOT NULL DEFAULT 0)')
+        draft_cols = {row[1] for row in conn.execute('PRAGMA table_info(product_broadcast_drafts)').fetchall()}
+        if 'template' not in draft_cols:
+            conn.execute('ALTER TABLE product_broadcast_drafts ADD COLUMN template TEXT')
+        if 'awaiting_field' not in draft_cols:
+            conn.execute('ALTER TABLE product_broadcast_drafts ADD COLUMN awaiting_field TEXT')
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_jobs (token TEXT PRIMARY KEY, pid TEXT NOT NULL, photo TEXT, status TEXT NOT NULL)')
+        job_cols = {row[1] for row in conn.execute('PRAGMA table_info(product_broadcast_jobs)').fetchall()}
+        if 'template' not in job_cols:
+            conn.execute('ALTER TABLE product_broadcast_jobs ADD COLUMN template TEXT')
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_recipients (token TEXT NOT NULL, cid INTEGER NOT NULL, status TEXT NOT NULL DEFAULT "pending", PRIMARY KEY(token,cid))')
         conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
         conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
@@ -58,14 +66,22 @@ def install(namespace):
     def draft(cid):
         with sg['db']() as conn:
             prepare_broadcast_tables(conn)
-            row = conn.execute('SELECT token,pid,photo,awaiting_photo FROM product_broadcast_drafts WHERE cid=?', (cid,)).fetchone()
-        return dict(zip(('token', 'pid', 'photo', 'awaiting_photo'), row)) if row else None
+            row = conn.execute('SELECT token,pid,photo,awaiting_photo,template,awaiting_field FROM product_broadcast_drafts WHERE cid=?', (cid,)).fetchone()
+        if not row:
+            return None
+        result = dict(zip(('token', 'pid', 'photo', 'awaiting_photo', 'template', 'awaiting_field'), row))
+        try:
+            result['template'] = json.loads(result.get('template') or '{}')
+        except Exception:
+            result['template'] = {}
+        return result
 
     def save_draft(cid, pending):
         with sg['db']() as conn:
             prepare_broadcast_tables(conn)
-            conn.execute('INSERT OR REPLACE INTO product_broadcast_drafts VALUES (?,?,?,?,?)',
-                         (cid, pending['token'], pending['pid'], pending.get('photo'), int(bool(pending.get('awaiting_photo')))))
+            conn.execute('INSERT OR REPLACE INTO product_broadcast_drafts(cid,token,pid,photo,awaiting_photo,template,awaiting_field) VALUES (?,?,?,?,?,?,?)',
+                         (cid, pending['token'], pending['pid'], pending.get('photo'), int(bool(pending.get('awaiting_photo'))),
+                          json.dumps(pending.get('template') or {}, ensure_ascii=False), pending.get('awaiting_field')))
 
     def clear_draft(cid):
         with sg['db']() as conn:
@@ -129,43 +145,77 @@ def install(namespace):
             return []
         return sg['admin_category_product_ids'](category)
 
-    def product_card(api, cid, pid, photo=None):
+    def default_template():
+        return {
+            'product_icon': '🛍',
+            'qty_icon': '📦',
+            'price_icon': '💵',
+            'button_text': '🛒 شراء الآن',
+        }
+
+    def merged_template(value=None):
+        result = default_template()
+        if isinstance(value, dict):
+            for key in result:
+                if value.get(key):
+                    result[key] = str(value[key])[:40]
+        return result
+
+    def product_card(api, cid, pid, photo=None, template=None):
+        """Compact product broadcast card, intentionally short like a stock alert."""
+        tpl = merged_template(template)
         title = sg['esc'](sg['name'](pid, cid))
-        description = sg['esc'](sg['product_description'](pid, cid))
-        status = '✅ متوفر' if sg['in_stock'](pid) else '🔴 غير متوفر حاليًا'
-        details = sg['info_block'](pid, cid)
-        if sg['info_display'](pid)[0]:
-            details = details.partition('\n')[2]
-        price_line = '💵 <b>السعر:</b> ' + sg['esc'](sg['price'](cid, pid))
-        info = price_line + ('\n' + details if details else '')
-        body = f'🛍 <b>{title}</b>\n\n{info}\n{status}'
-        if description:
-            body += '\n\n' + description
-        buttons = [[sg['btn']('الذهاب للمنتج', 'item:' + pid,
-                              sg['ui_icon']('ui_broadcast_product'), style='primary')]]
-        if sg['can_order'](pid):
-            buttons.append([sg['btn']('شراء مباشرة', 'buy:' + pid,
-                                      sg['ui_icon']('ui_broadcast_buy'), style='success')])
-        photo = photo or sg['saved_product_photo'](pid)
-        if photo:
-            # Telegram photo captions are limited to 1024 characters. Keep the
-            # purchase buttons on the same message as the picture.
-            caption = f'🛍 <b>{title}</b>\n\n{info}\n{status}'
-            if description and len(caption) + len(description) < 850:
-                caption += '\n\n' + description
-            result = api.call('sendPhoto', chat_id=cid, photo=photo,
-                              caption=caption, parse_mode='HTML', reply_markup=sg['kb'](buttons))
-            if result:
-                return result
-        return sg['send'](api, cid, body[:3900], sg['kb'](buttons))
+        cp = sg['custom_product'](pid)
+        qty = cp[6] if cp else None
+        if qty is None:
+            try:
+                info = sg['info_block'](pid, cid)
+                import re
+                match = re.search(r'(?:الكمية|Quantity)\\D*(\\d+)', info or '', re.I)
+                qty = int(match.group(1)) if match else None
+            except Exception:
+                qty = None
+        body = f"{sg['esc'](tpl['product_icon'])} <b>{title}</b>"
+        if qty is not None:
+            body += f"\\n{sg['esc'](tpl['qty_icon'])} <b>الكمية:</b> {qty}"
+        else:
+            body += f"\\n{sg['esc'](tpl['qty_icon'])} <b>الحالة:</b> متوفر"
+        body += f"\\n{sg['esc'](tpl['price_icon'])} <b>السعر:</b> {sg['esc'](sg['price'](cid, pid))}"
+        button = sg['btn'](tpl['button_text'], 'item:' + pid, sg['ui_icon']('ui_broadcast_buy'), style='success')
+        return sg['send'](api, cid, body, sg['kb']([[button]]))
 
     def product_preview(api, cid, pending):
-        product_card(api, cid, pending['pid'], pending.get('photo'))
+        template = merged_template(pending.get('template'))
+        product_card(api, cid, pending['pid'], template=template)
         token = pending['token']
-        return sg['send'](api, cid, 'هذه معاينة الإعلان. يمكنك إضافة صورة خاصة لهذا الإرسال أو تأكيده.',
-                          sg['kb']([[sg['btn']('🖼️ إضافة صورة للإعلان', 'pbphoto:' + token)],
-                                    [sg['btn']('✅ تأكيد الإرسال', 'pbconfirm:' + token, style='success')],
-                                    [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]]))
+        return sg['send'](
+            api, cid,
+            'هذه معاينة بطاقة المنتج المختصرة. تقدر تعدل الأيقونات ونص زر الشراء ثم ترسلها للجميع.',
+            sg['kb']([
+                [sg['btn']('✏️ تعديل البطاقة', 'pbeditor:' + token, style='primary')],
+                [sg['btn']('✅ إرسال للجميع', 'pbconfirm:' + token, style='success')],
+                [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]
+            ])
+        )
+
+    def product_editor(api, cid, pending):
+        tpl = merged_template(pending.get('template'))
+        token = pending['token']
+        text = (
+            '✏️ <b>تعديل بطاقة المنتج</b>\\n\\n'
+            f"أيقونة المنتج: {sg['esc'](tpl['product_icon'])}\\n"
+            f"أيقونة الكمية: {sg['esc'](tpl['qty_icon'])}\\n"
+            f"أيقونة السعر: {sg['esc'](tpl['price_icon'])}\\n"
+            f"نص الزر: {sg['esc'](tpl['button_text'])}"
+        )
+        return sg['send'](api, cid, text, sg['kb']([
+            [sg['btn']('🛍 تعديل أيقونة المنتج', 'pbedit:product_icon:' + token)],
+            [sg['btn']('📦 تعديل أيقونة الكمية', 'pbedit:qty_icon:' + token)],
+            [sg['btn']('💵 تعديل أيقونة السعر', 'pbedit:price_icon:' + token)],
+            [sg['btn']('🛒 تعديل نص زر الشراء', 'pbedit:button_text:' + token)],
+            [sg['btn']('👁 معاينة', 'pbpreview:' + token, style='primary')],
+            [sg['btn']('↩️ رجوع', 'pbpreview:' + token)]
+        ]))
 
     def deliver_queued(api):
         with sg['db']() as conn:
@@ -174,8 +224,12 @@ def install(namespace):
             # Mark this specific persisted job cancelled so a Railway restart will
             # not resume it and keep sending progress/completion notifications.
             conn.execute('UPDATE product_broadcast_jobs SET status="cancelled" WHERE token=? AND status IN ("queued","running")', ('0ef24b184fc7',))
-            jobs = conn.execute('SELECT token,pid,photo FROM product_broadcast_jobs WHERE status IN ("queued","running") ORDER BY rowid').fetchall()
-        for token, pid, photo in jobs:
+            jobs = conn.execute('SELECT token,pid,photo,template FROM product_broadcast_jobs WHERE status IN ("queued","running") ORDER BY rowid').fetchall()
+        for token, pid, photo, template_json in jobs:
+            try:
+                job_template = json.loads(template_json or '{}')
+            except Exception:
+                job_template = {}
             with sg['db']() as conn:
                 conn.execute('UPDATE product_broadcast_jobs SET status="running" WHERE token=?', (token,))
                 recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid', (token,))]
@@ -184,7 +238,7 @@ def install(namespace):
 
             def deliver_product(user_id):
                 try:
-                    result = product_card(api, user_id, pid, photo)
+                    result = product_card(api, user_id, pid, photo, job_template)
                 except Exception as exc:
                     print('Product delivery error:', type(exc).__name__, str(exc)[:200], flush=True)
                     result = None
@@ -231,7 +285,7 @@ def install(namespace):
     DELIVERY_WORKER = deliver_queued
 
     def action(api, cid, value):
-        if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbphoto:', 'pbconfirm:')) and cid != admin_id:
+        if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbphoto:', 'pbconfirm:', 'pbeditor:', 'pbedit:', 'pbpreview:')) and cid != admin_id:
             return namespace['show_home'](api, cid)
         if cid == admin_id and value == 'admin:product_broadcast':
             PRODUCT_BROADCAST.pop(cid, None)
@@ -248,9 +302,42 @@ def install(namespace):
             if not valid or not sg['product_visible'](pid):
                 return categories(api, cid)
             token = uuid.uuid4().hex[:12]
-            pending = {'token': token, 'pid': pid}
+            pending = {'token': token, 'pid': pid, 'template': default_template()}
             save_draft(cid, pending)
             return product_preview(api, cid, pending)
+        if cid == admin_id and value.startswith('pbeditor:'):
+            pending = draft(cid)
+            token = value.split(':', 1)[1]
+            if not pending or pending['token'] != token:
+                return categories(api, cid)
+            return product_editor(api, cid, pending)
+        if cid == admin_id and value.startswith('pbpreview:'):
+            pending = draft(cid)
+            token = value.split(':', 1)[1]
+            if not pending or pending['token'] != token:
+                return categories(api, cid)
+            pending['awaiting_field'] = None
+            save_draft(cid, pending)
+            return product_preview(api, cid, pending)
+        if cid == admin_id and value.startswith('pbedit:'):
+            bits = value.split(':', 2)
+            if len(bits) != 3:
+                return categories(api, cid)
+            field, token = bits[1], bits[2]
+            if field not in ('product_icon', 'qty_icon', 'price_icon', 'button_text'):
+                return categories(api, cid)
+            pending = draft(cid)
+            if not pending or pending['token'] != token:
+                return categories(api, cid)
+            pending['awaiting_field'] = field
+            save_draft(cid, pending)
+            label = {
+                'product_icon': 'أيقونة المنتج',
+                'qty_icon': 'أيقونة الكمية',
+                'price_icon': 'أيقونة السعر',
+                'button_text': 'نص زر الشراء',
+            }[field]
+            return sg['send'](api, cid, f'أرسل الآن <b>{label}</b> الجديدة.', sg['kb']([[sg['btn']('❌ إلغاء التعديل', 'pbeditor:' + token)]]))
         if cid == admin_id and value.startswith('pbphoto:'):
             pending = draft(cid)
             if not pending or pending['token'] != value.split(':', 1)[1]:
@@ -276,7 +363,8 @@ def install(namespace):
                 return sg['send'](api, cid, 'المنتج مخفي الآن. لم يتم الإرسال.')
             with sg['db']() as conn:
                 prepare_broadcast_tables(conn)
-                conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs VALUES (?,?,?,"queued")', (token, pid, pending.get('photo')))
+                conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs(token,pid,photo,status,template) VALUES (?,?,?,"queued",?)',
+                             (token, pid, pending.get('photo'), json.dumps(merged_template(pending.get('template')), ensure_ascii=False)))
                 conn.executemany('INSERT OR IGNORE INTO product_broadcast_recipients(token,cid) VALUES (?,?)',
                                  [(token, user_id) for user_id in set(_users()) - {admin_id}])
                 conn.execute('DELETE FROM product_broadcast_drafts WHERE cid=? AND token=?', (cid, token))
@@ -387,6 +475,22 @@ def install(namespace):
     def handle_receipt(api, message):
         cid = message.get('chat', {}).get('id')
         pending = draft(cid) if cid == admin_id else None
+        if pending and pending.get('awaiting_field'):
+            field = pending['awaiting_field']
+            raw = (message.get('text') or message.get('caption') or '').strip()
+            if not raw:
+                sg['send'](api, cid, 'أرسل قيمة نصية أو إيموجي للتعديل.')
+                return True
+            tpl = merged_template(pending.get('template'))
+            if field == 'button_text':
+                tpl[field] = raw[:40]
+            else:
+                tpl[field] = raw[:12]
+            pending['template'] = tpl
+            pending['awaiting_field'] = None
+            save_draft(cid, pending)
+            sg['send'](api, cid, '✅ تم التعديل.')
+            return product_editor(api, cid, pending) or True
         if pending and pending.get('awaiting_photo'):
             photos = message.get('photo') or []
             if not photos:
