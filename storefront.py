@@ -78,6 +78,38 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
     conn.execute('CREATE TABLE IF NOT EXISTS description_emoji (pid TEXT, lang TEXT, plain TEXT NOT NULL, html TEXT NOT NULL, PRIMARY KEY(pid,lang))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS content_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
+    if not conn.execute("SELECT 1 FROM content_migrations WHERE key='concise_product_descriptions_v1'").fetchone():
+        rows = conn.execute('SELECT pid,name FROM admin_products').fetchall()
+        for product_pid, product_name in rows:
+            low = (product_name or '').lower()
+            ar_desc = ''
+            en_desc = ''
+            if 'youtube' in low and ('family' in low or 'دعوة' in product_name or 'عائل' in product_name):
+                ar_desc = 'YouTube Premium دعوة عائلية لمدة شهر.\nتفعيل على حسابك الشخصي.'
+                en_desc = 'YouTube Premium family invitation for 1 month.\nActivated on your personal account.'
+            elif 'youtube' in low and ('full' in low or 'private' in low or 'كامل' in product_name or 'خاص' in product_name):
+                ar_desc = 'YouTube Premium حساب كامل خاص لمدة شهر.\nالحساب للاستخدام الشخصي.'
+                en_desc = 'YouTube Premium private full account for 1 month.\nFor personal use.'
+            elif 'crunchy' in low and ('profile' in low or 'ملف' in product_name):
+                ar_desc = 'Crunchyroll ملف خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
+                en_desc = 'Crunchyroll private profile for 1 month.\nFor personal use.'
+            elif 'crunchy' in low and ('7d' in low or '7 day' in low or '7 أيام' in product_name or '7 ايام' in product_name):
+                ar_desc = 'Crunchyroll حساب كامل لمدة 7 أيام.\nجاهز للاستخدام.'
+                en_desc = 'Crunchyroll full account for 7 days.\nReady to use.'
+            elif 'crunchy' in low and ('1m' in low or 'month' in low or 'شهر' in product_name):
+                ar_desc = 'Crunchyroll حساب كامل لمدة شهر.\nجاهز للاستخدام.'
+                en_desc = 'Crunchyroll full account for 1 month.\nReady to use.'
+            elif 'shahid' in low or 'شاهد' in product_name:
+                ar_desc = 'Shahid VIP اشتراك خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
+                en_desc = 'Shahid VIP private subscription for 1 month.\nFor personal use.'
+            else:
+                ar_desc = 'منتج ' + product_name + '.\nيتم التسليم بعد تأكيد الطلب.'
+                en_desc = product_name + ' product.\nDelivered after order confirmation.'
+            conn.execute('UPDATE admin_products SET description=? WHERE pid=?', (ar_desc[:1500], product_pid))
+            conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)',
+                         (product_pid, 'description', 'en', en_desc[:1500]))
+        conn.execute("INSERT OR REPLACE INTO content_migrations(key,applied_at) VALUES ('concise_product_descriptions_v1', datetime('now'))")
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
     icon_cols={row[1] for row in conn.execute('PRAGMA table_info(product_info_icons)').fetchall()}
