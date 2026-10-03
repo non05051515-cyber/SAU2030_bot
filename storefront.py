@@ -194,7 +194,7 @@ def amount(pid, currency='SAR', source_price=None):
 
 
 def price(cid, pid, currency=None, source_price=None):
-    currency = currency or prefs(cid)[1]
+    currency = currency or 'USD'
     value = amount(pid, currency, source_price)
     if value is None:
         return tr(cid, 'يُحدد عبر الدعم', 'Contact support for price')
@@ -227,6 +227,21 @@ def wallet_debit(cid, value):
         updated = (current - value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         conn.execute('UPDATE wallets SET balance_sar=? WHERE cid=?', (str(updated), cid))
     return updated
+
+
+def auto_translate(text, target='en'):
+    text = (text or '').strip()
+    if not text:
+        return text
+    try:
+        import chatgpt_extension
+        language = 'English' if target == 'en' else 'Arabic'
+        prompt = 'Translate the following digital-store product text to ' + language + '. Return only the translation and preserve product names, numbers, punctuation, and line breaks:\n\n' + text
+        translated = chatgpt_extension.ask_model(G.get('ADMIN_ID', 0), prompt)
+        return (translated or text).strip()
+    except Exception as exc:
+        print('Auto translation error:', type(exc).__name__, flush=True)
+        return text
 
 
 def crypto_call(method, **data):
