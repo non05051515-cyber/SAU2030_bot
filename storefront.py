@@ -1627,10 +1627,10 @@ def compact_name(pid, cid=0):
     low_full = full.lower().replace('-', ' ').replace('_', ' ')
 
     # Preserve distinctive ChatGPT product identifiers so similar plans remain clear.
-    if '4b' in low_full.replace(' ', '') or '4 b' in low_full:
+    if 'apple pay' in low_full or 'applepay' in low_full:
         if language == 'ar':
-            return '4B • شهر خاص' if ('خاص' in full or 'private' in low_full) else '4B • شهر'
-        return '4B • Private 1M' if ('خاص' in full or 'private' in low_full) else '4B • 1M'
+            return 'Apple Pay • شهر خاص' if ('خاص' in full or 'private' in low_full) else 'Apple Pay • شهر'
+        return 'Apple Pay • Private 1M' if ('خاص' in full or 'private' in low_full) else 'Apple Pay • 1M'
     if 'upi' in low_full or 'ubi' in low_full:
         tag = 'UPI' if 'upi' in low_full else 'UBI'
         if language == 'ar':
