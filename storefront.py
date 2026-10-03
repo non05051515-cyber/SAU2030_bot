@@ -597,7 +597,10 @@ def product_stock(pid):
 
 def info_icon(pid,field,fallback):
     with db() as conn:
-        row=conn.execute('SELECT custom_emoji_id,fallback_emoji FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
+        if field in ('price','stock'):
+            row=conn.execute('SELECT custom_emoji_id,fallback_emoji FROM product_info_icons WHERE pid=? AND field=?',('__global__',field)).fetchone()
+        else:
+            row=conn.execute('SELECT custom_emoji_id,fallback_emoji FROM product_info_icons WHERE pid=? AND field=?',(LEGACY.get(pid,pid),field)).fetchone()
     if not row: return fallback
     if not row[0]: return esc(row[1] or fallback)
     return '<tg-emoji emoji-id="'+esc(row[0])+'">'+esc(row[1] or fallback)+'</tg-emoji>'
@@ -616,7 +619,10 @@ def admin_info_menu(api,cid,category_id=None):
         custom_ids=[r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?',(category_id,)).fetchall()] if category_id else []
     if category_id is None:
         cats=[(pid,p['name']) for pid,p in G['PRODUCTS'].items()]+custom_cats
-        rows=[[btn(label,'infocat:'+pid)] for pid,label in cats]
+        rows=[
+            [btn('💵 أيقونة السعر — لجميع المنتجات','infoicon:price:__global__',style='success')],
+            [btn('📦 أيقونة الكمية — لجميع المنتجات','infoicon:stock:__global__',style='success')],
+        ] + [[btn(label,'infocat:'+pid)] for pid,label in cats]
     else:
         ids=admin_category_product_ids(category_id)
         rows=[[btn(name(pid,cid),'infopick:'+pid)] for pid in ids]
@@ -627,7 +633,6 @@ def admin_info_editor(api,cid,pid):
     sp,ss,sw,w=info_display(pid)
     rows=[[btn(('✅ ' if sp else '❌ ')+'السعر','infotoggle:price:'+pid),btn(('✅ ' if ss else '❌ ')+'الكمية','infotoggle:stock:'+pid)],
           [btn(('✅ ' if sw else '❌ ')+'الضمان','infotoggle:warranty:'+pid),btn('✏️ نص الضمان','infowarranty:'+pid)],
-          [btn('💵 أيقونة السعر','infoicon:price:'+pid),btn('📦 أيقونة الكمية','infoicon:stock:'+pid)],
           [btn('🛡 أيقونة الضمان','infoicon:warranty:'+pid)],
           [btn('↩️ منتج آخر','admin:info')],[btn('↩️ لوحة الإدارة','admin')]]
     send(api,cid,'🎛 <b>'+esc(name(pid,cid))+'</b>\n\nحدد المعلومات التي تريد ظهورها للعميل.\nالضمان الحالي: <b>'+esc(w or 'غير محدد')+'</b>',kb(rows))
@@ -783,7 +788,9 @@ def handle_info_icon(api,message):
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,'',normal))
                 conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
-            send(api,cid,'✅ تم حفظ '+esc(normal)+' كأيقونة عادية. إذا أردتها متحركة، اختر إيموجي تيليجرام المخصص وأرسله.',kb([[btn('↩️ إعدادات المنتج','infopick:'+pid)]]))
+            back_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
+            back_label = '↩️ إعدادات البيانات' if pid == '__global__' else '↩️ إعدادات المنتج'
+            send(api,cid,'✅ تم حفظ '+esc(normal)+' كأيقونة عادية. إذا أردتها متحركة، اختر إيموجي تيليجرام المخصص وأرسله.',kb([[btn(back_label,back_action)]]))
             return True
         send(api,cid,'لم أجد أيقونة. أرسل إيموجي واحدًا مثل ➕، أو اختر أيقونة متحركة مخصصة من إيموجي تيليجرام.',kb([[btn('❌ إلغاء','admin:info')]])); return True
     fallback='⭐'
@@ -796,7 +803,11 @@ def handle_info_icon(api,message):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,str(emoji),fallback))
         conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
-    admin_info_editor(api,cid,pid); return True
+    if pid == '__global__':
+        admin_info_menu(api,cid)
+    else:
+        admin_info_editor(api,cid,pid)
+    return True
 
 def handle_info_warranty(api,message):
     cid=message.get('chat',{}).get('id')
@@ -3742,7 +3753,9 @@ def action(api, cid, value):
         field, _, pid = arg.partition(':')
         if field in ('price','stock','warranty'):
             with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'info_icon',field+':'+pid))
-            send(api,cid,'أرسل الآن الأيقونة المتحركة المخصصة لهذا الحقل.',kb([[btn('❌ إلغاء','infopick:'+pid)]]))
+            target_text = 'لجميع المنتجات' if pid == '__global__' else 'لهذا المنتج'
+            cancel_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
+            send(api,cid,'أرسل الآن الأيقونة المتحركة '+target_text+'.',kb([[btn('❌ إلغاء',cancel_action)]]))
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
