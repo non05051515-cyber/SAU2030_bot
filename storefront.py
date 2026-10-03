@@ -99,7 +99,7 @@ def prefs(cid):
                 pass
             if language not in ('ar', 'en'):
                 language = 'ar'
-            conn.execute('INSERT INTO preferences(cid,lang,currency) VALUES (?,?,?)', (cid, language, 'SAR'))
+            conn.execute('INSERT INTO preferences(cid,lang,currency) VALUES (?,?,?)', (cid, language, 'USD'))
             row = (language, 'SAR')
     return row
 
@@ -966,20 +966,21 @@ def admin_prices(api, cid, category_id=None):
         rows += [[btn(label, 'pricecat:' + pid)] for pid, label in custom_categories]
     else:
         ids = admin_category_product_ids(category_id)
-        rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'SAR'), 'pricepick:' + pid)] for pid in ids]
+        rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'USD'), 'pricepick:' + pid)] for pid in ids]
     send(api, cid, '✏️ اختر القسم أو المنتج لتعديل سعر البيع:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def price_editor(api, cid, pid, currency=None):
     if cid != G['ADMIN_ID'] or (pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid)):
         return
-    if currency not in ('SAR', 'USD'):
-        return send(api, cid, esc(name(pid, cid)) + '\nالسعر الحالي: ' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD') + '\nاختر عملة السعر الجديد:', kb([[btn('ريال سعودي', 'priceedit:SAR:' + pid), btn('دولار', 'priceedit:USD:' + pid)], [btn('إلغاء', 'admin:prices')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
-        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'price', json.dumps([pid, currency])))
-    send(api, cid, 'أرسل سعر البيع النهائي بالعملة ' + currency + '\nمثال: 19.50\nسيُحوّل للعملة الأخرى تلقائيًا، دون إضافة هامش ربح فوقه.', kb([[btn('إلغاء', 'admin:prices')]]))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'price', json.dumps([pid, 'USD'])))
+    send(api, cid,
+         esc(name(pid, cid)) + '\nالسعر الحالي: <b>' + price(cid, pid, 'USD') +
+         '</b>\n\nأرسل سعر البيع النهائي بالدولار USD.\nمثال: <code>6.35</code>',
+         kb([[btn('إلغاء', 'admin:prices')]]))
 
 
 def handle_admin_price(api, message):
@@ -1003,14 +1004,14 @@ def handle_admin_price(api, message):
     except Exception:
         send(api, cid, 'أرسل سعرًا أكبر من صفر، برقم فقط وبحد أقصى منزلتين عشريتين. مثال: 19.50', kb([[btn('إلغاء', 'admin:prices')]]))
         return True
-    pid, currency = json.loads(state[0])
+    pid, _currency = json.loads(state[0])
+    usd = value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    sar = (usd * Decimal('3.75')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (pid, str(value), currency))
-        usd = value if currency == 'USD' else (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        sar = value if currency == 'SAR' else (value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        conn.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (pid, str(usd), 'USD'))
         conn.execute('UPDATE admin_products SET price_usd=?,price_sar=? WHERE pid=?', (str(usd), str(sar), pid))
         conn.execute("DELETE FROM admin_state WHERE cid=? AND action='price'", (cid,))
-    send(api, cid, '✅ تم حفظ سعر ' + esc(name(pid, cid)) + '\n' + price(cid, pid, 'SAR') + ' / ' + price(cid, pid, 'USD') + '\n\nافتح قائمة المنتجات من جديد لرؤية السعر الجديد.', kb([[btn('تعديل منتج آخر', 'admin:prices')], [btn('لوحة الإدارة', 'admin')]]))
+    send(api, cid, '✅ تم حفظ سعر ' + esc(name(pid, cid)) + '\n💵 <b>' + price(cid, pid, 'USD') + '</b>\n\nافتح قائمة المنتجات من جديد لرؤية السعر الجديد.', kb([[btn('تعديل منتج آخر', 'admin:prices')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
@@ -1261,7 +1262,7 @@ def admin_panel(api, cid):
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
-                             [btn('✏️ تعديل سعر منتج', 'admin:prices')],
+                             [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
@@ -2027,8 +2028,8 @@ def settings(api, cid, kind):
         rows = [[btn('العربية', 'setlang:ar'), btn('English', 'setlang:en')]]
         text = '🌐 اختر اللغة / Choose language'
     else:
-        rows = [[btn('🇸🇦 SAR — ريال سعودي', 'setcurrency:SAR'), btn('🇺🇸 USD — US Dollar', 'setcurrency:USD')]]
-        text = '💱 اختر العملة / Choose currency'
+        rows = [[btn('🇺🇸 USD — US Dollar', 'setcurrency:USD')]]
+        text = '💱 أسعار المنتجات ثابتة بالدولار USD\nيظهر التحويل للريال السعودي عند الدفع فقط.'
     send(api, cid, text, kb(rows + [nav(cid)]))
 
 
@@ -2170,7 +2171,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         else:
             status = tr(cid, '🟢 متوفر', '🟢 Available')
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
-        caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
+        caption += '💰 <b>' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
             caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
@@ -2891,7 +2892,8 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (arg, cid))
+            stored_value = arg if prefix == 'setlang' else 'USD'
+            conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
@@ -3071,8 +3073,8 @@ def settings(api, cid, kind):
         rows = [[btn('العربية', 'setlang:ar'), btn('English', 'setlang:en')]]
         text = '🌐 اختر اللغة / Choose language'
     else:
-        rows = [[btn('🇸🇦 SAR — ريال سعودي', 'setcurrency:SAR'), btn('🇺🇸 USD — US Dollar', 'setcurrency:USD')]]
-        text = '💱 اختر العملة / Choose currency'
+        rows = [[btn('🇺🇸 USD — US Dollar', 'setcurrency:USD')]]
+        text = '💱 أسعار المنتجات ثابتة بالدولار USD\nيظهر التحويل للريال السعودي عند الدفع فقط.'
     send(api, cid, text, kb(rows + [nav(cid)]))
 
 
@@ -3120,7 +3122,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
         else:
             status = tr(cid, '🟢 متوفر', '🟢 Available')
         caption = '<b>' + esc(name(pid, cid)) + '</b>\n\n'
-        caption += '💰 <b>' + price(cid, pid, 'SAR') + ' | ' + price(cid, pid, 'USD') + '</b>\n\n' + status
+        caption += '💰 <b>' + price(cid, pid, 'USD') + '</b>\n\n' + status
         if v.get('manual_delivery'):
             caption += '\n' + tr(cid, '✉️ يتم إرسال بيانات المنتج بعد تأكيد الدفع', '✉️ Product details are sent after payment confirmation')
         details = btn(tr(cid, '📋 التفاصيل', '📋 Details'), 'item:' + pid)
@@ -3768,7 +3770,8 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (arg, cid))
+            stored_value = arg if prefix == 'setlang' else 'USD'
+            conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
