@@ -94,6 +94,41 @@ def ask_model(cid, text):
     return answer
 
 
+def translate_text(text, target='en'):
+    """Stateless translation helper for store catalog text."""
+    text = (text or '').strip()
+    if not text:
+        return text
+    key = os.getenv("MIRAI_API_KEY", "").strip()
+    if not key:
+        return text
+    base = os.getenv("MIRAI_API_BASE", "https://api.miraiapi.com/v1").rstrip("/")
+    model = os.getenv("MIRAI_MODEL", "claude-opus-4.8")
+    language = 'English' if target == 'en' else 'Arabic'
+    payload = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You translate digital-store catalog text. Return only the translation, with no explanation."},
+            {"role": "user", "content": "Translate to " + language + ". Preserve product names, durations, numbers, punctuation, and line breaks:\n\n" + text}
+        ],
+        "max_tokens": 1000
+    }, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(base + "/chat/completions", payload, {
+        "Authorization": "Bearer " + key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "SAU2030Bot/translation",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            data = json.load(response)
+        result = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        return result or text
+    except Exception as exc:
+        print("Translation error:", type(exc).__name__)
+        return text
+
+
 def handle_chat_message(api, message):
     cid = message.get("chat", {}).get("id")
     if cid == s.G.get('ADMIN_ID'):
