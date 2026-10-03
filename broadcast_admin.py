@@ -339,6 +339,57 @@ def install(namespace):
             result = sg['send'](api, cid, '⏳ بدأ إرسال المنتج للمستخدمين. سأرسل لك عدد من وصلتهم الرسالة عند الانتهاء.')
             tick_product_broadcast(api)
             return result
+        if cid == admin_id and value == 'admin:supplierapi':
+            return sg['supplier_api_menu'](api, cid)
+        if cid == admin_id and value.startswith('suppliercat:'):
+            return sg['supplier_api_menu'](api, cid, value.split(':', 1)[1])
+        if cid == admin_id and value.startswith('supplierpick:'):
+            return sg['supplier_api_editor'](api, cid, value.split(':', 1)[1])
+        if cid == admin_id and value.startswith('supplierpandora:'):
+            pid = value.split(':', 1)[1]
+            endpoint, api_key, service_id, enabled, provider, variant_id = sg['supplier_api_row'](pid)
+            endpoint = 'https://api.pandoradigital.shop/api/v1'
+            provider = 'pandora'
+            with sg['db']() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
+                             (pid, endpoint, api_key, service_id, enabled, provider, variant_id))
+            sg['send'](api, cid, '✅ تم اختيار <b>Pandora Digital</b> لهذا المنتج.\n\nأضف الآن مفتاح API ثم Product ID وVariant ID.')
+            return sg['supplier_api_editor'](api, cid, pid)
+        if cid == admin_id and value.startswith('supplierset:'):
+            parts = value.split(':', 2)
+            if len(parts) == 3:
+                field, pid = parts[1], parts[2]
+                if field in ('endpoint', 'key', 'service', 'variant'):
+                    action_name = {'endpoint':'supplier_endpoint','key':'supplier_key','service':'supplier_service','variant':'supplier_variant'}[field]
+                    with sg['db']() as conn:
+                        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, action_name, pid))
+                    prompt = {
+                        'endpoint':'أرسل رابط API الكامل، مثال: <code>https://api.pandoradigital.shop/api/v1</code>',
+                        'key':'أرسل مفتاح API. لن يظهر كاملًا بعد الحفظ.',
+                        'service':'أرسل Product ID لدى المورد.',
+                        'variant':'أرسل Variant ID لدى المورد.'
+                    }[field]
+                    return sg['send'](api, cid, '🔌 <b>' + sg['esc'](sg['name'](pid, cid)) + '</b>\n\n' + prompt,
+                                      sg['kb']([[sg['btn']('❌ إلغاء', 'supplierpick:' + pid)]]))
+        if cid == admin_id and value.startswith('suppliertest:'):
+            return sg['supplier_test_connection'](api, cid, value.split(':', 1)[1])
+        if cid == admin_id and value.startswith('suppliertoggle:'):
+            pid = value.split(':', 1)[1]
+            endpoint, api_key, service_id, enabled, provider, variant_id = sg['supplier_api_row'](pid)
+            if not endpoint or not api_key or (provider == 'pandora' and (not service_id or not variant_id)):
+                sg['send'](api, cid, '⚠️ أضف رابط API والمفتاح وProduct ID وVariant ID أولًا.' if provider == 'pandora' else '⚠️ أضف رابط API والمفتاح أولًا.')
+                return sg['supplier_api_editor'](api, cid, pid)
+            with sg['db']() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
+                             (pid, endpoint, api_key, service_id, 0 if enabled else 1, provider, variant_id))
+            return sg['supplier_api_editor'](api, cid, pid)
+        if cid == admin_id and value.startswith('supplierdelete:'):
+            pid = value.split(':', 1)[1]
+            with sg['db']() as conn:
+                conn.execute('DELETE FROM supplier_api WHERE pid=?', (pid,))
+            sg['send'](api, cid, '✅ تم حذف ربط API لهذا المنتج.')
+            return sg['supplier_api_editor'](api, cid, pid)
+
         if cid == admin_id and value in ('admin:visibility', 'admin:chatgptvis'):
             return sg['visibility_categories'](api, cid)
         if cid == admin_id and value.startswith('viscat:'):
