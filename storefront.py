@@ -1776,7 +1776,9 @@ def category(api, cid, pid):
             if not product_visible(product_id):
                 continue
             sold_out = not available or int(stock or 0) <= 0
-            label = ('🔴 نفد | ' if sold_out else '') + name(product_id, cid) + ' | ' + price(cid, product_id)
+            qty = int(stock or 0)
+            label = name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
+            if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
@@ -2669,8 +2671,9 @@ def category(api, cid, pid):
         rows = []
         for v in choices:
             sold_out = not in_stock(v['id'])
-            status = '⏸ ' if v.get('review_required') else (tr(cid, '🔴 نفد | ', '🔴 SOLD OUT | ') if sold_out else '')
-            rows.append([btn(status + name(v['id'], cid) + ' | ' + price(cid, v['id']),
+            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
+            qty = product_stock(v['id'])
+            rows.append([btn(status + name(v['id'], cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, v['id']),
                              'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
