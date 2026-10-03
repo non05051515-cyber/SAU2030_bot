@@ -50,6 +50,8 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
+    conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfer_state (cid INTEGER PRIMARY KEY, step TEXT NOT NULL, recipient INTEGER, amount_sar TEXT)')
+    conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfers (id TEXT PRIMARY KEY, sender INTEGER NOT NULL, recipient INTEGER NOT NULL, amount_sar TEXT NOT NULL, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
@@ -1964,6 +1966,8 @@ def admin_icon_buttons(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     buttons = [btn(label, 'seticon:' + key, ui_icon(key)) for key, label in UI_ICON_LABELS.items()]
+    for row in payment_methods.methods(sys.modules[__name__]):
+        buttons.append(btn(row[1], 'seticon:pay_custom_' + str(row[0]), ui_icon('pay_custom_' + str(row[0]))))
     rows = [[button] for button in buttons]
     send(api, cid, '🔘 <b>أزرار المتجر</b>\n\nاختر الزر الذي تريد إضافة أيقونة متحركة له:',
          kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
@@ -1974,7 +1978,8 @@ def begin_icon_setup(api, cid, pid):
     custom_cat = custom_category(pid)
     cp = custom_product(pid)
     is_variant = pid in VARIANTS
-    if pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS and not custom_cat and not cp and not is_variant:
+    dynamic_payment = pid.startswith('pay_custom_') and pid[11:].isdigit()
+    if pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS and not custom_cat and not cp and not is_variant and not dynamic_payment:
         return admin_icons(api, cid)
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'icon', pid))
@@ -1986,6 +1991,9 @@ def begin_icon_setup(api, cid, pid):
         label = UI_ICON_LABELS[pid]
     elif custom_cat:
         label = custom_cat[1]
+    elif dynamic_payment:
+        row = payment_methods.get(sys.modules[__name__], pid[11:])
+        label = row[1] if row else pid
     else:
         label = cp[1]
     send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بـ <b>{esc(label)}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
@@ -2626,9 +2634,12 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '👛 <b>محفظة VEXA</b>\n\nرصيدك الحالي:', '👛 <b>VEXA Wallet</b>\n\nYour current balance:')
+    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
     text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
-    send(api, cid, text, kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'home')]))
+    rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
+             btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
+            [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
+    send(api, cid, text, kb(rows))
 
 
 def wallet_amounts(api, cid):
@@ -2637,12 +2648,13 @@ def wallet_amounts(api, cid):
         row = []
         for value in pair:
             usd = (Decimal(value) / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            row.append(btn(f'{value} {tr(cid, "ر.س", "SAR")} / {usd:.2f} USD', f'topup:{value}'))
+            row.append(btn(f'{value} {tr(cid, "ر.س", "SAR")} / {usd:.2f} USD', f'topup:{value}', style='success'))
         rows.append(row)
-    text = tr(cid, 'اختر مبلغ شحن المحفظة — جميع المبالغ معروضة بالريال والدولار:',
-              'Choose a wallet top-up amount — all amounts are shown in SAR and USD:')
-    rows.append([btn(tr(cid, '✏️ مبلغ اختياري بالدولار', '✏️ Custom amount in USD'), 'topupcustom')])
-    send(api, cid, text, kb(rows + [nav(cid, 'wallet')]))
+    text = tr(cid, 'اختر مبلغ إضافة الرصيد — جميع المبالغ معروضة بالريال والدولار:',
+              'Choose an add-funds amount — all amounts are shown in SAR and USD:')
+    rows.append([btn(tr(cid, 'مبلغ اختياري بالدولار', 'Custom amount in USD'), 'topupcustom', style='success')])
+    rows.append([btn(tr(cid, 'رجوع', 'Back'), 'wallet', style='primary')])
+    send(api, cid, text, kb(rows))
 
 
 def wallet_method(api, cid, value):
@@ -2653,9 +2665,73 @@ def wallet_method(api, cid, value):
     if value <= 0 or value > 5000:
         return wallet_amounts(api, cid)
     usd = (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, 'اختر طريقة شحن المحفظة:', 'Choose a wallet top-up method:') + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>'
-    send(api, cid, text, kb([[btn('Crypto Pay', f'topupcrypto:{value}', ui_icon('pay_cryptopay'))],
-                             [btn('Bybit / USDT', f'topupbybit:{value}', ui_icon('pay_bybit'))], nav(cid, 'wallet:topup')]))
+    text = tr(cid, 'اختر طريقة إضافة الرصيد:', 'Choose an add-funds method:') + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>'
+    rows = [
+        [btn('Crypto Pay', f'topupcrypto:{value}', ui_icon('pay_cryptopay'), style='success')],
+        [btn('Bybit / USDT', f'topupbybit:{value}', ui_icon('pay_bybit'), style='success')]
+    ]
+    for method in payment_methods.methods(sys.modules[__name__], True):
+        rows.append([btn(method[1], f'topupmanual:{method[0]}:{value}', ui_icon('pay_custom_' + str(method[0])), style='success')])
+    rows.append([btn(tr(cid, 'رجوع', 'Back'), 'wallet:topup', style='primary')])
+    send(api, cid, text, kb(rows))
+
+
+def wallet_transfer_begin(api, cid):
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO wallet_transfer_state(cid,step,recipient,amount_sar) VALUES (?,? ,NULL,NULL)', (cid, 'recipient'))
+    send(api, cid, tr(cid, 'أرسل رقم ID للمستخدم المستلم داخل البوت.', 'Send the recipient user ID inside the bot.'),
+         kb([[btn(tr(cid, 'إلغاء', 'Cancel'), 'wallet', style='primary')]]))
+
+
+def wallet_manual_topup(api, cid, method_id, value):
+    row = payment_methods.get(sys.modules[__name__], str(method_id))
+    if not row:
+        return wallet_method(api, cid, value)
+    try:
+        value = Decimal(value).quantize(Decimal('0.01'))
+    except Exception:
+        return wallet_amounts(api, cid)
+    topup_id = uuid.uuid4().hex[:16]
+    with db() as conn:
+        conn.execute('INSERT INTO wallet_topups VALUES (?,?,?,?,?,?)', (topup_id, cid, str(value), 'manual_' + str(method_id), None, 'pending'))
+    usd = (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    details = payment_methods.details(sys.modules[__name__], dict(zip(('name','holder','account'), row[1:4])))
+    text = details + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>\n\n' + tr(cid, 'بعد التحويل اضغط تم التحويل ثم أرسل صورة الإثبات.', 'After paying, tap Payment sent, then send the receipt image.')
+    send(api, cid, text, kb([[btn(tr(cid, 'تم التحويل', 'Payment sent'), 'topupreceipt:' + topup_id, style='success')],
+                             [btn(tr(cid, 'رجوع', 'Back'), f'topup:{value}', style='primary')]]))
+
+
+def wallet_transfer_confirm(api, cid, recipient, amount_sar):
+    try:
+        recipient = int(recipient)
+        amount = Decimal(str(amount_sar)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception:
+        return wallet(api, cid)
+    if recipient == cid or amount <= 0:
+        return wallet(api, cid)
+    transfer_id = uuid.uuid4().hex[:16]
+    with db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('INSERT OR IGNORE INTO wallets(cid,balance_sar) VALUES (?,?)', (cid, '0'))
+        conn.execute('INSERT OR IGNORE INTO wallets(cid,balance_sar) VALUES (?,?)', (recipient, '0'))
+        current = Decimal(conn.execute('SELECT balance_sar FROM wallets WHERE cid=?', (cid,)).fetchone()[0])
+        if current < amount:
+            conn.rollback()
+            return send(api, cid, tr(cid, 'رصيدك غير كافٍ لإتمام التحويل.', 'Your balance is insufficient for this transfer.'), kb([[btn(tr(cid, 'رجوع', 'Back'), 'wallet', style='primary')]]))
+        sender_new = (current - amount).quantize(Decimal('0.01'))
+        recipient_current = Decimal(conn.execute('SELECT balance_sar FROM wallets WHERE cid=?', (recipient,)).fetchone()[0])
+        recipient_new = (recipient_current + amount).quantize(Decimal('0.01'))
+        conn.execute('UPDATE wallets SET balance_sar=? WHERE cid=?', (str(sender_new), cid))
+        conn.execute('UPDATE wallets SET balance_sar=? WHERE cid=?', (str(recipient_new), recipient))
+        conn.execute('INSERT INTO wallet_transfers VALUES (?,?,?,?,?)', (transfer_id, cid, recipient, str(amount), now_saudi()))
+        conn.execute('DELETE FROM wallet_transfer_state WHERE cid=?', (cid,))
+        conn.commit()
+    usd = (amount / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    send(api, cid, tr(cid, 'تم تحويل الرصيد بنجاح.', 'Balance transferred successfully.') + f'\n<b>{amount:.2f} SAR / {usd:.2f} USD</b>', kb([[btn(tr(cid, 'الرجوع للمحفظة', 'Back to Wallet'), 'wallet', style='primary')]]))
+    try:
+        send(api, recipient, tr(recipient, 'تمت إضافة رصيد إلى محفظتك من مستخدم آخر.', 'Balance was added to your wallet by another user.') + f'\n<b>{amount:.2f} SAR / {usd:.2f} USD</b>', menu(recipient))
+    except Exception:
+        pass
 
 
 def wallet_crypto(api, cid, value):
@@ -2680,9 +2756,10 @@ def wallet_bybit(api, cid, value):
     with db() as conn:
         conn.execute('INSERT INTO wallet_topups VALUES (?,?,?,?,?,?)', (topup_id, cid, str(value), 'bybit', None, 'pending'))
     send(api, cid, tr(cid, 'اختر طريقة إرسال USDT عبر Bybit:', 'Choose how to send USDT via Bybit:'),
-         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id, ui_icon('pay_bybitid'))],
-             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id, ui_icon('pay_trc20'))],
-             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id, ui_icon('pay_bep20'))], nav(cid, f'topup:{value}')]))
+         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id, ui_icon('pay_bybitid'), style='success')],
+             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id, ui_icon('pay_trc20'), style='success')],
+             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id, ui_icon('pay_bep20'), style='success')],
+             [btn(tr(cid, 'رجوع', 'Back'), f'topup:{value}', style='primary')]]))
 
 
 def wallet_bybit_details(api, cid, method, topup_id):
@@ -2885,6 +2962,55 @@ def receipt(api, message):
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
+    with db() as conn:
+        transfer_state = conn.execute('SELECT step,recipient,amount_sar FROM wallet_transfer_state WHERE cid=?', (cid,)).fetchone()
+    if transfer_state:
+        raw = (message.get('text') or '').strip()
+        if raw.startswith('/'):
+            with db() as conn:
+                conn.execute('DELETE FROM wallet_transfer_state WHERE cid=?', (cid,))
+            return False
+        step, recipient, amount_sar = transfer_state
+        if step == 'recipient':
+            try:
+                target = int(raw)
+            except Exception:
+                send(api, cid, tr(cid, 'أرسل رقم ID صحيح فقط.', 'Send a valid numeric user ID only.'))
+                return True
+            if target == cid:
+                send(api, cid, tr(cid, 'لا يمكنك التحويل لنفس حسابك.', 'You cannot transfer to your own account.'))
+                return True
+            try:
+                known_users = {int(x) for x in json.loads(USERS_PATH.read_text(encoding='utf-8'))}
+            except Exception:
+                known_users = set()
+            if target not in known_users:
+                send(api, cid, tr(cid, 'هذا المستخدم غير موجود داخل البوت.', 'This user is not registered in the bot.'))
+                return True
+            with db() as conn:
+                conn.execute('UPDATE wallet_transfer_state SET step=?,recipient=? WHERE cid=?', ('amount', target, cid))
+            send(api, cid, tr(cid, 'أرسل مبلغ التحويل بالدولار USD، مثال: 5', 'Send the transfer amount in USD, e.g. 5'))
+            return True
+        if step == 'amount':
+            try:
+                usd_value = Decimal(raw.replace(',', '.')).quantize(Decimal('0.01'))
+            except Exception:
+                send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط.', 'Send the amount as a number only.'))
+                return True
+            if usd_value <= 0:
+                send(api, cid, tr(cid, 'المبلغ يجب أن يكون أكبر من صفر.', 'Amount must be greater than zero.'))
+                return True
+            sar_value = (usd_value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if wallet_balance(cid) < sar_value:
+                send(api, cid, tr(cid, 'رصيدك غير كافٍ.', 'Your balance is insufficient.'))
+                return True
+            with db() as conn:
+                conn.execute('UPDATE wallet_transfer_state SET amount_sar=? WHERE cid=?', (str(sar_value), cid))
+            send(api, cid,
+                 tr(cid, 'تأكيد التحويل إلى المستخدم:', 'Confirm transfer to user:') + f' <code>{recipient}</code>\n<b>{usd_value:.2f} USD / {sar_value:.2f} SAR</b>',
+                 kb([[btn(tr(cid, 'تأكيد التحويل', 'Confirm transfer'), f'wallettransferconfirm:{recipient}:{sar_value}', style='success')],
+                     [btn(tr(cid, 'إلغاء', 'Cancel'), 'wallet', style='primary')]]))
+            return True
     with db() as conn:
         custom = conn.execute('SELECT 1 FROM custom_topup_state WHERE cid=?', (cid,)).fetchone()
     if custom:
@@ -3205,7 +3331,15 @@ def action(api, cid, value):
         elif arg in VARIANTS: item(api, cid, arg)
         else: category(api, cid, arg)
     elif prefix == 'wallet':
-        wallet_amounts(api, cid) if arg == 'topup' else wallet(api, cid)
+        if arg == 'topup': wallet_amounts(api, cid)
+        elif arg == 'transfer': wallet_transfer_begin(api, cid)
+        else: wallet(api, cid)
+    elif prefix == 'wallettransferconfirm':
+        recipient, _, amount_sar = arg.partition(':')
+        wallet_transfer_confirm(api, cid, recipient, amount_sar)
+    elif prefix == 'topupmanual':
+        method_id, _, value = arg.partition(':')
+        wallet_manual_topup(api, cid, method_id, value)
     elif prefix == 'topup':
         wallet_method(api, cid, arg)
     elif prefix == 'topupcustom':
@@ -3577,9 +3711,12 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '👛 <b>محفظة VEXA</b>\n\nرصيدك الحالي:', '👛 <b>VEXA Wallet</b>\n\nYour current balance:')
+    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
     text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
-    send(api, cid, text, kb([[btn(tr(cid, '➕ شحن المحفظة', '➕ Top up wallet'), 'wallet:topup')], nav(cid, 'home')]))
+    rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
+             btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
+            [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
+    send(api, cid, text, kb(rows))
 
 
 def wallet_amounts(api, cid):
@@ -3588,12 +3725,13 @@ def wallet_amounts(api, cid):
         row = []
         for value in pair:
             usd = (Decimal(value) / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            row.append(btn(f'{value} {tr(cid, "ر.س", "SAR")} / {usd:.2f} USD', f'topup:{value}'))
+            row.append(btn(f'{value} {tr(cid, "ر.س", "SAR")} / {usd:.2f} USD', f'topup:{value}', style='success'))
         rows.append(row)
-    text = tr(cid, 'اختر مبلغ شحن المحفظة — جميع المبالغ معروضة بالريال والدولار:',
-              'Choose a wallet top-up amount — all amounts are shown in SAR and USD:')
-    rows.append([btn(tr(cid, '✏️ مبلغ اختياري بالدولار', '✏️ Custom amount in USD'), 'topupcustom')])
-    send(api, cid, text, kb(rows + [nav(cid, 'wallet')]))
+    text = tr(cid, 'اختر مبلغ إضافة الرصيد — جميع المبالغ معروضة بالريال والدولار:',
+              'Choose an add-funds amount — all amounts are shown in SAR and USD:')
+    rows.append([btn(tr(cid, 'مبلغ اختياري بالدولار', 'Custom amount in USD'), 'topupcustom', style='success')])
+    rows.append([btn(tr(cid, 'رجوع', 'Back'), 'wallet', style='primary')])
+    send(api, cid, text, kb(rows))
 
 
 def wallet_method(api, cid, value):
@@ -3604,9 +3742,15 @@ def wallet_method(api, cid, value):
     if value <= 0 or value > 5000:
         return wallet_amounts(api, cid)
     usd = (value / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, 'اختر طريقة شحن المحفظة:', 'Choose a wallet top-up method:') + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>'
-    send(api, cid, text, kb([[btn('Crypto Pay', f'topupcrypto:{value}', ui_icon('pay_cryptopay'))],
-                             [btn('Bybit / USDT', f'topupbybit:{value}', ui_icon('pay_bybit'))], nav(cid, 'wallet:topup')]))
+    text = tr(cid, 'اختر طريقة إضافة الرصيد:', 'Choose an add-funds method:') + f'\n\n<b>{value:.2f} SAR / {usd:.2f} USD</b>'
+    rows = [
+        [btn('Crypto Pay', f'topupcrypto:{value}', ui_icon('pay_cryptopay'), style='success')],
+        [btn('Bybit / USDT', f'topupbybit:{value}', ui_icon('pay_bybit'), style='success')]
+    ]
+    for method in payment_methods.methods(sys.modules[__name__], True):
+        rows.append([btn(method[1], f'topupmanual:{method[0]}:{value}', ui_icon('pay_custom_' + str(method[0])), style='success')])
+    rows.append([btn(tr(cid, 'رجوع', 'Back'), 'wallet:topup', style='primary')])
+    send(api, cid, text, kb(rows))
 
 
 def wallet_crypto(api, cid, value):
@@ -3631,9 +3775,10 @@ def wallet_bybit(api, cid, value):
     with db() as conn:
         conn.execute('INSERT INTO wallet_topups VALUES (?,?,?,?,?,?)', (topup_id, cid, str(value), 'bybit', None, 'pending'))
     send(api, cid, tr(cid, 'اختر طريقة إرسال USDT عبر Bybit:', 'Choose how to send USDT via Bybit:'),
-         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id, ui_icon('pay_bybitid'))],
-             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id, ui_icon('pay_trc20'))],
-             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id, ui_icon('pay_bep20'))], nav(cid, f'topup:{value}')]))
+         kb([[btn('Bybit Pay', 'topupsend:bybitid:' + topup_id, ui_icon('pay_bybitid'), style='success')],
+             [btn('USDT • TRON (TRC20)', 'topupsend:trc20:' + topup_id, ui_icon('pay_trc20'), style='success')],
+             [btn('USDT • BSC (BEP20)', 'topupsend:bep20:' + topup_id, ui_icon('pay_bep20'), style='success')],
+             [btn(tr(cid, 'رجوع', 'Back'), f'topup:{value}', style='primary')]]))
 
 
 def wallet_bybit_details(api, cid, method, topup_id):
@@ -3824,6 +3969,55 @@ def receipt(api, message):
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
+    with db() as conn:
+        transfer_state = conn.execute('SELECT step,recipient,amount_sar FROM wallet_transfer_state WHERE cid=?', (cid,)).fetchone()
+    if transfer_state:
+        raw = (message.get('text') or '').strip()
+        if raw.startswith('/'):
+            with db() as conn:
+                conn.execute('DELETE FROM wallet_transfer_state WHERE cid=?', (cid,))
+            return False
+        step, recipient, amount_sar = transfer_state
+        if step == 'recipient':
+            try:
+                target = int(raw)
+            except Exception:
+                send(api, cid, tr(cid, 'أرسل رقم ID صحيح فقط.', 'Send a valid numeric user ID only.'))
+                return True
+            if target == cid:
+                send(api, cid, tr(cid, 'لا يمكنك التحويل لنفس حسابك.', 'You cannot transfer to your own account.'))
+                return True
+            try:
+                known_users = {int(x) for x in json.loads(USERS_PATH.read_text(encoding='utf-8'))}
+            except Exception:
+                known_users = set()
+            if target not in known_users:
+                send(api, cid, tr(cid, 'هذا المستخدم غير موجود داخل البوت.', 'This user is not registered in the bot.'))
+                return True
+            with db() as conn:
+                conn.execute('UPDATE wallet_transfer_state SET step=?,recipient=? WHERE cid=?', ('amount', target, cid))
+            send(api, cid, tr(cid, 'أرسل مبلغ التحويل بالدولار USD، مثال: 5', 'Send the transfer amount in USD, e.g. 5'))
+            return True
+        if step == 'amount':
+            try:
+                usd_value = Decimal(raw.replace(',', '.')).quantize(Decimal('0.01'))
+            except Exception:
+                send(api, cid, tr(cid, 'أرسل المبلغ كرقم فقط.', 'Send the amount as a number only.'))
+                return True
+            if usd_value <= 0:
+                send(api, cid, tr(cid, 'المبلغ يجب أن يكون أكبر من صفر.', 'Amount must be greater than zero.'))
+                return True
+            sar_value = (usd_value * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if wallet_balance(cid) < sar_value:
+                send(api, cid, tr(cid, 'رصيدك غير كافٍ.', 'Your balance is insufficient.'))
+                return True
+            with db() as conn:
+                conn.execute('UPDATE wallet_transfer_state SET amount_sar=? WHERE cid=?', (str(sar_value), cid))
+            send(api, cid,
+                 tr(cid, 'تأكيد التحويل إلى المستخدم:', 'Confirm transfer to user:') + f' <code>{recipient}</code>\n<b>{usd_value:.2f} USD / {sar_value:.2f} SAR</b>',
+                 kb([[btn(tr(cid, 'تأكيد التحويل', 'Confirm transfer'), f'wallettransferconfirm:{recipient}:{sar_value}', style='success')],
+                     [btn(tr(cid, 'إلغاء', 'Cancel'), 'wallet', style='primary')]]))
+            return True
     with db() as conn:
         custom = conn.execute('SELECT 1 FROM custom_topup_state WHERE cid=?', (cid,)).fetchone()
     if custom:
@@ -4138,7 +4332,15 @@ def action(api, cid, value):
         elif arg in VARIANTS: item(api, cid, arg)
         else: category(api, cid, arg)
     elif prefix == 'wallet':
-        wallet_amounts(api, cid) if arg == 'topup' else wallet(api, cid)
+        if arg == 'topup': wallet_amounts(api, cid)
+        elif arg == 'transfer': wallet_transfer_begin(api, cid)
+        else: wallet(api, cid)
+    elif prefix == 'wallettransferconfirm':
+        recipient, _, amount_sar = arg.partition(':')
+        wallet_transfer_confirm(api, cid, recipient, amount_sar)
+    elif prefix == 'topupmanual':
+        method_id, _, value = arg.partition(':')
+        wallet_manual_topup(api, cid, method_id, value)
     elif prefix == 'topup':
         wallet_method(api, cid, arg)
     elif prefix == 'topupcustom':
