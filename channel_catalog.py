@@ -93,26 +93,23 @@ def local_photo(api, target, image_path, text, markup):
 
 
 def post(api, pid, target=CHANNEL, kind='stock'):
-    if pid not in product_ids() or not state(pid)['available']: return None
+    """Publish a compact product card with a direct deep-link purchase button."""
+    if pid not in product_ids() or not state(pid)['available']:
+        return None
     st = state(pid)
-    heading = '✨ منتج جديد' if kind == 'new' else '🔥 توفر الآن'
-    text = heading + ' | VEXA STORE\n\n' + s.name(pid, 0)[:150]
-    text += '\n\n💵 السعر: ' + s.price(0, pid, 'SAR')
-    text += '\n📦 الكمية المتوفرة: ' + str(st['quantity']) if st['quantity'] is not None else '\n✅ متوفر'
-    description = s.product_description(pid, 0)
-    if description: text += '\n\n' + description[:250]
-    text += '\n\nاضغط الزر لعرض المنتج وشرائه 👇'
-    markup = {'inline_keyboard': [[{'text': '🛒 شراء الآن', 'url': link(pid), 'style': 'success'}]]}
-    photo = s.saved_product_photo(pid)
-    if photo:
-        result = api.call('sendPhoto', chat_id=target, photo=photo, caption=text, reply_markup=markup)
-        if result: return result
-    if photo is None:
-        image_path = s.VARIANTS.get(pid, {}).get('image') or ('assets/' + pid + '.png' if pid in s.G['PRODUCTS'] else None)
-        if image_path:
-            result = local_photo(api, target, image_path, text, markup)
-            if result: return result
-    return api.call('sendMessage', chat_id=target, text=text, reply_markup=markup)
+    product_name = s.name(pid, 0)[:150]
+    text = '🛍 <b>' + s.esc(product_name) + '</b>'
+    if st['quantity'] is not None:
+        text += '\n📦 <b>الكمية:</b> ' + str(st['quantity'])
+    else:
+        text += '\n📦 <b>الحالة:</b> متوفر'
+    text += '\n💵 <b>السعر:</b> ' + s.esc(s.price(0, pid, 'SAR'))
+    markup = {'inline_keyboard': [[{
+        'text': '🛒 شراء الآن',
+        'url': link(pid),
+        'style': 'success'
+    }]]}
+    return api.call('sendMessage', chat_id=target, text=text, parse_mode='HTML', reply_markup=markup)
 
 
 def scan():
@@ -193,7 +190,11 @@ def install(namespace):
         verb = parts[1]
         if verb == 'group':
             clear_draft(cid)
-            return s.send(api, cid, '👥 النشر في المجموعة @SAU2030_k', s.kb([[s.btn('✉️ إرسال رسالة للمجموعة', 'channel:group_message', style='primary')], [s.btn('↩️ لوحة الإدارة', 'admin')]]))
+            return s.send(api, cid, '👥 النشر في المجموعة @SAU2030_k', s.kb([
+                [s.btn('🛍 إرسال منتج', 'channel:group_products', style='success')],
+                [s.btn('✉️ إرسال رسالة للمجموعة', 'channel:group_message', style='primary')],
+                [s.btn('↩️ لوحة الإدارة', 'admin')]
+            ]))
         if verb == 'group_message':
             with db() as c:
                 c.execute("INSERT OR REPLACE INTO channel_message_drafts VALUES (?,?,NULL,'group_waiting')", (cid,uuid.uuid4().hex))
@@ -210,6 +211,40 @@ def install(namespace):
                 return s.send(api, cid, '✅ تم نشر الرسالة في المجموعة.', s.kb([[s.btn('↩️ المجموعة', 'channel:group')]]))
             with db() as c: c.execute("UPDATE channel_message_drafts SET status='group_ready' WHERE cid=? AND token=?", (cid,token))
             return s.send(api, cid, '❌ تعذر النشر. تأكد أن البوت مشرف بالمجموعة ولديه صلاحية إرسال الرسائل.', s.kb([[s.btn('🔄 إعادة المحاولة', 'channel:group_send:'+token)], [s.btn('❌ إلغاء', 'channel:group')]]))
+        if verb == 'group_products':
+            clear_draft(cid)
+            page = max(0, int(parts[2])) if len(parts) > 2 and parts[2].isdigit() else 0
+            ids = [pid for pid in product_ids() if state(pid)['available']]
+            rows = [[s.btn(s.name(pid, 0)[:55], 'channel:group_preview:' + pid)] for pid in ids[page*8:(page+1)*8]]
+            nav = []
+            if page:
+                nav.append(s.btn('⬅️ السابق', f'channel:group_products:{page-1}'))
+            if (page+1)*8 < len(ids):
+                nav.append(s.btn('التالي ➡️', f'channel:group_products:{page+1}'))
+            if nav:
+                rows.append(nav)
+            rows.append([s.btn('↩️ خيارات المجموعة', 'channel:group')])
+            return s.send(api, cid, '🛍 اختر المنتج الذي تريد نشره في المجموعة:', s.kb(rows))
+        if verb == 'group_preview':
+            if len(parts) < 3:
+                return
+            pid = parts[2]
+            if not post(api, pid, target=cid):
+                return s.send(api, cid, 'هذا المنتج غير متوفر للنشر.')
+            return s.send(api, cid, 'نشر هذه البطاقة المختصرة في المجموعة؟', s.kb([
+                [s.btn('✅ نشر في المجموعة', 'channel:group_product_send:' + pid, style='success')],
+                [s.btn('↩️ رجوع', 'channel:group_products')]
+            ]))
+        if verb == 'group_product_send':
+            if len(parts) < 3:
+                return
+            pid = parts[2]
+            result = post(api, pid, target='@SAU2030_k')
+            return s.send(
+                api, cid,
+                '✅ تم نشر المنتج في المجموعة.' if result else '❌ تعذر نشر المنتج. تأكد أن البوت مشرف في المجموعة ولديه صلاحية إرسال الرسائل.',
+                s.kb([[s.btn('↩️ المجموعة', 'channel:group')]])
+            )
         if verb == 'list':
             clear_draft(cid)
             return s.send(api, cid, '📣 النشر في @VEXA2030\n\nاختر نوع الإرسال:', s.kb([
