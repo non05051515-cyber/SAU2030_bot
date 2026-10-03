@@ -147,6 +147,8 @@ def install(namespace):
 
     def default_template():
         return {
+            'title': '',
+            'note': '',
             'product_icon': '🛍',
             'qty_icon': '📦',
             'price_icon': '💵',
@@ -156,15 +158,16 @@ def install(namespace):
     def merged_template(value=None):
         result = default_template()
         if isinstance(value, dict):
+            limits = {'title': 120, 'note': 220, 'product_icon': 12, 'qty_icon': 12, 'price_icon': 12, 'button_text': 40}
             for key in result:
-                if value.get(key):
-                    result[key] = str(value[key])[:40]
+                if key in value and value.get(key) is not None:
+                    result[key] = str(value.get(key) or '')[:limits[key]]
         return result
 
     def product_card(api, cid, pid, photo=None, template=None):
         """Compact product broadcast card, intentionally short like a stock alert."""
         tpl = merged_template(template)
-        title = sg['esc'](sg['name'](pid, cid))
+        title = sg['esc'](tpl.get('title') or sg['name'](pid, cid))
         cp = sg['custom_product'](pid)
         qty = cp[6] if cp else None
         if qty is None:
@@ -186,13 +189,14 @@ def install(namespace):
 
     def product_preview(api, cid, pending):
         template = merged_template(pending.get('template'))
-        product_card(api, cid, pending['pid'], template=template)
+        product_card(api, cid, pending['pid'], pending.get('photo'), template=template)
         token = pending['token']
         return sg['send'](
             api, cid,
-            'هذه معاينة بطاقة المنتج المختصرة. تقدر تعدل الأيقونات ونص زر الشراء ثم ترسلها للجميع.',
+            'هذه معاينة بطاقة المنتج. عدّل الكلام أو الأيقونات أو أضف صورة، ثم أرسلها للجميع.',
             sg['kb']([
                 [sg['btn']('✏️ تعديل البطاقة', 'pbeditor:' + token, style='primary')],
+                [sg['btn']('🖼️ إضافة/تغيير صورة', 'pbphoto:' + token)],
                 [sg['btn']('✅ إرسال للجميع', 'pbconfirm:' + token, style='success')],
                 [sg['btn']('❌ إلغاء', 'admin:product_broadcast')]
             ])
@@ -209,10 +213,13 @@ def install(namespace):
             f"نص الزر: {sg['esc'](tpl['button_text'])}"
         )
         return sg['send'](api, cid, text, sg['kb']([
+            [sg['btn']('📝 تعديل عنوان الإعلان', 'pbedit:title:' + token)],
+            [sg['btn']('➕ إضافة/تعديل كلام مختصر', 'pbedit:note:' + token)],
             [sg['btn']('🛍 تعديل أيقونة المنتج', 'pbedit:product_icon:' + token)],
             [sg['btn']('📦 تعديل أيقونة الكمية', 'pbedit:qty_icon:' + token)],
             [sg['btn']('💵 تعديل أيقونة السعر', 'pbedit:price_icon:' + token)],
             [sg['btn']('🛒 تعديل نص زر الشراء', 'pbedit:button_text:' + token)],
+            [sg['btn']('🖼️ إضافة/تغيير صورة', 'pbphoto:' + token)],
             [sg['btn']('👁 معاينة', 'pbpreview:' + token, style='primary')],
             [sg['btn']('↩️ رجوع', 'pbpreview:' + token)]
         ]))
@@ -324,7 +331,7 @@ def install(namespace):
             if len(bits) != 3:
                 return categories(api, cid)
             field, token = bits[1], bits[2]
-            if field not in ('product_icon', 'qty_icon', 'price_icon', 'button_text'):
+            if field not in ('title', 'note', 'product_icon', 'qty_icon', 'price_icon', 'button_text'):
                 return categories(api, cid)
             pending = draft(cid)
             if not pending or pending['token'] != token:
@@ -332,6 +339,8 @@ def install(namespace):
             pending['awaiting_field'] = field
             save_draft(cid, pending)
             label = {
+                'title': 'عنوان الإعلان',
+                'note': 'الكلام المختصر',
                 'product_icon': 'أيقونة المنتج',
                 'qty_icon': 'أيقونة الكمية',
                 'price_icon': 'أيقونة السعر',
@@ -482,7 +491,11 @@ def install(namespace):
                 sg['send'](api, cid, 'أرسل قيمة نصية أو إيموجي للتعديل.')
                 return True
             tpl = merged_template(pending.get('template'))
-            if field == 'button_text':
+            if field == 'title':
+                tpl[field] = raw[:120]
+            elif field == 'note':
+                tpl[field] = raw[:220]
+            elif field == 'button_text':
                 tpl[field] = raw[:40]
             else:
                 tpl[field] = raw[:12]
