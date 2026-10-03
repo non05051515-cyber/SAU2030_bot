@@ -1950,6 +1950,16 @@ def compact_name(pid, cid=0):
             return tag + ' • شهر واحد'
         return tag + ' • 1M'
 
+    # YouTube names are often long; keep the plan type visible so price/stock
+    # never get pushed off the Telegram button.
+    if 'youtube' in low_full:
+        if 'family invitation' in low_full or 'دعوة' in full or 'عائل' in full:
+            return 'دعوة عائلية • شهر' if language == 'ar' else 'Family Invitation • 1M'
+        if 'private full account' in low_full or 'full account' in low_full or 'حساب كامل' in full or 'حساب خاص' in full:
+            return 'حساب كامل خاص • شهر' if language == 'ar' else 'Private Full Account • 1M'
+        if 'premium' in low_full:
+            return 'YouTube Premium • شهر' if language == 'ar' else 'YouTube Premium • 1M'
+
     preset = (en if language == 'en' else ar).get(pid)
     if preset:
         return preset
@@ -1979,7 +1989,12 @@ def compact_name(pid, cid=0):
     for old, new in replacements:
         label = label.replace(old, new)
     label = ' '.join(label.split()).strip(' -—|•:')
-    return label or full
+    label = label or full
+    # Telegram renders inline-button text on one line. Limit only the product
+    # name segment so the USD price and stock segment remain fully visible.
+    if len(label) > 28:
+        label = label[:27].rstrip(' -—|•:') + '…'
+    return label
 
 
 def product_button_icon(pid, cid=0):
@@ -2227,7 +2242,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💰 ' + price(cid, product_id) + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
@@ -3178,7 +3193,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💰 ' + price(cid, product_id) + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), 'danger' if sold_out else 'success')])
@@ -3191,7 +3206,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
             qty = product_stock(v['id'])
-            rows.append([btn(status + compact_name(v['id'], cid) + ' | 💰 ' + price(cid, v['id']) + ' | ' + compact_stock(qty),
+            rows.append([btn(status + compact_name(v['id'], cid) + ' | 💵 ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
