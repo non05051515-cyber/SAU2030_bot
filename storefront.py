@@ -1386,11 +1386,14 @@ def begin_icon_setup(api, cid, pid):
         return home(api, cid)
     custom_cat = custom_category(pid)
     cp = custom_product(pid)
-    if pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS and not custom_cat and not cp:
+    is_variant = pid in VARIANTS
+    if pid not in G['PRODUCTS'] and pid not in UI_ICON_LABELS and not custom_cat and not cp and not is_variant:
         return admin_icons(api, cid)
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'icon', pid))
-    if pid in G['PRODUCTS']:
+    if is_variant:
+        label = name(pid, cid)
+    elif pid in G['PRODUCTS']:
         label = G['PRODUCTS'][pid]['name']
     elif pid in UI_ICON_LABELS:
         label = UI_ICON_LABELS[pid]
