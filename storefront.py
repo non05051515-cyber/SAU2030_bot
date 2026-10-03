@@ -1163,7 +1163,7 @@ def admin_panel(api, cid):
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
-                             [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
+                             [btn('🎞 أيقونة متحركة للمنتج', 'admin:icons', style='success')],
                              [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
@@ -1324,7 +1324,7 @@ def admin_icons(api, cid):
         icon = ui_icon(key)
         buttons.append(btn(label, 'seticon:' + key, icon))
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nيمكنك الآن اختيار الأقسام والمنتجات الجديدة أيضًا، ثم إرسال الأيقونة للبوت.',
+    send(api, cid, '🎞 <b>أيقونة متحركة بجانب اسم المنتج</b>\n\nاختر المنتج أو القسم، ثم أرسل إيموجي تيليجرام المخصص المتحرك نفسه. سيُحفظ كـ Custom Emoji ويظهر متحركًا داخل الزر بجانب الاسم.',
          kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
