@@ -1256,7 +1256,7 @@ def admin_panel(api, cid):
         review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
         activity_count = total_activity_count(conn)
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
-    send(api, cid, text, kb([[btn('📦 الطلبات الأخيرة', 'admin:orders', style='primary')],
+    send(api, cid, text, kb([[btn('🔔 الطلبات الجديدة / التسليم', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
@@ -1264,7 +1264,6 @@ def admin_panel(api, cid):
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
-                             [btn('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
@@ -1418,13 +1417,7 @@ def pandora_fulfill_order(api, internal_order_id):
 
 
 def fulfill_paid_order(api, order_id):
-    with db() as conn:
-        row = conn.execute('SELECT pid FROM orders WHERE id=?', (order_id,)).fetchone()
-    if not row:
-        return False
-    endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(row[0])
-    if enabled and provider == 'pandora':
-        return pandora_fulfill_order(api, order_id)
+    # Manual fulfillment mode: supplier integrations are intentionally disabled.
     return False
 
 
@@ -1517,18 +1510,21 @@ def admin_orders(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     with db() as conn:
-        rows = conn.execute('SELECT id,cid,pid,method,usd,sar,status,created_at FROM orders ORDER BY rowid DESC LIMIT 15').fetchall()
+        rows = conn.execute('SELECT id,cid,pid,method,usd,sar,status,created_at FROM orders ORDER BY rowid DESC LIMIT 20').fetchall()
+        pending_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status IN ("review","paid")').fetchone()[0]
     if not rows:
         return send(api, cid, '📦 لا توجد طلبات مسجلة حتى الآن.', kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
-    status_names = {'paid': '✅ مدفوع', 'review': '⏳ مراجعة', 'rejected': '❌ مرفوض'}
-    parts = ['📦 <b>آخر الطلبات</b>']
-    review_buttons = []
+    status_names = {'paid': '🟢 بانتظار التسليم', 'review': '🟡 بانتظار مراجعة الدفع', 'rejected': '❌ مرفوض', 'delivered': '✅ تم التسليم'}
+    parts = [f'🔔 <b>الطلبات</b>\nبانتظار الإجراء: <b>{pending_count}</b>']
+    action_buttons = []
     for oid, user_id, pid, method, usd, sar, status, created in rows:
         parts.append(f'\n<b>#{esc(oid)}</b> • {status_names.get(status, esc(status))}\n{esc(name(pid, cid))}\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", oid)}\n{esc(sar)} SAR / {esc(usd)} USD • {esc(method)}\nالعميل: {customer_link(user_id)} • {esc(created)}')
         if status == 'review':
-            review_buttons.append([btn('✅ قبول #' + oid, 'payreview:accept:' + oid, style='success'), btn('❌ رفض', 'payreview:reject:' + oid, style='danger')])
-    review_buttons.extend([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]])
-    send(api, cid, '\n'.join(parts), kb(review_buttons))
+            action_buttons.append([btn('✅ قبول #' + oid, 'payreview:accept:' + oid, style='success'), btn('❌ رفض', 'payreview:reject:' + oid, style='danger')])
+        elif status == 'paid':
+            action_buttons.append([btn('📤 تسليم #' + oid, 'orderdeliver:' + oid, style='success')])
+    action_buttons.extend([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]])
+    send(api, cid, '\n'.join(parts), kb(action_buttons))
 
 
 # Only the currently opened admin activity message is refreshed.
@@ -3651,6 +3647,19 @@ def action(api, cid, value):
             BROADCAST_PENDING.discard(cid)
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'orderdeliver' and cid == G['ADMIN_ID']:
+        oid = arg
+        with db() as conn:
+            row = conn.execute('SELECT cid,status,pid FROM orders WHERE id=?', (oid,)).fetchone()
+        if not row:
+            return send(api, cid, '⚠️ الطلب غير موجود.')
+        customer, status, pid = row
+        if status == 'delivered':
+            return send(api, cid, '✅ هذا الطلب تم تسليمه مسبقًا.')
+        if status != 'paid':
+            return send(api, cid, '⚠️ لازم يكون الطلب مدفوع قبل التسليم.')
+        G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
+        return send(api, cid, f'📤 <b>تسليم الطلب #{esc(oid)}</b>\n{esc(name(pid, cid))}\n\nأرسل الآن الرسالة أو الكود أو الصورة أو الملف، وسيتم إرساله مباشرة للعميل وتسجيل الطلب كمُسلّم.')
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
         with db() as conn:
