@@ -447,12 +447,20 @@ def install(namespace):
             if not raw:
                 sg['send'](api, cid, 'أرسل نص الإعلان في رسالة واحدة.')
                 return True
+            # Preserve Telegram custom/animated emoji IDs instead of flattening
+            # them into ordinary Unicode emoji when the ad text is saved.
+            source_message = message
+            if message.get('caption') is not None and not message.get('text'):
+                source_message = dict(message)
+                source_message['text'] = message.get('caption') or ''
+                source_message['entities'] = message.get('caption_entities') or []
+            formatted = sg['description_message_html'](source_message, raw[:3500])
             tpl = merged_template(pending.get('template'))
-            tpl['custom_text'] = raw[:3500]
+            tpl['custom_text'] = formatted
             pending['template'] = tpl
             pending['awaiting_field'] = None
             save_draft(cid, pending)
-            sg['send'](api, cid, '✅ تم حفظ نص الإعلان.')
+            sg['send'](api, cid, '✅ تم حفظ نص الإعلان مع الأيقونات المتحركة.')
             return product_preview(api, cid, pending) or True
         if pending and pending.get('awaiting_photo'):
             photos = message.get('photo') or []
