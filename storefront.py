@@ -55,6 +55,7 @@ def db():
     conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS product_stock_overrides (pid TEXT PRIMARY KEY, stock INTEGER NOT NULL DEFAULT 0)')
+    conn.execute('CREATE TABLE IF NOT EXISTS supplier_api (pid TEXT PRIMARY KEY, endpoint TEXT NOT NULL DEFAULT "", api_key TEXT NOT NULL DEFAULT "", service_id TEXT NOT NULL DEFAULT "", enabled INTEGER NOT NULL DEFAULT 0)')
     conn.execute('CREATE TABLE IF NOT EXISTS product_visibility (pid TEXT PRIMARY KEY, visible INTEGER NOT NULL CHECK(visible IN (0,1)))')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
@@ -790,6 +791,35 @@ def handle_admin_text(api, message):
     if cid != G.get('ADMIN_ID'):
         return False
     with db() as conn:
+        supplier_state = conn.execute("SELECT action,value FROM admin_state WHERE cid=? AND action IN ('supplier_endpoint','supplier_key','supplier_service')", (cid,)).fetchone()
+    if supplier_state:
+        action_name, pid = supplier_state
+        raw = (message.get('text') or '').strip()
+        if raw.startswith('/'):
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            return False
+        if not raw:
+            send(api, cid, 'أرسل قيمة صحيحة.')
+            return True
+        endpoint, api_key, service_id, enabled = supplier_api_row(pid)
+        if action_name == 'supplier_endpoint':
+            if not (raw.startswith('https://') or raw.startswith('http://')):
+                send(api, cid, 'أرسل رابط API يبدأ بـ <code>https://</code> أو <code>http://</code>.')
+                return True
+            endpoint = raw[:500]
+        elif action_name == 'supplier_key':
+            api_key = raw[:500]
+        else:
+            service_id = raw[:200]
+        with db() as conn:
+            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled) VALUES (?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,api_key=excluded.api_key,service_id=excluded.service_id,enabled=excluded.enabled',
+                         (LEGACY.get(pid,pid), endpoint, api_key, service_id, enabled))
+            conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        send(api, cid, '✅ تم حفظ إعداد API.')
+        supplier_api_editor(api, cid, pid)
+        return True
+    with db() as conn:
         qty_row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='stock_quantity'", (cid,)).fetchone()
     if qty_row:
         raw_qty = (message.get('text') or '').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
@@ -1223,12 +1253,62 @@ def admin_panel(api, cid):
                              [btn('✏️ تعديل سعر منتج', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
+                             [btn('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
+
+
+def supplier_api_row(pid):
+    pid = LEGACY.get(pid, pid)
+    with db() as conn:
+        row = conn.execute('SELECT endpoint,api_key,service_id,enabled FROM supplier_api WHERE pid=?', (pid,)).fetchone()
+    return row or ('', '', '', 0)
+
+
+def supplier_api_menu(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        custom_cats = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+    if category_id is None:
+        cats = [(pid, ('YouTube' if pid == 'youtube' else name(pid, cid))) for pid in G['PRODUCTS']]
+        cats += [(pid, label) for pid, label in custom_cats if pid not in G['PRODUCTS']]
+        rows = [[btn(label, 'suppliercat:' + pid)] for pid, label in cats]
+        send(api, cid, '🔌 <b>ربط API بالمنتج</b>\n\nاختر القسم:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+        return
+    ids = admin_category_product_ids(category_id)
+    rows = []
+    for pid in dict.fromkeys(ids):
+        endpoint, api_key, service_id, enabled = supplier_api_row(pid)
+        mark = '🟢 ' if enabled and endpoint and api_key else '⚪️ '
+        rows.append([btn(mark + name(pid, cid), 'supplierpick:' + pid)])
+    send(api, cid, '🔌 اختر المنتج الذي تريد ربطه بالمورد:', kb(rows + [[btn('↩️ الأقسام', 'admin:supplierapi')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+def supplier_api_editor(api, cid, pid):
+    if cid != G['ADMIN_ID']:
+        return
+    pid = LEGACY.get(pid, pid)
+    if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid):
+        return supplier_api_menu(api, cid)
+    endpoint, api_key, service_id, enabled = supplier_api_row(pid)
+    masked = ('••••••' + api_key[-4:]) if api_key else 'غير مضاف'
+    text = ('🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n'
+            'الحالة: <b>' + ('🟢 مفعّل' if enabled else '⚪️ غير مفعّل') + '</b>\n'
+            '🌐 رابط API: <code>' + esc(endpoint or 'غير مضاف') + '</code>\n'
+            '🔑 المفتاح: <code>' + esc(masked) + '</code>\n'
+            '🆔 معرف المنتج/الخدمة: <code>' + esc(service_id or 'غير مضاف') + '</code>')
+    rows = [[btn('🌐 رابط API', 'supplierset:endpoint:' + pid), btn('🔑 مفتاح API', 'supplierset:key:' + pid)],
+            [btn('🆔 معرف المنتج', 'supplierset:service:' + pid)],
+            [btn('✅ تفعيل الربط' if not enabled else '⏸ إيقاف الربط', 'suppliertoggle:' + pid, style='success' if not enabled else 'danger')],
+            [btn('🗑 حذف الربط', 'supplierdelete:' + pid, style='danger')],
+            [btn('↩️ المنتجات', 'admin:supplierapi')], [btn('↩️ لوحة الإدارة', 'admin')]]
+    send(api, cid, text, kb(rows))
 
 
 def admin_stats(api, cid):
@@ -2447,6 +2527,7 @@ def action(api, cid, value):
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
+        elif arg == 'supplierapi': supplier_api_menu(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
@@ -2512,6 +2593,37 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'stock_quantity', pid))
             send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n📦 الكمية الحالية: <b>' + esc(product_stock(pid)) + '</b>\n\nأرسل الكمية الجديدة كرقم، مثال: <code>4</code>.', kb([[btn('❌ إلغاء', 'stockpick:' + pid)]]))
+    elif prefix == 'suppliercat':
+        supplier_api_menu(api, cid, arg)
+    elif prefix == 'supplierpick':
+        supplier_api_editor(api, cid, arg)
+    elif prefix == 'supplierset' and cid == G['ADMIN_ID']:
+        field, _, pid = arg.partition(':')
+        if field in ('endpoint', 'key', 'service'):
+            action_name = {'endpoint':'supplier_endpoint','key':'supplier_key','service':'supplier_service'}[field]
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, action_name, pid))
+            prompt = {'endpoint':'أرسل رابط API الكامل، مثال: <code>https://example.com/api/order</code>',
+                      'key':'أرسل مفتاح API. لن يظهر كاملًا بعد الحفظ.',
+                      'service':'أرسل معرف المنتج أو الخدمة لدى المورد.'}[field]
+            send(api, cid, '🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n' + prompt, kb([[btn('❌ إلغاء', 'supplierpick:' + pid)]]))
+    elif prefix == 'suppliertoggle' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        endpoint, api_key, service_id, enabled = supplier_api_row(pid)
+        if not endpoint or not api_key:
+            send(api, cid, '⚠️ أضف رابط API والمفتاح أولًا.')
+            supplier_api_editor(api, cid, pid)
+        else:
+            with db() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled) VALUES (?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
+                             (pid, endpoint, api_key, service_id, 0 if enabled else 1))
+            supplier_api_editor(api, cid, pid)
+    elif prefix == 'supplierdelete' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        with db() as conn:
+            conn.execute('DELETE FROM supplier_api WHERE pid=?', (pid,))
+        send(api, cid, '✅ تم حذف ربط API لهذا المنتج.')
+        supplier_api_editor(api, cid, pid)
     elif prefix == 'txtcat':
         field, _, category_id = arg.partition(':')
         admin_text_menu(api, cid, field, category_id)
