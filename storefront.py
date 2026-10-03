@@ -1028,24 +1028,18 @@ def handle_admin_product(api, message):
         payload['count'] = count
         payload['index'] = 0
         next_action = 'add_product_name'
-        prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + ' بالعربي</b>.'
+        prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
     elif action_name == 'add_product_name':
         payload['current'] = {'name': raw[:100]}
         next_action = 'add_product_desc'
-        prompt = '📝 أرسل <b>وصف المنتج بالعربي</b> لـ <b>' + esc(payload['current']['name']) + '</b>.'
+        prompt = '📝 أرسل <b>وصف المنتج</b> لـ <b>' + esc(payload['current']['name']) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
     elif action_name == 'add_product_desc':
         payload['current']['description'] = raw[:1500]
         payload['current']['description_html'] = description_message_html(message, raw[:1500])
-        next_action = 'add_product_name_en'
-        prompt = '🌐 أرسل <b>اسم المنتج بالإنجليزي</b>.'
-    elif action_name == 'add_product_name_en':
-        payload['current']['name_en'] = raw[:100]
-        next_action = 'add_product_desc_en'
-        prompt = '🌐 أرسل <b>وصف المنتج بالإنجليزي</b>.'
-    elif action_name == 'add_product_desc_en':
-        payload['current']['description_en'] = raw[:1500]
+        payload['current']['name_en'] = auto_translate(payload['current']['name'], 'en')[:100]
+        payload['current']['description_en'] = auto_translate(payload['current']['description'], 'en')[:1500]
         next_action = 'add_product_price'
-        prompt = '💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
+        prompt = '✅ تم إنشاء النسخة الإنجليزية تلقائيًا.\n\n💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
     elif action_name == 'add_product_price':
         normalized = raw.replace('$','').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
         try:
@@ -1072,7 +1066,7 @@ def handle_admin_product(api, message):
         payload['index'] = int(payload.get('index', 0)) + 1
         if payload['index'] < int(payload['count']):
             next_action = 'add_product_name'
-            prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + ' بالعربي</b>.'
+            prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
         else:
             lines = ['✅ <b>راجع القسم قبل الحفظ</b>', '', '📁 ' + esc(payload['category_name'])]
             for i, product in enumerate(payload['products'], 1):
