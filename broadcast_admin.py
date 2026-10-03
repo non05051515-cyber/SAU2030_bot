@@ -169,6 +169,10 @@ def install(namespace):
     def deliver_queued(api):
         with sg['db']() as conn:
             prepare_broadcast_tables(conn)
+            # Emergency stop for the stuck product broadcast requested by the admin.
+            # Mark this specific persisted job cancelled so a Railway restart will
+            # not resume it and keep sending progress/completion notifications.
+            conn.execute('UPDATE product_broadcast_jobs SET status="cancelled" WHERE token=? AND status IN ("queued","running")', ('0ef24b184fc7',))
             jobs = conn.execute('SELECT token,pid,photo FROM product_broadcast_jobs WHERE status IN ("queued","running") ORDER BY rowid').fetchall()
         for token, pid, photo in jobs:
             with sg['db']() as conn:
