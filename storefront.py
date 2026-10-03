@@ -1979,6 +1979,15 @@ def compact_name(pid, cid=0):
             return tag + ' • شهر واحد'
         return tag + ' • 1M'
 
+    # Keep Crunchyroll product buttons LTR and compact so the visual order is
+    # always: product name | USD price | stock, even in the Arabic interface.
+    if 'ملف خاص' in full or ('private' in low_full and 'profile' in low_full):
+        return 'Private Profile • 1M'
+    if ('حساب كامل' in full and ('7 أيام' in full or '7 ايام' in full)) or ('full' in low_full and '7' in low_full):
+        return 'Full Acc • 7D'
+    if ('حساب كامل' in full and ('شهر' in full or '1m' in low_full)) or ('full acc' in low_full and '1m' in low_full):
+        return 'Full Acc • 1M'
+
     # YouTube names are often long; keep the plan type visible so price/stock
     # never get pushed off the Telegram button.
     if 'youtube' in low_full:
