@@ -1089,6 +1089,7 @@ def handle_admin_product(api, message):
         with db() as conn:
             if not payload.get('category_id'):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
+                conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
                 pid = 'custom_' + uuid.uuid4().hex[:10]
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -1566,7 +1567,7 @@ def home(api, cid):
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     text = tr(cid, f'👋 <b>أهلاً بك في VEXA STORE!</b>\n\n🆔 رقم العضوية: <code>{cid}</code>\n👤 حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n💳 الرصيد: <b>${balance_usd:.2f}</b>\n🛍 المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'👋 <b>Welcome to VEXA STORE!</b>\n\n🆔 Member ID: <code>{cid}</code>\n👤 Account: <a href="tg://user?id={cid}">Open profile</a>\n💳 Balance: <b>${balance_usd:.2f}</b>\n🛍 Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
-    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency')), btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
+    rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='danger'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='success')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals')), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'))], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='danger'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'))], [btn('Language / اللغة','settings:lang',ui_icon('ui_language'))]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'))])
     if cid == G.get('ADMIN_ID'):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
@@ -1879,10 +1880,13 @@ def checkout_totals(cid, pid):
 def summary(cid, pid):
     qty = product_options.selected(sys.modules[__name__], cid, pid)
     sar, usd, discount, code = checkout_totals(cid, pid)
-    text = esc(name(pid,cid)) + '\n💰 سعر الوحدة: ' + price(cid,pid) + f'\n🛍 الكمية: {qty}'
+    text = esc(name(pid,cid)) + '\n💵 سعر الوحدة: ' + price(cid,pid,'USD') + f'\n🛍 الكمية: {qty}'
     if code:
-        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount:.2f} SAR'
-    return text + f'\n✅ الإجمالي: {sar:.2f} SAR / {usd:.2f} USD'
+        discount_usd = (Decimal(str(discount)) / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount_usd:.2f} USD / {discount:.2f} SAR'
+    text += f'\n\n💲 <b>الإجمالي بالدولار:</b> {usd:.2f} USD'
+    text += f'\n🇸🇦 <b>الإجمالي بالريال:</b> {sar:.2f} SAR'
+    return text
 
 
 def wallet(api, cid):
@@ -2753,10 +2757,13 @@ def checkout_totals(cid, pid):
 def summary(cid, pid):
     qty = product_options.selected(sys.modules[__name__], cid, pid)
     sar, usd, discount, code = checkout_totals(cid, pid)
-    text = esc(name(pid,cid)) + '\n💰 سعر الوحدة: ' + price(cid,pid) + f'\n🛍 الكمية: {qty}'
+    text = esc(name(pid,cid)) + '\n💵 سعر الوحدة: ' + price(cid,pid,'USD') + f'\n🛍 الكمية: {qty}'
     if code:
-        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount:.2f} SAR'
-    return text + f'\n✅ الإجمالي: {sar:.2f} SAR / {usd:.2f} USD'
+        discount_usd = (Decimal(str(discount)) / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        text += '\n🎟 ' + esc(code) + f' — الخصم: {discount_usd:.2f} USD / {discount:.2f} SAR'
+    text += f'\n\n💲 <b>الإجمالي بالدولار:</b> {usd:.2f} USD'
+    text += f'\n🇸🇦 <b>الإجمالي بالريال:</b> {sar:.2f} SAR'
+    return text
 
 
 def wallet(api, cid):
