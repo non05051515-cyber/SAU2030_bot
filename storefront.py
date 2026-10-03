@@ -1469,8 +1469,8 @@ def supplier_api_editor(api, cid, pid):
             '🆔 Product ID: <code>' + esc(service_id or 'غير مضاف') + '</code>\n'
             '🧩 Variant ID: <code>' + esc(variant_id or 'غير مضاف') + '</code>')
     rows = [[btn('🧩 Pandora Digital', 'supplierpandora:' + pid, style='primary')],
-            [btn('🌐 رابط API', 'supplierset:endpoint:' + pid), btn('🔑 مفتاح API', 'supplierset:key:' + pid)],
-            [btn('🆔 Product ID', 'supplierset:service:' + pid), btn('🧩 Variant ID', 'supplierset:variant:' + pid)],
+            [btn(('✅ ' if endpoint else '❌ ') + 'رابط API', 'supplierset:endpoint:' + pid), btn(('✅ ' if api_key else '❌ ') + 'مفتاح API', 'supplierset:key:' + pid)],
+            [btn(('✅ ' if service_id else '❌ ') + 'Product ID', 'supplierset:service:' + pid), btn(('✅ ' if variant_id else '❌ ') + 'Variant ID', 'supplierset:variant:' + pid)],
             [btn('🧪 اختبار الاتصال', 'suppliertest:' + pid)],
             [btn('✅ تفعيل الربط' if not enabled else '⏸ إيقاف الربط', 'suppliertoggle:' + pid, style='success' if not enabled else 'danger')],
             [btn('🗑 حذف الربط', 'supplierdelete:' + pid, style='danger')],
@@ -2795,8 +2795,13 @@ def action(api, cid, value):
     elif prefix == 'suppliertoggle' and cid == G['ADMIN_ID']:
         pid = LEGACY.get(arg, arg)
         endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
-        if not endpoint or not api_key or (provider == 'pandora' and (not service_id or not variant_id)):
-            send(api, cid, '⚠️ أضف رابط API والمفتاح وProduct ID وVariant ID أولًا.' if provider == 'pandora' else '⚠️ أضف رابط API والمفتاح أولًا.')
+        missing = []
+        if not endpoint: missing.append('رابط API')
+        if not api_key: missing.append('مفتاح API')
+        if provider == 'pandora' and not service_id: missing.append('Product ID')
+        if provider == 'pandora' and not variant_id: missing.append('Variant ID')
+        if missing:
+            send(api, cid, '⚠️ تم حفظ الموجود، لكن باقي قبل التفعيل: <b>' + esc(' + '.join(missing)) + '</b>.\n\nإذا هدفك فقط تجربة المفتاح الآن اضغط 🧪 اختبار الاتصال.')
             supplier_api_editor(api, cid, pid)
         else:
             with db() as conn:
