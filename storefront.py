@@ -1081,23 +1081,43 @@ def admin_products_page(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     with db() as conn:
-        categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid DESC').fetchall()
-    buttons = [[btn('📁 ' + category_name, 'mycategory:' + category_id)] for category_id, category_name in categories]
-    text = '📦 <b>منتجاتي</b>\n\nاختر قسمًا لإدارة منتجاته:' if buttons else '📦 <b>منتجاتي</b>\n\nلا توجد أقسام مضافة حتى الآن.'
+        custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid DESC').fetchall()
+    seen = set()
+    categories = []
+    for category_id in G['PRODUCTS']:
+        if category_id not in seen:
+            categories.append((category_id, category_label(category_id, cid)))
+            seen.add(category_id)
+    for category_id, category_name in custom_categories:
+        if category_id not in seen:
+            categories.append((category_id, category_name))
+            seen.add(category_id)
+    buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
+    text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
     send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_category_detail(api, cid, category_id):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
-    cat = custom_category(category_id)
-    if not cat:
-        return admin_products_page(api, cid)
-    with db() as conn:
-        rows = conn.execute('SELECT pid,name,price_usd,available,stock FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
-    buttons = [[btn(('✅ ' if available and int(stock or 0)>0 else '🔴 ') + product_name + ' • ' + price(cid, pid, 'USD'), 'myproduct:' + pid, style='success' if available and int(stock or 0)>0 else 'danger'),
-                btn('🖼️ الصورة', 'photopick:' + pid)] for pid, product_name, price_usd, available, stock in rows]
-    send(api, cid, '📁 <b>' + esc(cat[1]) + '</b>\n\nالمنتجات داخل القسم:', kb(buttons + [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')], [btn('↩️ منتجاتي', 'admin:myproducts')]]))
+    ids = admin_category_product_ids(category_id)
+    buttons = []
+    for pid in ids:
+        cp = custom_product(pid)
+        if cp:
+            _pid, product_name, _description, _price_usd, available, _cat, stock = cp
+            qty = int(stock or 0)
+            is_available = bool(available and qty > 0)
+        else:
+            product_name = name(pid, cid)
+            qty = product_stock(pid)
+            is_available = bool(in_stock(pid))
+        label = ('✅ ' if is_available else '🔴 ') + compact_name(pid, cid) + ' • ' + price(cid, pid, 'USD') + ' • ' + compact_stock(qty)
+        buttons.append([btn(label, 'myproduct:' + pid, style='success' if is_available else 'danger'),
+                        btn('🔌 API', 'supplierpick:' + pid)])
+    title = category_label(category_id, cid)
+    extra = [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')]]
+    send(api, cid, '📁 <b>' + esc(title) + '</b>\n\nكل المنتجات داخل القسم:', kb(buttons + extra + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
 
 def begin_add_product(api, cid):
@@ -1277,16 +1297,34 @@ def admin_product_detail(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
     cp = custom_product(pid)
-    if not cp:
-        return admin_products_page(api, cid)
-    _, product_name, description, price_usd, available, category_id, stock = cp
-    text = '📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description) + '\n\n💵 ' + price(cid, pid, 'USD') + '\n📦 الكمية: ' + str(stock) + '\nالحالة: ' + ('✅ متوفر' if available and int(stock or 0)>0 else '🔴 غير متوفر')
-    send(api, cid, text, kb([[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
-                             [btn('💵 تعديل السعر', 'pricepick:' + pid)],
-                             [btn('🔌 ربط API بالمنتج', 'supplierpick:' + pid, style='primary')],
-                             [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
-                             [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
-                             [btn('↩️ القسم', 'mycategory:' + category_id)]]))
+    if cp:
+        _, product_name, description, price_usd, available, category_id, stock = cp
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
+                [btn('💵 تعديل السعر', 'pricepick:' + pid)],
+                [btn('🔌 ربط API بالمنتج', 'supplierpick:' + pid, style='primary')],
+                [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
+                [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
+                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+    else:
+        if pid not in VARIANTS and pid not in G['PRODUCTS']:
+            return admin_products_page(api, cid)
+        product_name = name(pid, cid)
+        description = product_description(pid, cid)
+        qty = product_stock(pid)
+        is_available = bool(in_stock(pid))
+        category_id = VARIANTS.get(pid, {}).get('category', pid)
+        rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
+                [btn('💵 تعديل السعر', 'pricepick:' + pid)],
+                [btn('🔌 ربط API بالمنتج', 'supplierpick:' + pid, style='primary')],
+                [btn('📦 تعديل التوفر/الكمية', 'admin:stock')],
+                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+    text = ('📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description or '') +
+            '\n\n💵 ' + price(cid, pid, 'USD') +
+            '\n📦 الكمية: ' + esc(qty) +
+            '\nالحالة: ' + ('✅ متوفر' if is_available else '🔴 غير متوفر'))
+    send(api, cid, text, kb(rows))
 
 
 def toggle_admin_product(api, cid, pid):
