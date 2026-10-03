@@ -1277,7 +1277,15 @@ def supplier_api_row(pid):
     pid = LEGACY.get(pid, pid)
     with db() as conn:
         row = conn.execute('SELECT endpoint,api_key,service_id,enabled,COALESCE(provider,"generic"),COALESCE(variant_id,"") FROM supplier_api WHERE pid=?', (pid,)).fetchone()
-    return row or ('', '', '', 0, 'generic', '')
+    if not row:
+        return ('', '', '', 0, 'generic', '')
+    endpoint, api_key, service_id, enabled, provider, variant_id = row
+    # For Pandora, prefer Railway secrets so a rotated key is picked up immediately
+    # without storing the secret in SQLite or GitHub.
+    if provider == 'pandora':
+        endpoint = (os.getenv('PANDORA_API_BASE') or endpoint or 'https://api.pandoradigital.shop/api/v1').strip()
+        api_key = (os.getenv('PANDORA_API_KEY') or api_key or '').strip()
+    return endpoint, api_key, service_id, enabled, provider, variant_id
 
 
 def supplier_api_menu(api, cid, category_id=None):
