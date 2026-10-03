@@ -376,8 +376,13 @@ def install(namespace):
         if cid == admin_id and value.startswith('suppliertoggle:'):
             pid = value.split(':', 1)[1]
             endpoint, api_key, service_id, enabled, provider, variant_id = sg['supplier_api_row'](pid)
-            if not endpoint or not api_key or (provider == 'pandora' and (not service_id or not variant_id)):
-                sg['send'](api, cid, '⚠️ أضف رابط API والمفتاح وProduct ID وVariant ID أولًا.' if provider == 'pandora' else '⚠️ أضف رابط API والمفتاح أولًا.')
+            missing = []
+            if not endpoint: missing.append('رابط API')
+            if not api_key: missing.append('مفتاح API')
+            if provider == 'pandora' and not service_id: missing.append('Product ID')
+            if provider == 'pandora' and not variant_id: missing.append('Variant ID')
+            if missing:
+                sg['send'](api, cid, '⚠️ تم حفظ الموجود، لكن باقي قبل التفعيل: <b>' + sg['esc'](' + '.join(missing)) + '</b>.\n\nإذا هدفك فقط تجربة المفتاح الآن اضغط 🧪 اختبار الاتصال.')
                 return sg['supplier_api_editor'](api, cid, pid)
             with sg['db']() as conn:
                 conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
