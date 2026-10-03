@@ -123,7 +123,7 @@ def admin_icons(api, cid):
         s.kb([
             [s.btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
             [s.btn('📁 أسماء الأقسام', 'iconmenu:categories')],
-            [s.btn('🔘 أزرار المتجر', 'iconmenu:buttons')],
+            [s.btn('🏠 أيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
             [s.btn('📺 أزرار تفعيل IPTV', 'admin:iptvicons')],
             [s.btn('↩️ لوحة الإدارة', 'admin')]
         ])
