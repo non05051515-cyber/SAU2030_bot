@@ -199,8 +199,7 @@ def install(namespace):
 
     def settings_page(api, cid):
         rows = [
-            [s.btn(s.tr(cid, 'اللغة', 'Language'), 'settings:lang', s.ui_icon('ui_language')),
-             s.btn(s.tr(cid, 'العملة', 'Currency'), 'settings:currency', s.ui_icon('ui_currency'))],
+            [s.btn(s.tr(cid, 'اللغة', 'Language'), 'settings:lang', s.ui_icon('ui_language'))],
             [s.btn(s.tr(cid, 'كود الخصم', 'Discount code'), 'coupon:*', s.ui_icon('ui_coupon')),
              s.btn(s.tr(cid, 'الإحالات', 'Referrals'), 'referrals', s.ui_icon('ui_referrals'))],
             [s.btn(s.tr(cid, 'رجوع', 'Back'), 'home')]
