@@ -1001,7 +1001,7 @@ def show_extended_category(api, cid, category_id):
         return False
     variants = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
     originals = variants or ([category_id] if amount(category_id, 'SAR') is not None else [])
-    rows = [[btn(compact_name(pid, cid) + ' | 📦 ' + str(product_stock(pid)) + ' | 💰 ' + price(cid, pid), 'options:' + pid,
+    rows = [[btn(compact_name(pid, cid) + ' | ' + compact_stock(product_stock(pid)) + ' | 💰 ' + price(cid, pid), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
     send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
@@ -1568,6 +1568,15 @@ def reset_navigation_state(cid):
         conn.execute('UPDATE wallet_topups SET status="cancelled" WHERE cid=? AND status="receipt_pending"', (cid,))
 
 
+def compact_stock(value):
+    """Stable stock segment for Telegram RTL/LTR buttons: 📦 4."""
+    try:
+        value = int(value)
+    except Exception:
+        value = 0
+    return '\u2066📦 ' + str(value) + '\u2069'
+
+
 def compact_name(pid, cid=0):
     """Short button label for every product; full name stays inside product details."""
     pid = LEGACY.get(pid, pid)
@@ -1913,7 +1922,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
+            label = compact_name(product_id, cid) + ' | ' + compact_stock(qty) + ' | 💰 ' + price(cid, product_id)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
@@ -2802,7 +2811,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
+            label = compact_compact_name(product_id, cid) + ' | ' + compact_stock(qty) + ' | 💰 ' + price(cid, product_id)
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
@@ -2815,7 +2824,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
             qty = product_stock(v['id'])
-            rows.append([btn(status + compact_name(v['id'], cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, v['id']),
+            rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + compact_stock(qty) + ' | 💰 ' + price(cid, v['id']),
                              'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
