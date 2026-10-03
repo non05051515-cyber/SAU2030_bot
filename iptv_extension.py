@@ -125,29 +125,19 @@ def iptv_icon_menu(api, cid):
 def admin_icons(api, cid):
     if cid != s.G['ADMIN_ID']:
         return s.home(api, cid)
-    buttons = []
-    for pid, product in s.G['PRODUCTS'].items():
-        mark = '✅ ' if product.get('custom_emoji_id') else ''
-        callback = 'admin:iptvicons' if pid == 'iptv' else 'seticon:' + pid
-        buttons.append(s.btn(product['name'], callback, product.get('custom_emoji_id')))
-    # Include categories/products created from the admin product manager.
-    # This extension owns the active admin_icons handler at runtime, so these
-    # must be added here too (not only in storefront.admin_icons).
-    with s.db() as conn:
-        custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
-        custom_products = conn.execute('SELECT pid,name FROM admin_products ORDER BY rowid').fetchall()
-    for key, label in custom_categories:
-        buttons.append(s.btn('📁 ' + label, 'seticon:' + key, s.ui_icon(key)))
-    for key, label in custom_products:
-        buttons.append(s.btn('📦 ' + label, 'seticon:' + key, s.ui_icon(key)))
-    # Also expose the global storefront/interface buttons here.
-    for key, label in s.UI_ICON_LABELS.items():
-        icon = s.ui_icon(key)
-        buttons.append(s.btn(label, 'seticon:' + key, icon))
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    s.send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر القسم. عند اختيار IPTV ستظهر أزرار طرق التفعيل داخله.',
-           s.kb(rows + [[s.btn('↩️ لوحة الإدارة', 'admin')]]))
-
+    # Keep the admin panel compact. The actual product/category/button lists
+    # are handled by storefront's nested icon menus.
+    return s.send(
+        api, cid,
+        '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر أين تريد إضافة الأيقونة:',
+        s.kb([
+            [s.btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
+            [s.btn('📁 أسماء الأقسام', 'iconmenu:categories')],
+            [s.btn('🔘 أزرار المتجر', 'iconmenu:buttons')],
+            [s.btn('📺 أزرار تفعيل IPTV', 'admin:iptvicons')],
+            [s.btn('↩️ لوحة الإدارة', 'admin')]
+        ])
+    )
 
 def begin_icon_setup(api, cid, pid):
     if pid not in DEVICE_ICON_KEYS.values():
