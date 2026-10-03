@@ -1555,9 +1555,10 @@ def reset_navigation_state(cid):
 
 def start(api, cid):
     reset_navigation_state(cid)
-    send(api, cid, tr(cid, '👋 <b>مرحباً بك في VEXA STORE</b>\n\nمتجر الخدمات والاشتراكات الرقمية.',
-                     '👋 <b>Welcome to VEXA STORE</b>\n\nDigital services and subscriptions.'),
-         kb([[btn('🚀 START | ابدأ', 'enter_store', ui_icon('ui_start'))], [btn('🌐 العربية / English', 'settings:lang', ui_icon('ui_language'))]]))
+    send(api, cid,
+         '🌐 <b>اختر لغتك | Choose your language</b>',
+         kb([[btn('🇸🇦 العربية', 'setlang:ar'),
+              btn('🇺🇸 English', 'setlang:en')]]))
 
 
 def home(api, cid):
