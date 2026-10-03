@@ -1433,17 +1433,20 @@ def supplier_test_connection(api, cid, pid):
             return send(api, cid, '❌ رابط API غير صحيح. أعد حفظ الرابط بدون أي رموز أو مسافات إضافية.')
         if not api_key:
             return send(api, cid, '❌ مفتاح API غير صحيح أو يحتوي رموز غير مدعومة. أعد نسخه من Pandora ثم احفظه من جديد.')
-        req = urllib.request.Request(endpoint.rstrip('/') + '/balance', headers={'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'})
+
+        # The integration needs catalog access to locate products/variants.
+        # balance:read is optional, so test /products instead of /balance.
+        req = urllib.request.Request(endpoint.rstrip('/') + '/products?limit=1',
+                                     headers={'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'})
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-        bal = data.get('available_balance', '?')
-        cur = data.get('currency', 'USD')
-        send(api, cid, '✅ اتصال المورد ناجح.\nالرصيد المتاح: <b>' + esc(bal) + ' ' + esc(cur) + '</b>')
+        count = len(data.get('items') or []) if isinstance(data, dict) else 0
+        send(api, cid, '✅ اتصال Pandora ناجح والمفتاح يملك صلاحية قراءة المنتجات.\n📦 تم الوصول إلى الكتالوج بنجاح.')
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
             msg = '❌ المفتاح غير صحيح أو منتهي أو ملغي.'
         elif exc.code == 403:
-            msg = '❌ المفتاح لا يملك صلاحية balance:read.'
+            msg = '❌ المفتاح لا يملك صلاحية <code>catalog:read</code>. اطلب تفعيلها على مفتاح Pandora.'
         else:
             msg = '❌ فشل الاتصال مع Pandora. HTTP ' + str(exc.code)
         send(api, cid, msg)
