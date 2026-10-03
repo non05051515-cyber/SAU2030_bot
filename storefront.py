@@ -1326,6 +1326,7 @@ def admin_panel(api, cid):
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
+                             [btn('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
