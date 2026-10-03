@@ -816,9 +816,9 @@ def handle_admin_text(api, message):
             if not (raw.startswith('https://') or raw.startswith('http://')):
                 send(api, cid, 'أرسل رابط API يبدأ بـ <code>https://</code> أو <code>http://</code>.')
                 return True
-            endpoint = raw[:500]
+            endpoint = ''.join(ch for ch in raw[:500].strip() if ord(ch) < 128)
         elif action_name == 'supplier_key':
-            api_key = raw[:500]
+            api_key = ''.join(ch for ch in raw[:500].strip() if ord(ch) < 128)
         elif action_name == 'supplier_service':
             service_id = raw[:200]
         else:
@@ -1427,12 +1427,28 @@ def supplier_test_connection(api, cid, pid):
     if not endpoint or not api_key:
         return send(api, cid, '⚠️ أضف رابط API والمفتاح أولًا.')
     try:
+        endpoint = ''.join(ch for ch in endpoint.strip() if ord(ch) < 128)
+        api_key = ''.join(ch for ch in api_key.strip() if ord(ch) < 128)
+        if not endpoint.startswith(('http://','https://')):
+            return send(api, cid, '❌ رابط API غير صحيح. أعد حفظ الرابط بدون أي رموز أو مسافات إضافية.')
+        if not api_key:
+            return send(api, cid, '❌ مفتاح API غير صحيح أو يحتوي رموز غير مدعومة. أعد نسخه من Pandora ثم احفظه من جديد.')
         req = urllib.request.Request(endpoint.rstrip('/') + '/balance', headers={'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'})
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         bal = data.get('available_balance', '?')
         cur = data.get('currency', 'USD')
         send(api, cid, '✅ اتصال المورد ناجح.\nالرصيد المتاح: <b>' + esc(bal) + ' ' + esc(cur) + '</b>')
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            msg = '❌ المفتاح غير صحيح أو منتهي أو ملغي.'
+        elif exc.code == 403:
+            msg = '❌ المفتاح لا يملك صلاحية balance:read.'
+        else:
+            msg = '❌ فشل الاتصال مع Pandora. HTTP ' + str(exc.code)
+        send(api, cid, msg)
+    except UnicodeEncodeError:
+        send(api, cid, '❌ يوجد رمز أو مسافة غير صالحة داخل رابط API أو المفتاح. أعد نسخهما مباشرة من Pandora بدون أي نص إضافي.')
     except Exception as exc:
         send(api, cid, '❌ فشل اختبار الاتصال: <code>' + esc(type(exc).__name__) + '</code>')
 
