@@ -986,7 +986,7 @@ def show_extended_category(api, cid, category_id):
         return False
     variants = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
     originals = variants or ([category_id] if amount(category_id, 'SAR') is not None else [])
-    rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid), 'options:' + pid,
+    rows = [[btn(compact_name(pid, cid) + ' | 📦 ' + str(product_stock(pid)) + ' | 💰 ' + price(cid, pid), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
     send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
@@ -1553,6 +1553,37 @@ def reset_navigation_state(cid):
         conn.execute('UPDATE wallet_topups SET status="cancelled" WHERE cid=? AND status="receipt_pending"', (cid,))
 
 
+def compact_name(pid, cid=0):
+    """Short button label while keeping the full product name in details."""
+    full = name(pid, cid)
+    low = full.lower()
+    language = prefs(cid)[0]
+    category_id = VARIANTS.get(LEGACY.get(pid, pid), {}).get('category')
+    cp = custom_product(LEGACY.get(pid, pid))
+    if not category_id and cp:
+        category_id = cp[5]
+    if category_id == 'chatgpt' or 'chatgpt' in low:
+        if language == 'ar':
+            if 'خاص' in full or 'private' in low:
+                return 'شهر خاص'
+            if 'ubi' in low:
+                return 'شهر واحد'
+            if 'تجديد' in full or 'recharge' in low:
+                return 'شهر تجديد'
+            if 'plus' in low and ('شهر' in full or '1 month' in low or '1m' in low):
+                return 'شهر واحد'
+        else:
+            if 'خاص' in full or 'private' in low:
+                return 'Private 1M'
+            if 'ubi' in low:
+                return '1 Month'
+            if 'تجديد' in full or 'recharge' in low:
+                return 'Recharge 1M'
+            if 'plus' in low and ('month' in low or '1m' in low):
+                return '1 Month'
+    return full
+
+
 def start(api, cid):
     reset_navigation_state(cid)
     send(api, cid,
@@ -1787,7 +1818,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
+            label = compact_name(product_id, cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, product_id)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, ui_icon(product_id), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
@@ -2686,7 +2717,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
             qty = product_stock(v['id'])
-            rows.append([btn(status + name(v['id'], cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, v['id']),
+            rows.append([btn(status + compact_name(v['id'], cid) + ' | 📦 ' + str(qty) + ' | 💰 ' + price(cid, v['id']),
                              'item:' + v['id'], p.get('custom_emoji_id') if ui_icon(v['id']) is None else ui_icon(v['id']), 'danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
