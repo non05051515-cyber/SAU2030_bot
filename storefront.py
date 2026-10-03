@@ -1384,8 +1384,8 @@ def supplier_api_row(pid):
     # For Pandora, prefer Railway secrets so a rotated key is picked up immediately
     # without storing the secret in SQLite or GitHub.
     if provider == 'pandora':
-        endpoint = (os.getenv('PANDORA_API_BASE') or endpoint or 'https://api.pandoradigital.shop/api/v1').strip()
-        api_key = (os.getenv('PANDORA_API_KEY') or api_key or '').strip()
+        endpoint = (os.getenv('PANDORA_API_BASE') or 'https://api.pandoradigital.shop/api/v1').strip()
+        api_key = (os.getenv('PANDORA_API_KEY') or '').strip()
     return endpoint, api_key, service_id, enabled, provider, variant_id
 
 
@@ -1570,12 +1570,12 @@ def supplier_api_editor(api, cid, pid):
     text = ('🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n'
             'المورد: <b>' + esc('Pandora Digital' if provider == 'pandora' else 'Generic API') + '</b>\n'
             'الحالة: <b>' + ('🟢 مفعّل' if enabled else '⚪️ غير مفعّل') + '</b>\n'
-            '🌐 رابط API: <code>' + esc(endpoint or 'غير مضاف') + '</code>\n'
-            '🔑 المفتاح: <code>' + esc(masked) + '</code>\n'
+            '🌐 رابط Pandora العام: <b>' + ('✅ جاهز' if endpoint else '❌ غير موجود') + '</b>\n'
+            '🔑 مفتاح Pandora العام: <b>' + ('✅ جاهز' if api_key else '❌ غير موجود') + '</b>\n'
             '🆔 Product ID: <code>' + esc(service_id or 'غير مضاف') + '</code>\n'
-            '🧩 Variant ID: <code>' + esc(variant_id or 'غير مضاف') + '</code>')
+            '🧩 Variant ID: <code>' + esc(variant_id or 'غير مضاف') + '</code>\n\n'
+            'أضف فقط Product ID و Variant ID لهذا المنتج.')
     rows = [[btn('🧩 Pandora Digital', 'supplierpandora:' + pid, style='primary')],
-            [btn(('✅ ' if endpoint else '❌ ') + 'رابط API', 'supplierset:endpoint:' + pid), btn(('✅ ' if api_key else '❌ ') + 'مفتاح API', 'supplierset:key:' + pid)],
             [btn(('✅ ' if service_id else '❌ ') + 'Product ID', 'supplierset:service:' + pid), btn(('✅ ' if variant_id else '❌ ') + 'Variant ID', 'supplierset:variant:' + pid)],
             [btn('🧪 اختبار الاتصال', 'suppliertest:' + pid)],
             [btn('✅ تفعيل الربط' if not enabled else '⏸ إيقاف الربط', 'suppliertoggle:' + pid, style='success' if not enabled else 'danger')],
@@ -2923,7 +2923,7 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
                          (pid, endpoint, api_key, service_id, enabled, provider, variant_id))
-        send(api, cid, '✅ تم اختيار <b>Pandora Digital</b> لهذا المنتج.\n\nأضف الآن مفتاح API ثم معرف المنتج لدى Pandora.')
+        send(api, cid, '✅ تم اختيار <b>Pandora Digital</b> لهذا المنتج.\n\nالرابط والمفتاح يُستخدمان من Railway تلقائيًا. أضف الآن Product ID و Variant ID فقط.')
         supplier_api_editor(api, cid, pid)
     elif prefix == 'supplierset' and cid == G['ADMIN_ID']:
         field, _, pid = arg.partition(':')
