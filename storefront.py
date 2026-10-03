@@ -1576,12 +1576,169 @@ def supplier_api_editor(api, cid, pid):
             '🧩 Variant ID: <code>' + esc(variant_id or 'غير مضاف') + '</code>\n\n'
             'أضف فقط Product ID و Variant ID لهذا المنتج.')
     rows = [[btn('🧩 Pandora Digital', 'supplierpandora:' + pid, style='primary')],
+            [btn('🔎 اختيار منتج من Pandora', 'pandorabrowse:' + pid, style='primary')],
             [btn(('✅ ' if service_id else '❌ ') + 'Product ID', 'supplierset:service:' + pid), btn(('✅ ' if variant_id else '❌ ') + 'Variant ID', 'supplierset:variant:' + pid)],
             [btn('🧪 اختبار الاتصال', 'suppliertest:' + pid)],
             [btn('✅ تفعيل الربط' if not enabled else '⏸ إيقاف الربط', 'suppliertoggle:' + pid, style='success' if not enabled else 'danger')],
             [btn('🗑 حذف الربط', 'supplierdelete:' + pid, style='danger')],
             [btn('↩️ المنتجات', 'admin:supplierapi')], [btn('↩️ لوحة الإدارة', 'admin')]]
     send(api, cid, text, kb(rows))
+
+
+
+def _pandora_list(payload):
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    for key in ('data','products','items','results'):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            for nested in ('data','products','items','results'):
+                if isinstance(value.get(nested), list):
+                    return value[nested]
+    return []
+
+
+def _pandora_product_name(item):
+    if not isinstance(item, dict):
+        return str(item)
+    return str(item.get('name') or item.get('title') or item.get('product_name') or item.get('label') or item.get('id') or 'Pandora Product')
+
+
+def _pandora_product_id(item):
+    if not isinstance(item, dict):
+        return ''
+    return str(item.get('id') or item.get('product_id') or item.get('productId') or item.get('uuid') or '')
+
+
+def _pandora_variants(item):
+    if not isinstance(item, dict):
+        return []
+    variants = item.get('variants') or item.get('options') or item.get('skus') or []
+    if isinstance(variants, dict):
+        variants = variants.get('data') or variants.get('items') or list(variants.values())
+    if not isinstance(variants, list):
+        variants = []
+    out = []
+    for v in variants:
+        if not isinstance(v, dict):
+            continue
+        vid = str(v.get('id') or v.get('variant_id') or v.get('variantId') or v.get('sku') or '')
+        if not vid:
+            continue
+        label = str(v.get('name') or v.get('title') or v.get('label') or v.get('sku') or vid)
+        out.append({'id': vid, 'name': label})
+    root_vid = str(item.get('variant_id') or item.get('variantId') or '')
+    if not out and root_vid:
+        out.append({'id': root_vid, 'name': str(item.get('variant_name') or item.get('variantName') or 'Default')})
+    return out
+
+
+def pandora_catalog_open(api, cid, pid, page=0):
+    if cid != G['ADMIN_ID']:
+        return
+    pid = LEGACY.get(pid, pid)
+    endpoint = (os.getenv('PANDORA_API_BASE') or 'https://api.pandoradigital.shop/api/v1').strip()
+    api_key = (os.getenv('PANDORA_API_KEY') or '').strip()
+    if not api_key:
+        return send(api, cid, '❌ مفتاح Pandora غير موجود في Railway.')
+    try:
+        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=100', api_key, timeout=20)
+        raw_items = _pandora_list(payload)
+        products = []
+        for item in raw_items:
+            product_id = _pandora_product_id(item)
+            if not product_id:
+                continue
+            products.append({'id': product_id, 'name': _pandora_product_name(item)[:80], 'variants': _pandora_variants(item)})
+        if not products:
+            return send(api, cid, '⚠️ لم أستطع قراءة منتجات Pandora. تأكد أن المفتاح يملك صلاحية <code>catalog:read</code>.', kb([[btn('↩️ رجوع', 'supplierpick:' + pid)]]))
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
+                         (cid, 'pandora_catalog', json.dumps({'pid': pid, 'products': products}, ensure_ascii=False)))
+        pandora_catalog_page(api, cid, page)
+    except Exception as exc:
+        code = getattr(exc, 'code', None)
+        if code == 403:
+            msg = '❌ مفتاح Pandora لا يملك صلاحية <code>catalog:read</code>.'
+        elif code == 401:
+            msg = '❌ مفتاح Pandora غير صحيح أو منتهي.'
+        else:
+            msg = '❌ تعذر تحميل كتالوج Pandora الآن: <code>' + esc(type(exc).__name__) + '</code>'
+        send(api, cid, msg, kb([[btn('↩️ رجوع', 'supplierpick:' + pid)]]))
+
+
+def pandora_catalog_page(api, cid, page=0):
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='pandora_catalog'", (cid,)).fetchone()
+    if not row:
+        return supplier_api_menu(api, cid)
+    state = json.loads(row[0])
+    products = state.get('products') or []
+    page = max(0, int(page or 0))
+    per_page = 8
+    start = page * per_page
+    if start >= len(products) and page:
+        page = 0; start = 0
+    rows = []
+    for index in range(start, min(start + per_page, len(products))):
+        label = products[index].get('name') or products[index].get('id')
+        rows.append([btn('📦 ' + str(label)[:45], 'pandorap:' + str(index))])
+    nav = []
+    if page > 0: nav.append(btn('⬅️ السابق', 'pandorapage:' + str(page-1)))
+    if start + per_page < len(products): nav.append(btn('التالي ➡️', 'pandorapage:' + str(page+1)))
+    if nav: rows.append(nav)
+    rows.append([btn('↩️ رجوع', 'supplierpick:' + state.get('pid',''))])
+    send(api, cid, '🔎 <b>منتجات Pandora</b>\n\nاختر المنتج المطابق لمنتج VEXA:', kb(rows))
+
+
+def pandora_catalog_product(api, cid, index):
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='pandora_catalog'", (cid,)).fetchone()
+    if not row:
+        return supplier_api_menu(api, cid)
+    state = json.loads(row[0]); products = state.get('products') or []
+    try:
+        index = int(index); product = products[index]
+    except Exception:
+        return pandora_catalog_page(api, cid, 0)
+    variants = product.get('variants') or []
+    if len(variants) == 1:
+        return pandora_catalog_save(api, cid, index, 0)
+    if not variants:
+        with db() as conn:
+            current = conn.execute('SELECT endpoint,api_key,service_id,enabled,provider,variant_id FROM supplier_api WHERE pid=?', (state['pid'],)).fetchone()
+            endpoint, api_key, _, enabled, _, variant_id = current if current else ('','','',0,'pandora','')
+            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET service_id=excluded.service_id,provider="pandora"',
+                         (state['pid'], endpoint, api_key, product['id'], enabled, 'pandora', variant_id))
+        return send(api, cid, '✅ تم حفظ Product ID تلقائيًا.\n⚠️ Pandora لم يُرجع Variant لهذا المنتج؛ أضف Variant ID يدويًا.', kb([[btn('↩️ إعداد API', 'supplierpick:' + state['pid'])]]))
+    rows = [[btn('🧩 ' + str(v.get('name') or v.get('id'))[:45], 'pandorav:' + str(index) + ':' + str(i))] for i,v in enumerate(variants[:20])]
+    rows.append([btn('↩️ المنتجات', 'pandorapage:0')])
+    send(api, cid, '🧩 <b>' + esc(product.get('name','Pandora')) + '</b>\n\nاختر الـ Variant:', kb(rows))
+
+
+def pandora_catalog_save(api, cid, pindex, vindex):
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='pandora_catalog'", (cid,)).fetchone()
+    if not row:
+        return supplier_api_menu(api, cid)
+    state = json.loads(row[0]); products = state.get('products') or []
+    try:
+        product = products[int(pindex)]
+        variant = (product.get('variants') or [])[int(vindex)]
+    except Exception:
+        return pandora_catalog_page(api, cid, 0)
+    pid = state['pid']
+    endpoint, api_key, _, enabled, _, _ = supplier_api_row(pid)
+    with db() as conn:
+        conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET service_id=excluded.service_id,variant_id=excluded.variant_id,provider="pandora"',
+                     (pid, endpoint, api_key, str(product['id']), enabled, 'pandora', str(variant['id'])))
+        conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+    send(api, cid, '✅ تم ربط المنتج تلقائيًا مع Pandora.\n\nProduct ID: <code>' + esc(product['id']) + '</code>\nVariant ID: <code>' + esc(variant['id']) + '</code>')
+    supplier_api_editor(api, cid, pid)
 
 
 def admin_stats(api, cid):
@@ -2911,6 +3068,15 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'stock_quantity', pid))
             send(api, cid, '<b>' + esc(name(pid, cid)) + '</b>\n\n📦 الكمية الحالية: <b>' + esc(product_stock(pid)) + '</b>\n\nأرسل الكمية الجديدة كرقم، مثال: <code>4</code>.', kb([[btn('❌ إلغاء', 'stockpick:' + pid)]]))
+    elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
+        pandora_catalog_open(api, cid, arg, 0)
+    elif prefix == 'pandorapage' and cid == G['ADMIN_ID']:
+        pandora_catalog_page(api, cid, arg)
+    elif prefix == 'pandorap' and cid == G['ADMIN_ID']:
+        pandora_catalog_product(api, cid, arg)
+    elif prefix == 'pandorav' and cid == G['ADMIN_ID']:
+        pidx, _, vidx = arg.partition(':')
+        pandora_catalog_save(api, cid, pidx, vidx)
     elif prefix == 'suppliercat':
         supplier_api_menu(api, cid, arg)
     elif prefix == 'supplierpick':
@@ -3837,6 +4003,59 @@ def action(api, cid, value):
             target_text = 'لجميع المنتجات' if pid == '__global__' else 'لهذا المنتج'
             cancel_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
             send(api,cid,'أرسل الآن الأيقونة المتحركة '+target_text+'.',kb([[btn('❌ إلغاء',cancel_action)]]))
+    elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
+        pandora_catalog_open(api, cid, arg, 0)
+    elif prefix == 'pandorapage' and cid == G['ADMIN_ID']:
+        pandora_catalog_page(api, cid, arg)
+    elif prefix == 'pandorap' and cid == G['ADMIN_ID']:
+        pandora_catalog_product(api, cid, arg)
+    elif prefix == 'pandorav' and cid == G['ADMIN_ID']:
+        pidx, _, vidx = arg.partition(':')
+        pandora_catalog_save(api, cid, pidx, vidx)
+    elif prefix == 'suppliercat':
+        supplier_api_menu(api, cid, arg)
+    elif prefix == 'supplierpick':
+        supplier_api_editor(api, cid, arg)
+    elif prefix == 'supplierpandora' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
+        endpoint = 'https://api.pandoradigital.shop/api/v1'
+        provider = 'pandora'
+        with db() as conn:
+            conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,provider=excluded.provider',
+                         (pid, endpoint, api_key, service_id, enabled, provider, variant_id))
+        supplier_api_editor(api, cid, pid)
+    elif prefix == 'supplierset' and cid == G['ADMIN_ID']:
+        field, _, pid = arg.partition(':')
+        if field in ('service', 'variant'):
+            action_name = {'service':'supplier_service','variant':'supplier_variant'}[field]
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, action_name, pid))
+            prompt = {'service':'أرسل Product ID لدى المورد.','variant':'أرسل Variant ID لدى المورد.'}[field]
+            send(api, cid, '🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n' + prompt, kb([[btn('❌ إلغاء', 'supplierpick:' + pid)]]))
+    elif prefix == 'suppliertest' and cid == G['ADMIN_ID']:
+        supplier_test_connection(api, cid, arg)
+    elif prefix == 'suppliertoggle' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
+        missing = []
+        if not endpoint: missing.append('رابط API')
+        if not api_key: missing.append('مفتاح API')
+        if not service_id: missing.append('Product ID')
+        if not variant_id: missing.append('Variant ID')
+        if missing:
+            send(api, cid, '⚠️ باقي قبل التفعيل: <b>' + esc(' + '.join(missing)) + '</b>.')
+            supplier_api_editor(api, cid, pid)
+        else:
+            with db() as conn:
+                conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET enabled=excluded.enabled',
+                             (pid, endpoint, api_key, service_id, 0 if enabled else 1, provider, variant_id))
+            supplier_api_editor(api, cid, pid)
+    elif prefix == 'supplierdelete' and cid == G['ADMIN_ID']:
+        pid = LEGACY.get(arg, arg)
+        with db() as conn:
+            conn.execute('DELETE FROM supplier_api WHERE pid=?', (pid,))
+        supplier_api_editor(api, cid, pid)
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
