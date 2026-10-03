@@ -118,9 +118,15 @@ def handle_admin_delivery(a,m):
  customer=x['customer']
  try:
   a.call('copyMessage',chat_id=customer,from_chat_id=ADMIN_ID,message_id=m['message_id'])
-  send(a,ADMIN_ID,'✅ تم إرسال الرسالة للعميل بنجاح.')
+  if x.get('order_id'):
+   try:
+    with storefront.db() as conn:
+     conn.execute('UPDATE orders SET status="delivered" WHERE id=?', (x['order_id'],))
+   except Exception:
+    pass
+  send(a,ADMIN_ID,'✅ تم إرسال الطلب للعميل وتسجيله كمُسلّم.')
  except Exception:
-  send(a,ADMIN_ID,'❌ تعذر إرسال الرسالة للعميل.')
+  send(a,ADMIN_ID,'❌ تعذر إرسال الطلب للعميل. بقي الطلب بانتظار التسليم.')
  PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
  return True
 def action(a,c,x):
