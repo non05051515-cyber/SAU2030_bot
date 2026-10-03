@@ -704,7 +704,7 @@ def admin_category_description(api, cid, pid=None, lang=None):
     if pid not in cats:
         return admin_category_description(api, cid)
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة وصف القسم:', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English', 'catdesclang:en:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
@@ -733,14 +733,19 @@ def handle_category_description(api, message):
     pid, lang = json.loads(row[0])
     formatted = description_message_html(message, text)
     translated_en = auto_translate(text, 'en')[:1500] if lang == 'ar' else None
+    translated_ar = auto_translate(text, 'ar')[:1500] if lang == 'en' else None
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', lang, formatted))
         if translated_en:
             conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', 'en', esc(translated_en)))
+        if translated_ar:
+            conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', 'ar', esc(translated_ar)))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
     msg = '✅ تم حفظ وصف القسم.'
     if translated_en:
         msg += '\n🌐 وتم تحديث الإنجليزية تلقائيًا.'
+    if translated_ar:
+        msg += '\n🇸🇦 وتم إنشاء النسخة العربية تلقائيًا.'
     send(api, cid, msg + '\n\n' + formatted, kb([[btn('معاينة القسم', 'product:' + pid)], [btn('تعديل قسم آخر', 'admin:categorydesc')], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
