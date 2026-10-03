@@ -173,12 +173,23 @@ def nav(cid, parent='products'):
 
 
 def menu(cid=0):
-    rows = [[{'text': tr(cid, '🚀 ابدأ', '🚀 Start')}, {'text': tr(cid, '🛍 المنتجات', '🛍 Products')}, {'text': tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT')}],
-                         [{'text': tr(cid, '👛 المحفظة', '👛 Wallet')}, {'text': '🔗 API'}, {'text': tr(cid, '🛡 الضمان', '🛡 Warranty')}],
-                         [{'text': '🌐 اللغة / Language'}, {'text': '💱 العملة / Currency'}],
-                         [{'text': tr(cid, '💎 الإحالات', '💎 Referrals')}]]
+    def rbtn(text, icon_key):
+        button = {'text': text, 'style': 'primary'}
+        icon = ui_icon(icon_key)
+        if icon:
+            button['icon_custom_emoji_id'] = icon
+        return button
+    rows = [[rbtn(tr(cid, '🚀 ابدأ', '🚀 Start'), 'ui_start'),
+             rbtn(tr(cid, '🛍 المنتجات', '🛍 Products'), 'ui_products'),
+             rbtn('⚡ VEXA VOLT', 'ui_volt')],
+            [rbtn(tr(cid, '👛 المحفظة', '👛 Wallet'), 'ui_account'),
+             rbtn('🔗 API', 'ui_api'),
+             rbtn(tr(cid, '🛡 الضمان', '🛡 Warranty'), 'ui_warranty')],
+            [rbtn('🌐 اللغة / Language', 'ui_language'),
+             rbtn('💱 العملة / Currency', 'ui_currency')],
+            [rbtn(tr(cid, '💎 الإحالات', '💎 Referrals'), 'ui_referrals')]]
     if cid == G.get('ADMIN_ID'):
-        rows.append([{'text': '🧾 لوحة الطلبات'}])
+        rows.append([rbtn('🧾 لوحة الطلبات', 'ui_admin')])
     return {'keyboard': rows,
             'resize_keyboard': True, 'is_persistent': True,
             'input_field_placeholder': tr(cid, 'اختر من القائمة', 'Choose from the menu')}
