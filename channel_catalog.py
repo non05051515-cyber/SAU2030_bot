@@ -103,7 +103,7 @@ def post(api, pid, target=CHANNEL, kind='stock'):
         text += '\n📦 <b>الكمية:</b> ' + str(st['quantity'])
     else:
         text += '\n📦 <b>الحالة:</b> متوفر'
-    text += '\n💵 <b>السعر:</b> ' + s.esc(s.price(0, pid, 'SAR'))
+    text += '\n💵 <b>السعر:</b> ' + s.esc(s.price(0, pid, 'USD'))
     markup = {'inline_keyboard': [[{
         'text': '🛒 شراء الآن',
         'url': link(pid),
