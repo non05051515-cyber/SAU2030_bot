@@ -1,5 +1,5 @@
 """VEXA STORE Telegram bot — Arabic / English."""
-import json,os,time,urllib.request,threading
+import json,os,time,urllib.request,threading,http.client
 import required_group
 import customer_inbox
 import telegram_payments
@@ -15,10 +15,15 @@ def jload(p,d):
  try:return json.loads(p.read_text(encoding='utf-8'))
  except:return d
 LANGS=jload(LANG_FILE,{})
+_USERS_CACHE=set(jload(USERS_FILE,[]))
+_USERS_LOCK=threading.Lock()
 def save_user(cid):
- u=set(jload(USERS_FILE,[]));u.add(cid)
- try:USERS_FILE.write_text(json.dumps(sorted(u)),encoding='utf-8')
- except:pass
+ if cid in _USERS_CACHE:return
+ with _USERS_LOCK:
+  if cid in _USERS_CACHE:return
+  _USERS_CACHE.add(cid)
+  try:USERS_FILE.write_text(json.dumps(sorted(_USERS_CACHE)),encoding='utf-8')
+  except:pass
 def lang(cid):return LANGS.get(str(cid),'ar')
 def set_lang(cid,v):
  LANGS[str(cid)]=v
@@ -27,21 +32,52 @@ def set_lang(cid,v):
 def tr(cid,a,e):return e if lang(cid)=='en' else a
 def btn(t,c):return {'text':t,'callback_data':c}
 class API:
- def __init__(self,t):self.u=f'https://api.telegram.org/bot{t}/';self._errors=threading.local()
+ def __init__(self,t):
+  self.t=t;self.u=f'https://api.telegram.org/bot{t}/';self._errors=threading.local();self._connections=threading.local()
  @property
  def last_error(self):return getattr(self._errors,'value',None)
+ def _conn(self):
+  conn=getattr(self._connections,'telegram',None)
+  if conn is None:
+   conn=http.client.HTTPSConnection('api.telegram.org',timeout=40)
+   self._connections.telegram=conn
+  return conn
+ def _reset_conn(self):
+  conn=getattr(self._connections,'telegram',None)
+  if conn:
+   try:conn.close()
+   except Exception:pass
+  self._connections.telegram=None
  def call(self,m,**d):
   self._errors.value=None
+  body=json.dumps(d).encode()
+  detail=''
   try:
-   with urllib.request.urlopen(urllib.request.Request(self.u+m,json.dumps(d).encode(),{'Content-Type':'application/json'}),timeout=40) as r:return json.load(r).get('result')
+   conn=self._conn()
+   conn.request('POST',f'/bot{self.t}/'+m,body,{'Content-Type':'application/json','Connection':'keep-alive'})
+   r=conn.getresponse();raw=r.read()
+   payload=json.loads(raw.decode('utf-8','replace')) if raw else {}
+   if 200 <= r.status < 300 and payload.get('ok'):
+    return payload.get('result')
+   detail=raw.decode('utf-8','replace')
+   self._errors.value={'code':r.status,'description':payload.get('description','')}
+   print('Telegram API error:',m,r.status,detail[:300],flush=True)
   except Exception as e:
-   if hasattr(e,'read'):
-    try: detail=e.read().decode('utf-8','replace')
-    except Exception: detail=''
-   else: detail=''
-   try:self._errors.value={'code':getattr(e,'code',None),'description':json.loads(detail).get('description','')}
-   except Exception:self._errors.value={'code':getattr(e,'code',None),'description':detail}
-   print('Telegram API error:',m,type(e).__name__,repr(e),detail[:300],flush=True);time.sleep(1)
+   self._reset_conn()
+   # Retry once on a fresh connection; stale keep-alive sockets are harmless.
+   try:
+    conn=self._conn()
+    conn.request('POST',f'/bot{self.t}/'+m,body,{'Content-Type':'application/json','Connection':'keep-alive'})
+    r=conn.getresponse();raw=r.read()
+    payload=json.loads(raw.decode('utf-8','replace')) if raw else {}
+    if 200 <= r.status < 300 and payload.get('ok'):
+     return payload.get('result')
+    detail=raw.decode('utf-8','replace')
+    self._errors.value={'code':r.status,'description':payload.get('description','')}
+   except Exception as retry_error:
+    self._reset_conn()
+    self._errors.value={'code':None,'description':str(retry_error)}
+    print('Telegram API error:',m,type(retry_error).__name__,repr(retry_error),flush=True)
 def send(a,c,t,k=None):
  d={'chat_id':c,'text':t,'parse_mode':'HTML'}
  if k:d['reply_markup']=k
