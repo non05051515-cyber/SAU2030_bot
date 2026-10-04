@@ -35,7 +35,10 @@ G = {}
 
 def db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=20)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    conn.execute('PRAGMA busy_timeout=20000')
     conn.execute('CREATE TABLE IF NOT EXISTS preferences (cid INTEGER PRIMARY KEY, lang TEXT NOT NULL DEFAULT "ar", currency TEXT NOT NULL DEFAULT "SAR")')
     conn.execute('CREATE TABLE IF NOT EXISTS receipts (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT)')
     conn.execute('CREATE TABLE IF NOT EXISTS wallets (cid INTEGER PRIMARY KEY, balance_sar TEXT NOT NULL DEFAULT "0")')
@@ -889,8 +892,22 @@ def handle_admin_text(api, message):
             return True
         endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
         if action_name == 'supplier_margin':
+            normalized = raw.replace('$', '').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
             try:
-                margin = Decimal(raw.replace('
+                margin = Decimal(normalized).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                if margin < 0 or margin > Decimal('10000'):
+                    raise ValueError()
+                sale = pandora_set_margin(pid, margin)
+            except Exception:
+                send(api, cid, 'أرسل هامش ربح صحيح بالدولار، مثال: <code>2.00</code>.')
+                return True
+            with db() as conn:
+                conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+            send(api, cid, '✅ تم حفظ هامش الربح <b>$' + f'{margin:.2f}' + '</b>.' +
+                 (('\nسعر البيع الجديد: <b>$' + f'{sale:.2f}' + '</b>') if sale is not None else ''))
+            supplier_api_editor(api, cid, pid)
+            return True
+        if action_name == 'supplier_endpoint':
             if not (raw.startswith('https://') or raw.startswith('http://')):
                 send(api, cid, 'أرسل رابط API يبدأ بـ <code>https://</code> أو <code>http://</code>.')
                 return True
