@@ -214,7 +214,7 @@ def main():
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
   # Keep all background services, but avoid hammering SQLite every 2 seconds.
-  jobs=[('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
+  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
   last={}
   while True:
    now=time.monotonic()
@@ -277,6 +277,7 @@ def main():
      else:required_group.prompt(a,c)
      continue
     if txt.startswith('/start') and channel_catalog.resume(a,c):continue
+    if pandora_stock_notifications.import_message(a,m):continue
     if handle_admin_delivery(a,m):continue
     if customer_inbox.handle(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
@@ -287,6 +288,7 @@ def main():
      parts=txt.split(maxsplit=1)
      if len(parts)>1 and parts[1].startswith('ref_') and 'register_referral' in globals():register_referral(c,parts[1][4:])
      show_start(a,c)
+    elif txt=='/pandoraicons' and c==ADMIN_ID:pandora_stock_notifications.begin_import(a,c)
     elif txt.startswith('/products'):show_products(a,c)
     elif txt.startswith('/currency'):action(a,c,'settings:currency')
     elif txt.startswith('/language'):action(a,c,'settings:lang')
@@ -322,6 +324,8 @@ welcome_editor.install(globals())
 
 import payment_execution
 payment_execution.install(storefront, globals())
+
+import pandora_stock_notifications
 
 if __name__=='__main__':main()
 
