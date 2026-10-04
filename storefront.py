@@ -854,7 +854,7 @@ def admin_text_editor(api, cid, field, pid, lang=None):
     if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid) and not custom_category(pid):
         return
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة النص الذي تريد تعديله:\n\n🇸🇦 عند تعديل العربية سيتم تحديث الإنجليزية تلقائيًا.', kb([[btn('🇸🇦 العربية + تحديث English', f'txtedit:{field}:ar:{pid}'), btn('🇺🇸 English يدوي', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
+        return send(api, cid, 'اختر لغة النص الذي تريد تعديله:\n\n🇸🇦 عند تعديل العربية سيتم تحديث الإنجليزية تلقائيًا.', kb(([[btn('✨ توليد وصف تلقائي', 'autodesc:' + pid, style='success')]] if field == 'description' else []) + [[btn('🇸🇦 العربية + تحديث English', f'txtedit:{field}:ar:{pid}'), btn('🇺🇸 English يدوي', f'txtedit:{field}:en:{pid}')], [btn('إلغاء', 'admin')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
@@ -864,6 +864,39 @@ def admin_text_editor(api, cid, field, pid, lang=None):
     send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.') + '\nسيحل النص الجديد محل النص القديم بالكامل.' + hint,
          kb(([[btn('🗑 إزالة الأيقونة المتحركة', 'removenameicon:' + pid)]] if field == 'name' else []) +
             [[btn('إلغاء', 'admin')]]))
+
+
+
+def generate_product_description(api,cid,pid):
+    if cid != G['ADMIN_ID']:
+        return home(api,cid)
+    pid=LEGACY.get(pid,pid)
+    title=name(pid,cid).strip()
+    short=title if len(title)<=42 else title[:39].rstrip()+'…'
+    sp,ss,sw,w=info_display(pid)
+    cp=custom_product(pid)
+    category=VARIANTS.get(pid,{}).get('category') or (cp[5] if cp else '')
+    low=(title+' '+str(category)).lower()
+    if 'capcut' in low:
+        ar='🎬 <b>'+esc(short)+'</b>\n\n✨ اشتراك CapCut Pro جاهز للاستخدام.\n⚡ تسليم تلقائي بعد تأكيد الدفع.\n📦 اختر الكمية المناسبة ثم أكمل الطلب.'
+        en='🎬 <b>'+esc(short)+'</b>\n\n✨ CapCut Pro subscription ready to use.\n⚡ Automatic delivery after payment confirmation.\n📦 Choose your quantity and complete the order.'
+    else:
+        ar='✨ <b>'+esc(short)+'</b>\n\n✅ منتج رقمي جاهز للطلب.\n⚡ تسليم سريع بعد تأكيد الدفع.\n📦 اختر الكمية المناسبة ثم أكمل الطلب.'
+        en='✨ <b>'+esc(short)+'</b>\n\n✅ Digital product ready to order.\n⚡ Fast delivery after payment confirmation.\n📦 Choose your quantity and complete the order.'
+    if sw and w:
+        ar += '\n🛡 الضمان: '+esc(str(w))
+        en += '\n🛡 Warranty: '+esc(str(w))
+    ar_plain=re.sub(r'<[^>]+>','',ar)
+    en_plain=re.sub(r'<[^>]+>','',en)
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(pid,'description','ar',ar_plain))
+        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(pid,'description','en',en_plain))
+        conn.execute('INSERT OR REPLACE INTO description_emoji(pid,lang,plain,html) VALUES (?,?,?,?)',(pid,'ar',ar_plain,ar))
+        conn.execute('INSERT OR REPLACE INTO description_emoji(pid,lang,plain,html) VALUES (?,?,?,?)',(pid,'en',en_plain,en))
+    send(api,cid,'✅ تم توليد وصف مختصر تلقائيًا بالعربية والإنجليزية.\n\n'+ar,
+         kb([[btn('👁 معاينة المنتج',('item:' if pid in VARIANTS or custom_product(pid) else 'product:')+pid)],
+             [btn('✏️ تعديل الوصف يدويًا','txtpick:description:'+pid)],
+             [btn('↩️ لوحة الإدارة','admin')]]))
 
 
 def handle_info_icon(api,message):
@@ -3693,6 +3726,8 @@ def action(api, cid, value):
     elif prefix == 'txtpick':
         field, _, pid = arg.partition(':')
         admin_text_editor(api, cid, field, pid)
+    elif prefix == 'autodesc' and cid == G['ADMIN_ID']:
+        generate_product_description(api,cid,arg)
     elif prefix == 'txtedit':
         parts = arg.split(':', 2)
         if len(parts) == 3:
