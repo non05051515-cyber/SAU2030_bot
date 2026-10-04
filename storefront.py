@@ -1103,6 +1103,41 @@ def handle_admin_photo(api, message):
     return True
 
 
+
+def admin_promotions(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    if category_id is None:
+        with db() as conn:
+            custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        cats = [(pid, name(pid, cid)) for pid in G['PRODUCTS']]
+        cats += [(pid, label) for pid, label in custom_categories if pid not in G['PRODUCTS']]
+        return send(api, cid, '🎁 <b>عروض الكميات</b>\n\nاختر القسم ثم المنتج. حذف العروض لا يغيّر وصف المنتج أو تنسيقه.',
+                    kb([[btn(label, 'promocat:' + pid)] for pid,label in cats] + [[btn('↩️ لوحة الإدارة','admin')]]))
+    ids = admin_category_product_ids(category_id)
+    send(api, cid, '🎁 اختر المنتج:', kb([[btn(name(pid,cid), 'promopick:' + pid)] for pid in ids] +
+                                         [[btn('↩️ الأقسام','admin:promotions')]]))
+
+def admin_promotion_editor(api, cid, pid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    pid = LEGACY.get(pid,pid)
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS promotion_visibility(pid TEXT PRIMARY KEY, visible INTEGER NOT NULL DEFAULT 1)')
+        row=conn.execute('SELECT visible FROM promotion_visibility WHERE pid=?',(pid,)).fetchone()
+    visible = True if row is None else bool(row[0])
+    send(api,cid,'🎁 <b>'+esc(name(pid,cid))+'</b>\n\nعروض الكميات: <b>'+('ظاهرة' if visible else 'مخفية')+'</b>\n\nهذا الخيار لا يعدّل وصف المنتج ولا تنسيقه.',
+         kb([[btn('🗑 إخفاء عروض الكميات' if visible else '♻️ إظهار عروض الكميات','promotoggle:'+pid,
+                  style='danger' if visible else 'success')],
+             [btn('↩️ لوحة الإدارة','admin')]]))
+
+def promotions_visible(pid):
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS promotion_visibility(pid TEXT PRIMARY KEY, visible INTEGER NOT NULL DEFAULT 1)')
+        row=conn.execute('SELECT visible FROM promotion_visibility WHERE pid=?',(LEGACY.get(pid,pid),)).fetchone()
+    return True if row is None else bool(row[0])
+
+
 def admin_prices(api, cid, category_id=None):
     if cid != G['ADMIN_ID']:
         return
@@ -1453,6 +1488,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
+                             [btn('🎁 عروض الكميات', 'admin:promotions')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
@@ -2957,7 +2993,7 @@ def item(api, cid, pid):
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
         text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
-    if v.get('promotions'):
+    if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
             text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
@@ -3500,6 +3536,7 @@ def action(api, cid, value):
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'buttonlabels': admin_button_labels(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
+        elif arg == 'promotions': admin_promotions(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
@@ -3523,6 +3560,16 @@ def action(api, cid, value):
         decision, _, oid = arg.partition(':')
         import payment_execution
         return payment_execution.approve(sys.modules[__name__], api, cid, decision, oid)
+    elif prefix == 'promocat' and cid == G['ADMIN_ID']:
+        admin_promotions(api,cid,arg)
+    elif prefix == 'promopick' and cid == G['ADMIN_ID']:
+        admin_promotion_editor(api,cid,arg)
+    elif prefix == 'promotoggle' and cid == G['ADMIN_ID']:
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS promotion_visibility(pid TEXT PRIMARY KEY, visible INTEGER NOT NULL DEFAULT 1)')
+            row=conn.execute('SELECT visible FROM promotion_visibility WHERE pid=?',(arg,)).fetchone()
+            conn.execute('INSERT OR REPLACE INTO promotion_visibility VALUES (?,?)',(arg,0 if row is None or row[0] else 1))
+        admin_promotion_editor(api,cid,arg)
     elif prefix == 'infocat':
         admin_info_menu(api,cid,arg)
     elif prefix == 'infopick':
@@ -4074,7 +4121,7 @@ def item(api, cid, pid):
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
         text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
-    if v.get('promotions'):
+    if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
             text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
@@ -6714,7 +6761,7 @@ def item(api, cid, pid):
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
         text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
-    if v.get('promotions'):
+    if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
             text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
@@ -7831,7 +7878,7 @@ def item(api, cid, pid):
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
         text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
-    if v.get('promotions'):
+    if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
             text += '\n' + esc(tier['min_quantity']) + '+: ' + esc(price(cid, pid, source_price=tier['source_usd'])) + esc(tr(cid, ' لكل قطعة', ' per unit'))
