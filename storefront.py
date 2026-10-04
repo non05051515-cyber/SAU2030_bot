@@ -1426,7 +1426,12 @@ def supplier_api_menu(api, cid, category_id=None):
 
 
 def _supplier_json_request(url, api_key, method='GET', payload=None, extra_headers=None, timeout=20):
-    headers = {'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'}
+    headers = {
+        'Authorization': 'Bearer ' + api_key,
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
     if payload is not None:
         headers['Content-Type'] = 'application/json'
     if extra_headers:
@@ -1569,7 +1574,10 @@ def supplier_test_connection(api, cid, pid):
         # The integration needs catalog access to locate products/variants.
         # balance:read is optional, so test /products instead of /balance.
         req = urllib.request.Request(endpoint.rstrip('/') + '/products?limit=1',
-                                     headers={'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'})
+                                     headers={'Authorization': 'Bearer ' + api_key,
+                                              'Accept': 'application/json',
+                                              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                                              'Accept-Language': 'en-US,en;q=0.9'})
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         count = len(data.get('items') or []) if isinstance(data, dict) else 0
@@ -1597,10 +1605,18 @@ def pandora_startup_probe():
         return
     url = endpoint.rstrip('/') + '/products?limit=1'
     modes = [
-        ('bearer', {'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'}),
-        ('x-api-key', {'X-API-Key': api_key, 'Accept': 'application/json'}),
-        ('api-key', {'Api-Key': api_key, 'Accept': 'application/json'}),
-        ('auth-raw', {'Authorization': api_key, 'Accept': 'application/json'}),
+        ('bearer', {'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9'}),
+        ('x-api-key', {'X-API-Key': api_key, 'Accept': 'application/json',
+                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                       'Accept-Language': 'en-US,en;q=0.9'}),
+        ('api-key', {'Api-Key': api_key, 'Accept': 'application/json',
+                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                     'Accept-Language': 'en-US,en;q=0.9'}),
+        ('auth-raw', {'Authorization': api_key, 'Accept': 'application/json',
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+                      'Accept-Language': 'en-US,en;q=0.9'}),
     ]
     for mode, headers in modes:
         try:
