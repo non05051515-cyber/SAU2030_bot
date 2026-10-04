@@ -2890,7 +2890,10 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
+        desc = product_description(pid, cid)
+        text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
+        if desc:
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -2899,7 +2902,10 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
+    desc = product_description(pid, cid)
+    text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
+    if desc:
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -3999,7 +4005,10 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
+        desc = product_description(pid, cid)
+        text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
+        if desc:
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -4008,7 +4017,10 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
+    desc = product_description(pid, cid)
+    text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
+    if desc:
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -6618,7 +6630,10 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
+        desc = product_description(pid, cid)
+        text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
+        if desc:
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -6627,7 +6642,10 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
+    desc = product_description(pid, cid)
+    text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
+    if desc:
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -7727,7 +7745,10 @@ def item(api, cid, pid):
             return
         _, product_name, description, price_usd, available, category_id, stock = cp
         status = tr(cid, '✅ متوفر', '✅ Available') if available and int(stock or 0) > 0 else tr(cid, '🔴 نفدت الكمية', '🔴 Out of stock')
-        text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + '\n\n' + esc(status) + '\n\n' + esc(product_description(pid, cid))
+        desc = product_description(pid, cid)
+        text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
+        if desc:
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -7736,7 +7757,10 @@ def item(api, cid, pid):
     available = ''
     if not in_stock(pid):
         available = tr(cid, '🚫 نفد لدى المورد وقت المراجعة. الطلب غير متاح حاليًا.', '🚫 Out of stock at the last supplier check. Ordering is currently unavailable.')
-    text = esc(name(pid, cid)) + '\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '') + '\n\n' + esc(product_description(pid, cid))
+    desc = product_description(pid, cid)
+    text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
+    if desc:
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
     if v.get('promotions'):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
