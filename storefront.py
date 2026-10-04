@@ -1330,7 +1330,7 @@ def admin_products_page(api, cid):
             seen.add(category_id)
     buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
     text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
-    send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+    send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success')], [btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_category_detail(api, cid, category_id):
@@ -1353,6 +1353,20 @@ def admin_category_detail(api, cid, category_id):
     title = category_label(category_id, cid)
     extra = [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')]]
     send(api, cid, '📁 <b>' + esc(title) + '</b>\n\nكل المنتجات داخل القسم:', kb(buttons + extra + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
+
+
+def begin_add_direct_product(api, cid):
+    """Add one standalone product directly to the Products page."""
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    reset_navigation_state(cid)
+    BROADCAST_PENDING.discard(cid)
+    payload = {'direct': True, 'category_id': None, 'category_name': '', 'count': 1, 'index': 0, 'products': []}
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
+                     (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
+    send(api, cid, '➕ <b>إضافة منتج مباشر</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي</b>:', 
+         kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
 def begin_add_product(api, cid):
@@ -1481,7 +1495,10 @@ def handle_admin_product(api, message):
             next_action = 'add_product_name'
             prompt = '✅ تم حفظ بيانات المنتج ' + str(payload['index']) + '.\n\nأرسل <b>اسم المنتج ' + str(payload['index'] + 1) + ' من ' + str(payload['count']) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
         else:
-            lines = ['✅ <b>راجع القسم قبل الحفظ</b>', '', '📁 ' + esc(payload['category_name'])]
+            if payload.get('direct'):
+                lines = ['✅ <b>راجع المنتج المباشر قبل الحفظ</b>', '']
+            else:
+                lines = ['✅ <b>راجع القسم قبل الحفظ</b>', '', '📁 ' + esc(payload['category_name'])]
             for i, product in enumerate(payload['products'], 1):
                 lines.append(str(i) + '. <b>' + esc(product['name']) + '</b> — $' + esc(product['price_usd']) + ' — الكمية: ' + str(product['stock']))
             lines += ['', 'أرسل <b>نعم</b> لحفظ القسم والمنتجات أو <b>لا</b> للإلغاء.']
@@ -1493,14 +1510,15 @@ def handle_admin_product(api, message):
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_products_page(api, cid)
             return True
-        category_id = payload.get('category_id') or 'cat_' + uuid.uuid4().hex[:10]
-        if payload.get('category_id') and category_id not in G['PRODUCTS'] and not custom_category(category_id):
+        is_direct = bool(payload.get('direct'))
+        category_id = None if is_direct else (payload.get('category_id') or 'cat_' + uuid.uuid4().hex[:10])
+        if not is_direct and payload.get('category_id') and category_id not in G['PRODUCTS'] and not custom_category(category_id):
             send(api, cid, 'القسم لم يعد موجودًا. اختر قسمًا آخر.')
             add_to_category(api, cid)
             return True
         saved_product_ids = []
         with db() as conn:
-            if not payload.get('category_id'):
+            if not is_direct and not payload.get('category_id'):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
@@ -1598,7 +1616,8 @@ def admin_panel(api, cid):
     send(api, cid, text, kb([[btn('🔔 الطلبات الجديدة / التسليم', 'admin:orders', style='primary')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
-                             [btn('➕ إضافة منتج', 'admin:addproduct', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
+                             [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
+                             [btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎁 عروض الكميات', 'admin:promotions')],
@@ -2809,8 +2828,17 @@ def products(api, cid):
     buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    # Standalone products appear directly below the category grid. Their status is
+    # shown only by the button background: green when available, red otherwise.
+    for pid, available, stock in direct_products:
+        if not product_visible(pid):
+            continue
+        is_available = bool(available and int(stock or 0) > 0)
+        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(int(stock or 0))
+        rows.append([btn(label, 'options:' + pid, style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
 
@@ -3656,6 +3684,7 @@ def action(api, cid, value):
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'supplierapi': supplier_api_menu(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
+        elif arg == 'adddirect': begin_add_direct_product(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
@@ -4712,6 +4741,7 @@ def action(api, cid, value):
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
+        elif arg == 'adddirect': begin_add_direct_product(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
@@ -7427,6 +7457,7 @@ def action(api, cid, value):
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'supplierapi': supplier_api_menu(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
+        elif arg == 'adddirect': begin_add_direct_product(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
@@ -8469,6 +8500,7 @@ def action(api, cid, value):
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
+        elif arg == 'adddirect': begin_add_direct_product(api, cid)
         elif arg == 'addproduct': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
