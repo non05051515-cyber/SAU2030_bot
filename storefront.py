@@ -1607,7 +1607,7 @@ def admin_product_detail(api, cid, pid):
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
-                [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
+                [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                 [btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
@@ -5451,7 +5451,7 @@ def admin_product_detail(api, cid, pid):
         is_available = bool(available and qty > 0)
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
-                [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
+                [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                 [btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
