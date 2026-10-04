@@ -604,34 +604,55 @@ def product_description(pid, cid=0):
 
 
 def description_message_html(message, plain):
-    """Preserve custom emoji IDs using Telegram's UTF-16 entity offsets."""
-    raw = message.get('text') or ''
+    """Preserve Telegram formatting from typed or forwarded product descriptions."""
+    raw = message.get('text') or message.get('caption') or ''
     leading = len(raw) - len(raw.lstrip())
     shift = len(raw[:leading].encode('utf-16-le')) // 2
     data = plain.encode('utf-16-le')
-    spans = []
-    for entity in message.get('entities', []):
-        emoji_id = str(entity.get('custom_emoji_id', ''))
-        if entity.get('type') != 'custom_emoji' or not emoji_id.isdecimal():
+    total = len(data) // 2
+    opens, closes = {}, {}
+    tag_map = {
+        'bold': ('<b>', '</b>'), 'italic': ('<i>', '</i>'),
+        'underline': ('<u>', '</u>'), 'strikethrough': ('<s>', '</s>'),
+        'spoiler': ('<tg-spoiler>', '</tg-spoiler>'), 'code': ('<code>', '</code>'),
+        'blockquote': ('<blockquote>', '</blockquote>'),
+        'expandable_blockquote': ('<blockquote expandable>', '</blockquote>'),
+    }
+    for entity in message.get('entities', []) or message.get('caption_entities', []):
+        kind = entity.get('type')
+        s = entity.get('offset', -1) - shift
+        e = s + entity.get('length', 0)
+        if not (0 <= s < e <= total):
             continue
-        start = entity.get('offset', -1) - shift
-        end = start + entity.get('length', 0)
-        if 0 <= start < end <= len(data) // 2:
-            spans.append((start * 2, end * 2, emoji_id))
-    parts, cursor = [], 0
-    for start, end, emoji_id in sorted(spans):
-        if start < cursor:
-            continue
-        try:
-            before = data[cursor:start].decode('utf-16-le')
-            fallback = data[start:end].decode('utf-16-le')
-        except UnicodeDecodeError:
-            continue
-        parts.extend((esc(before), '<tg-emoji emoji-id="' + emoji_id + '">' + esc(fallback) + '</tg-emoji>'))
-        cursor = end
-    parts.append(esc(data[cursor:].decode('utf-16-le')))
-    return ''.join(parts)
-
+        pair = tag_map.get(kind)
+        if kind == 'pre':
+            lang = entity.get('language') or ''
+            pair = ('<pre><code' + ((' class="language-' + esc(lang) + '"') if lang else '') + '>', '</code></pre>')
+        elif kind == 'text_link' and entity.get('url'):
+            pair = ('<a href="' + esc(entity['url']) + '">', '</a>')
+        elif kind == 'custom_emoji' and str(entity.get('custom_emoji_id', '')).isdecimal():
+            pair = ('<tg-emoji emoji-id="' + str(entity['custom_emoji_id']) + '">', '</tg-emoji>')
+        if pair:
+            opens.setdefault(s, []).append((e, pair[0]))
+            closes.setdefault(e, []).append((s, pair[1]))
+    out = []
+    for i in range(total + 1):
+        for s, tag in sorted(closes.get(i, []), reverse=True):
+            out.append(tag)
+        for e, tag in sorted(opens.get(i, []), reverse=True):
+            out.append(tag)
+        if i < total:
+            try:
+                out.append(esc(data[i*2:(i+1)*2].decode('utf-16-le')))
+            except UnicodeDecodeError:
+                # Surrogate pair: consume safely through the plain-text fallback below.
+                pass
+    rendered = ''.join(out)
+    # If UTF-16 surrogate splitting dropped visible characters, keep the exact text rather than corrupt it.
+    visible = re.sub(r'<[^>]+>', '', rendered)
+    if not rendered or (plain and not visible):
+        return esc(plain)
+    return rendered
 
 def product_description_html(pid, cid=0):
     pid = LEGACY.get(pid, pid)
