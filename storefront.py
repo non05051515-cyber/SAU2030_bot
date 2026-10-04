@@ -1494,26 +1494,21 @@ def pandora_pricing_row(pid):
 
 
 def pandora_quote_cost(pid, quantity=1):
+    """Return the authenticated Pandora account price, preferring catalogue special price."""
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not (provider == 'pandora' and endpoint and api_key and product_id):
         return None
-    quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
-        dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
-    if not quote.get('can_purchase', False):
-        return None
-    # Pandora may expose the authenticated account price under a special/customer
-    # price field while unit_price can be the public/default price.
-    candidates = (
-        'special_price', 'your_special_price', 'customer_price', 'account_price',
-        'user_price', 'discounted_price', 'net_price', 'unit_price'
-    )
-    containers = [quote]
-    for key in ('data', 'quote', 'pricing', 'price'):
-        value = quote.get(key)
-        if isinstance(value, dict):
-            containers.append(value)
-    for obj in containers:
-        for key in candidates:
+
+    def pick_price(obj):
+        if not isinstance(obj, dict):
+            return None
+        # Prefer account-specific/special fields over public/base price.
+        keys = (
+            'special_price', 'your_special_price', 'customer_price', 'account_price',
+            'user_price', 'member_price', 'reseller_price', 'wholesale_price',
+            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price'
+        )
+        for key in keys:
             value = obj.get(key)
             if value is None:
                 continue
@@ -1523,8 +1518,55 @@ def pandora_quote_cost(pid, quantity=1):
                 return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             except Exception:
                 pass
-    return None
+        for key in ('pricing', 'price', 'prices'):
+            value = obj.get(key)
+            if isinstance(value, dict):
+                found = pick_price(value)
+                if found is not None:
+                    return found
+        return None
 
+    # The authenticated catalogue is the same account context used for stock/products.
+    # Prefer its special/account price; use quote only as a fallback.
+    try:
+        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=100', api_key, timeout=20)
+        target = None
+        for item in _pandora_list(payload):
+            if _pandora_product_id(item) == str(product_id):
+                target = item
+                break
+        if target:
+            variants = target.get('variants') or target.get('options') or target.get('skus') or []
+            if isinstance(variants, dict):
+                variants = variants.get('data') or variants.get('items') or list(variants.values())
+            if variant_id and isinstance(variants, list):
+                for variant in variants:
+                    if not isinstance(variant, dict):
+                        continue
+                    vid = str(variant.get('id') or variant.get('variant_id') or variant.get('variantId') or variant.get('sku') or '')
+                    if vid == str(variant_id):
+                        found = pick_price(variant)
+                        if found is not None:
+                            return found
+                        break
+            found = pick_price(target)
+            if found is not None:
+                return found
+    except Exception as exc:
+        print('Pandora catalogue price lookup failed:', pid, type(exc).__name__, flush=True)
+
+    try:
+        quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
+            dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
+        if not quote.get('can_purchase', False):
+            return None
+        for obj in (quote, quote.get('data'), quote.get('quote'), quote.get('pricing'), quote.get('price')):
+            found = pick_price(obj)
+            if found is not None:
+                return found
+    except Exception as exc:
+        print('Pandora quote price lookup failed:', pid, type(exc).__name__, flush=True)
+    return None
 
 def pandora_refresh_price(pid):
     pid = LEGACY.get(pid, pid)
@@ -5176,26 +5218,21 @@ def pandora_pricing_row(pid):
 
 
 def pandora_quote_cost(pid, quantity=1):
+    """Return the authenticated Pandora account price, preferring catalogue special price."""
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not (provider == 'pandora' and endpoint and api_key and product_id):
         return None
-    quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
-        dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
-    if not quote.get('can_purchase', False):
-        return None
-    # Pandora may expose the authenticated account price under a special/customer
-    # price field while unit_price can be the public/default price.
-    candidates = (
-        'special_price', 'your_special_price', 'customer_price', 'account_price',
-        'user_price', 'discounted_price', 'net_price', 'unit_price'
-    )
-    containers = [quote]
-    for key in ('data', 'quote', 'pricing', 'price'):
-        value = quote.get(key)
-        if isinstance(value, dict):
-            containers.append(value)
-    for obj in containers:
-        for key in candidates:
+
+    def pick_price(obj):
+        if not isinstance(obj, dict):
+            return None
+        # Prefer account-specific/special fields over public/base price.
+        keys = (
+            'special_price', 'your_special_price', 'customer_price', 'account_price',
+            'user_price', 'member_price', 'reseller_price', 'wholesale_price',
+            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price'
+        )
+        for key in keys:
             value = obj.get(key)
             if value is None:
                 continue
@@ -5205,8 +5242,55 @@ def pandora_quote_cost(pid, quantity=1):
                 return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             except Exception:
                 pass
-    return None
+        for key in ('pricing', 'price', 'prices'):
+            value = obj.get(key)
+            if isinstance(value, dict):
+                found = pick_price(value)
+                if found is not None:
+                    return found
+        return None
 
+    # The authenticated catalogue is the same account context used for stock/products.
+    # Prefer its special/account price; use quote only as a fallback.
+    try:
+        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=100', api_key, timeout=20)
+        target = None
+        for item in _pandora_list(payload):
+            if _pandora_product_id(item) == str(product_id):
+                target = item
+                break
+        if target:
+            variants = target.get('variants') or target.get('options') or target.get('skus') or []
+            if isinstance(variants, dict):
+                variants = variants.get('data') or variants.get('items') or list(variants.values())
+            if variant_id and isinstance(variants, list):
+                for variant in variants:
+                    if not isinstance(variant, dict):
+                        continue
+                    vid = str(variant.get('id') or variant.get('variant_id') or variant.get('variantId') or variant.get('sku') or '')
+                    if vid == str(variant_id):
+                        found = pick_price(variant)
+                        if found is not None:
+                            return found
+                        break
+            found = pick_price(target)
+            if found is not None:
+                return found
+    except Exception as exc:
+        print('Pandora catalogue price lookup failed:', pid, type(exc).__name__, flush=True)
+
+    try:
+        quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
+            dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
+        if not quote.get('can_purchase', False):
+            return None
+        for obj in (quote, quote.get('data'), quote.get('quote'), quote.get('pricing'), quote.get('price')):
+            found = pick_price(obj)
+            if found is not None:
+                return found
+    except Exception as exc:
+        print('Pandora quote price lookup failed:', pid, type(exc).__name__, flush=True)
+    return None
 
 def pandora_refresh_price(pid):
     pid = LEGACY.get(pid, pid)
