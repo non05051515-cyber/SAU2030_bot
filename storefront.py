@@ -1589,20 +1589,36 @@ def supplier_test_connection(api, cid, pid):
 
 
 def pandora_startup_probe():
-    """Read-only Pandora connectivity smoke test. Never creates an order."""
+    """Read-only Pandora auth/connectivity diagnostics. Never creates an order."""
     endpoint = (os.getenv('PANDORA_API_BASE') or 'https://api.pandoradigital.shop/api/v1').strip()
     api_key = (os.getenv('PANDORA_API_KEY') or '').strip()
     if not api_key:
         print('Pandora probe: missing PANDORA_API_KEY', flush=True)
         return
-    try:
-        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=1', api_key, timeout=12)
-        items = _pandora_list(payload)
-        print('Pandora probe: catalog connection OK; products_read=' + str(len(items)), flush=True)
-    except urllib.error.HTTPError as exc:
-        print('Pandora probe: HTTP ' + str(exc.code), flush=True)
-    except Exception as exc:
-        print('Pandora probe: failed ' + type(exc).__name__, flush=True)
+    url = endpoint.rstrip('/') + '/products?limit=1'
+    modes = [
+        ('bearer', {'Authorization': 'Bearer ' + api_key, 'Accept': 'application/json'}),
+        ('x-api-key', {'X-API-Key': api_key, 'Accept': 'application/json'}),
+        ('api-key', {'Api-Key': api_key, 'Accept': 'application/json'}),
+        ('auth-raw', {'Authorization': api_key, 'Accept': 'application/json'}),
+    ]
+    for mode, headers in modes:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                raw = resp.read().decode('utf-8', 'replace')
+                data = json.loads(raw) if raw else {}
+            items = _pandora_list(data)
+            print('Pandora probe: auth=' + mode + ' OK products_read=' + str(len(items)), flush=True)
+            return
+        except urllib.error.HTTPError as exc:
+            try:
+                body = exc.read().decode('utf-8', 'replace')[:500]
+            except Exception:
+                body = ''
+            print('Pandora probe: auth=' + mode + ' HTTP ' + str(exc.code) + ' body=' + body.replace('\n',' '), flush=True)
+        except Exception as exc:
+            print('Pandora probe: auth=' + mode + ' failed ' + type(exc).__name__, flush=True)
 
 
 def _pandora_bool(value, default=True):
