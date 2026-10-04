@@ -210,12 +210,17 @@ def main():
  # Keep maintenance/broadcast work off the message polling path.
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
+  # Keep all background services, but avoid hammering SQLite every 2 seconds.
+  jobs=[('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
+  last={}
   while True:
-   for name, fn in [('customer_activity',storefront.tick_customer_activity),('stock_alerts',globals().get('tick_stock_alerts')),('channel_catalog',globals().get('tick_channel_catalog')),('auto_ads',globals().get('tick_auto_ads')),('product_broadcast',globals().get('tick_product_broadcast'))]:
-    if fn:
+   now=time.monotonic()
+   for name, fn, interval in jobs:
+    if fn and now-last.get(name,0)>=interval:
+     last[name]=now
      try:fn(a)
      except Exception as e:print('Maintenance error',name,type(e).__name__,str(e),flush=True)
-   time.sleep(2)
+   time.sleep(0.5)
  import threading
  threading.Thread(target=maintenance_loop,name='bot-maintenance',daemon=True).start()
  offset=0;print('Bot running...',flush=True)
