@@ -15,6 +15,11 @@ def report(s):
             FROM orders o LEFT JOIN supplier_api a ON a.pid=o.pid
             LEFT JOIN supplier_orders so ON so.order_id=o.id
             ORDER BY o.rowid DESC LIMIT 15""").fetchall()
+        prices = c.execute('''SELECT p.pid,p.price_usd,pp.value,pp.currency,pr.supplier_cost_usd,pr.margin_usd
+            FROM admin_products p LEFT JOIN product_prices pp ON pp.pid=p.pid
+            LEFT JOIN pandora_pricing pr ON pr.pid=p.pid WHERE p.category_id='pandora_capcut' ''').fetchall()
+        legacy_prices = c.execute("SELECT pid,value,currency FROM product_prices WHERE pid IN ('pd_14','pd_15','pd_16','pd_17')").fetchall()
+    print('VEXA pricing metadata: '+json.dumps({'canonical':prices,'legacy':legacy_prices}),flush=True)
     import payment_execution
     routing = [{'order_id':r[0],'saved_pid':r[1],'resolved_pid':payment_execution.resolve_pid(s,r[1])}
                for r in orders if payment_execution.is_capcut(s,r[1])]

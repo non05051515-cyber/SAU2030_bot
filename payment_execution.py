@@ -322,8 +322,14 @@ def guard_delivery(s, oid):
 
 
 def install(s, namespace):
+    import pandora_admin
+    pandora_admin.install(s)
     old_action = namespace['action']
     def action(api,cid,value):
+        if pandora_admin.action(s,api,cid,value):
+            return
+        if cid == s.G['ADMIN_ID']:
+            value = pandora_admin.price_action(s,value)
         prefix,_,arg = value.partition(':')
         if prefix in ('payreview','adminpay'):
             decision,_,oid = arg.partition(':')

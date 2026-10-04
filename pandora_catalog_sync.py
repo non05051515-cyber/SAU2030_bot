@@ -155,7 +155,7 @@ def sync_capcut():
                     conn.execute("""INSERT INTO pandora_pricing(pid,supplier_cost_usd,margin_usd,updated_at)
                         VALUES (?,?,?,?) ON CONFLICT(pid) DO UPDATE SET supplier_cost_usd=excluded.supplier_cost_usd,updated_at=excluded.updated_at""",
                         (pid, str(cost), str(margin), now))
-                    conn.execute("INSERT OR REPLACE INTO product_prices(pid,value,currency) VALUES (?,?,?)",
+                    conn.execute("INSERT OR IGNORE INTO product_prices(pid,value,currency) VALUES (?,?,?)",
                                  (pid, str(sale), "USD"))
             synced += 1
 

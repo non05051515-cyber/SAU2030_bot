@@ -140,4 +140,45 @@ class Payments(unittest.TestCase):
   self.assertEqual(self.query('SELECT status,pid FROM orders'),[('delivered','pd_17')])
   self.assertEqual(self.purchases()[0][2]['product_id'],'prd_3')
   self.assertEqual(self.bot.PENDING_ADMIN_DELIVERY,{})
+ def test_admin_link_button_and_binding_preserve_price_and_secret(self):
+  import json
+  self.bot.action(self.api,self.admin,'admin')
+  self.assertIn('admin:pandoralink',str(self.api.calls))
+  self.bot.action(self.api,self.admin,'admin:pandoralink')
+  self.assertIn('plcat:capcut',str(self.api.calls))
+  with self.s.db() as c:
+   c.execute('INSERT INTO product_prices VALUES (?,?,?)',('pc_2','12.50','USD'))
+   c.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(self.admin,'pandora_catalog',json.dumps({'pid':'pc_2','products':[{'id':'new-supplier-id','name':'Test','variants':[]}]})))
+  self.bot.action(self.api,self.admin,'pandorap:0')
+  self.assertEqual(self.query("SELECT service_id,enabled,api_key FROM supplier_api WHERE pid='pc_2'"),[('new-supplier-id',1,'')])
+  self.assertEqual(str(self.s.amount('pc_2','USD')),'12.50')
+  self.assertNotIn('TEST_ONLY',str(self.api.calls))
+  self.assertFalse(self.purchases())
+ def test_admin_link_is_admin_only(self):
+  self.bot.action(self.api,7,'admin:pandoralink')
+  self.assertFalse(self.api.calls)
+ def test_sync_and_refresh_never_overwrite_manual_sale(self):
+  import pandora_catalog_sync as sync
+  item={'id':'prd_2','name':'Capcut Pro 1 Month FW','stock':10}
+  pid='pc_prd_2'
+  with patch.object(self.s,'_supplier_json_request',return_value={'items':[item]}),patch.object(sync,'_quote',return_value=__import__('decimal').Decimal('1')):
+   sync.sync_capcut()
+  with self.s.db() as c:c.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)',(pid,'15.25','USD'))
+  with patch.object(self.s,'_supplier_json_request',return_value={'items':[item]}),patch.object(sync,'_quote',return_value=__import__('decimal').Decimal('2')):
+   sync.sync_capcut()
+  self.s.pandora_refresh_price(pid)
+  self.assertEqual(str(self.s.amount(pid,'USD')),'15.25')
+ def test_below_cost_product_cannot_be_ordered(self):
+  with self.s.db() as c:
+   c.execute('INSERT INTO pandora_pricing VALUES (?,?,?,?)',('pc_2','11','0','test'))
+   c.execute('INSERT INTO wallets VALUES (?,?)',(7,'100'))
+  self.assertFalse(self.s.can_order('pc_2'))
+  self.e.EVENT.message_id=888
+  self.bot.action(self.api,7,'paywallet:pc_2')
+  self.assertEqual(self.query('SELECT balance_sar FROM wallets'),[('100',)])
+  self.assertFalse(self.purchases())
+ def test_price_edit_targets_customer_sku(self):
+  import json
+  self.bot.action(self.api,self.admin,'pricepick:pd_16')
+  self.assertEqual(json.loads(self.query("SELECT value FROM admin_state WHERE action='price'")[0][0])[0],'pc_2')
 if __name__=='__main__':unittest.main()
