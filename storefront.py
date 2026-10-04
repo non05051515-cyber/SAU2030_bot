@@ -1417,7 +1417,7 @@ def admin_panel(api, cid):
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
-                             [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
+                             [btn('🎨 تعديل أزرار تيليجرام', 'admin:telegrambuttons', style='success')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
 
@@ -5150,7 +5150,7 @@ def admin_panel(api, cid):
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
-                             [btn('✏️ تعديل أسماء الأزرار', 'admin:buttonlabels')],
+                             [btn('🎨 تعديل أزرار تيليجرام', 'admin:telegrambuttons', style='success')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('🏠 الرئيسية', 'home')]]))
 
