@@ -476,6 +476,16 @@ def handle_button_label(api, message):
 
 
 
+
+def admin_names_menu(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    send(api, cid, '✏️ <b>تعديل الأسماء</b>\n\nاختر ما تريد تعديله:',
+         kb([[btn('📦 تعديل اسم المنتج', 'admin:editname', style='primary')],
+             [btn('📁 تعديل اسم القسم', 'admin:editcategoryname')],
+             [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
 def admin_category_name_menu(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
@@ -1706,7 +1716,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
-                             [btn('✏️ تعديل اسم القسم', 'admin:editcategoryname'), btn('✏️ تعديل اسم المنتج', 'admin:editname')],
+                             [btn('✏️ تعديل الأسماء', 'admin:names', style='primary')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎁 عروض الكميات', 'admin:promotions')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
@@ -3840,6 +3850,7 @@ def action(api, cid, value):
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'promotions': admin_promotions(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
+        elif arg == 'names': admin_names_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editcategoryname': admin_category_name_menu(api, cid)
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
@@ -4948,6 +4959,7 @@ def action(api, cid, value):
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
+        elif arg == 'names': admin_names_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editcategoryname': admin_category_name_menu(api, cid)
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
@@ -5689,7 +5701,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
-                             [btn('✏️ تعديل اسم القسم', 'admin:editcategoryname'), btn('✏️ تعديل اسم المنتج', 'admin:editname')],
+                             [btn('✏️ تعديل الأسماء', 'admin:names', style='primary')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
@@ -7755,6 +7767,7 @@ def action(api, cid, value):
         elif arg == 'buttonlabels': admin_button_labels(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
+        elif arg == 'names': admin_names_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editcategoryname': admin_category_name_menu(api, cid)
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
@@ -8849,6 +8862,7 @@ def action(api, cid, value):
         elif arg == 'icons': admin_icons(api, cid)
         elif arg == 'prices': admin_prices(api, cid)
         elif arg == 'photos': admin_photo_menu(api, cid)
+        elif arg == 'names': admin_names_menu(api, cid)
         elif arg == 'editname': admin_text_menu(api, cid, 'name')
         elif arg == 'editcategoryname': admin_category_name_menu(api, cid)
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
