@@ -168,6 +168,8 @@ def install(s, namespace):
         # Keep automatic-description admin callbacks inside the admin flow.
         if cid == s.G['ADMIN_ID'] and prefix == 'autodesc':
             return s.generate_product_description(api, cid, arg)
+        if cid == s.G['ADMIN_ID'] and prefix == 'autodescsave':
+            return s.save_auto_description(api, cid, arg)
         if value == 'admin:addtocategory':
             return s.add_to_category(api, cid)
         if prefix == 'addtocategory':
@@ -230,6 +232,8 @@ def install(s, namespace):
 
     def receipt(api,msg):
         cid=msg['chat']['id']
+        if s.handle_auto_description(api, msg):
+            return True
         if s.handle_button_label(api, msg):
             return True
         with s.db() as c:
