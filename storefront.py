@@ -1588,6 +1588,23 @@ def supplier_test_connection(api, cid, pid):
         send(api, cid, '❌ فشل اختبار الاتصال: <code>' + esc(type(exc).__name__) + '</code>')
 
 
+def pandora_startup_probe():
+    """Read-only Pandora connectivity smoke test. Never creates an order."""
+    endpoint = (os.getenv('PANDORA_API_BASE') or 'https://api.pandoradigital.shop/api/v1').strip()
+    api_key = (os.getenv('PANDORA_API_KEY') or '').strip()
+    if not api_key:
+        print('Pandora probe: missing PANDORA_API_KEY', flush=True)
+        return
+    try:
+        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=1', api_key, timeout=12)
+        items = _pandora_list(payload)
+        print('Pandora probe: catalog connection OK; products_read=' + str(len(items)), flush=True)
+    except urllib.error.HTTPError as exc:
+        print('Pandora probe: HTTP ' + str(exc.code), flush=True)
+    except Exception as exc:
+        print('Pandora probe: failed ' + type(exc).__name__, flush=True)
+
+
 def _pandora_bool(value, default=True):
     if value is None:
         return default
@@ -3520,6 +3537,10 @@ def action(api, cid, value):
 def install(namespace):
     global G
     G = namespace
+    try:
+        __import__('threading').Thread(target=pandora_startup_probe, daemon=True).start()
+    except Exception:
+        pass
     apply_icon_overrides()
     namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
@@ -4543,6 +4564,10 @@ def action(api, cid, value):
 def install(namespace):
     global G
     G = namespace
+    try:
+        __import__('threading').Thread(target=pandora_startup_probe, daemon=True).start()
+    except Exception:
+        pass
     apply_icon_overrides()
     namespace.update({'show_start': start, 'show_home': home, 'show_products': products,
                       'show_product': category, 'show_claude_product': item, 'handle_action': action, 'action': action,
