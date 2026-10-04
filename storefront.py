@@ -1352,6 +1352,7 @@ def admin_product_detail(api, cid, pid):
         is_available = bool(available and qty > 0)
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
+                [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
                 [btn('🔄 تغيير التوفر', 'myproducttoggle:' + pid)],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                 [btn('↩️ القسم', 'mycategory:' + category_id)]]
@@ -1365,6 +1366,7 @@ def admin_product_detail(api, cid, pid):
         category_id = VARIANTS.get(pid, {}).get('category', pid)
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
+                [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
                 [btn('📦 تعديل التوفر/الكمية', 'admin:stock')],
                 [btn('↩️ القسم', 'mycategory:' + category_id)]]
     text = ('📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description or '') +
