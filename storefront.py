@@ -592,7 +592,14 @@ def product_description(pid, cid=0):
     else:
         cp = custom_product(pid)
         default = cp[2] if cp else G['PRODUCTS'].get(pid, {}).get('description', '')
-    return text_override(pid, 'description', lang, default)
+    description = text_override(pid, 'description', lang, default)
+    # Never expose the upstream supplier to customers. Older Pandora-linked
+    # products may still carry the supplier name in their saved/default text.
+    endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if provider == 'pandora' and service_id:
+        if 'pandora' in (description or '').lower():
+            return tr(cid, 'تسليم تلقائي وفوري بعد تأكيد الدفع.', 'Automatic instant delivery after payment confirmation.')
+    return description
 
 
 def description_message_html(message, plain):
