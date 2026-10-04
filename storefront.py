@@ -1430,7 +1430,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🎨 تعديل أزرار تيليجرام', 'admin:telegrambuttons', style='success')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
-                             [btn('🏠 الرئيسية', 'home')]]))
+                             [btn('الرئيسية', 'home', ui_icon('ui_home'))]]))
 
 
 def supplier_api_row(pid):
@@ -2632,7 +2632,7 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
-    rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
+    rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
 
 
@@ -2820,7 +2820,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
             send(api, cid, caption, markup)
     send(api, cid, tr(cid, 'تصفح أقسام المتجر:', 'Browse store categories:'),
          kb([[btn(tr(cid, '↩️ الأقسام', '↩️ Categories'), 'products'),
-              btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]))
+              btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]))
 
 
 def category(api, cid, pid):
@@ -3849,7 +3849,7 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
-    rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
+    rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
 
 
@@ -3943,7 +3943,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
             send(api, cid, caption, markup)
     send(api, cid, tr(cid, 'تصفح أقسام المتجر:', 'Browse store categories:'),
          kb([[btn(tr(cid, '↩️ الأقسام', '↩️ Categories'), 'products'),
-              btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]))
+              btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]))
 
 
 def category(api, cid, pid):
@@ -5202,7 +5202,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🎨 تعديل أزرار تيليجرام', 'admin:telegrambuttons', style='success')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
-                             [btn('🏠 الرئيسية', 'home')]]))
+                             [btn('الرئيسية', 'home', ui_icon('ui_home'))]]))
 
 
 def supplier_api_row(pid):
@@ -6389,7 +6389,7 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
-    rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
+    rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
 
 
@@ -6577,7 +6577,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
             send(api, cid, caption, markup)
     send(api, cid, tr(cid, 'تصفح أقسام المتجر:', 'Browse store categories:'),
          kb([[btn(tr(cid, '↩️ الأقسام', '↩️ Categories'), 'products'),
-              btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]))
+              btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]))
 
 
 def category(api, cid, pid):
@@ -7606,7 +7606,7 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
-    rows += [[btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]
+    rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
 
 
@@ -7700,7 +7700,7 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
             send(api, cid, caption, markup)
     send(api, cid, tr(cid, 'تصفح أقسام المتجر:', 'Browse store categories:'),
          kb([[btn(tr(cid, '↩️ الأقسام', '↩️ Categories'), 'products'),
-              btn(tr(cid, '🏠 الرئيسية', '🏠 Home'), 'home')]]))
+              btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]))
 
 
 def category(api, cid, pid):
