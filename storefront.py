@@ -1741,11 +1741,68 @@ def admin_panel(api, cid):
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
+                             [btn('📣 إعلان منتج', 'admin:productad', style='success')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
                              [btn('🎨 تعديل أزرار تيليجرام', 'admin:telegrambuttons', style='success')],
                              [btn(ui_label('ui_category_description', 'تعديل وصف القسم'), 'admin:categorydesc', ui_icon('ui_category_description'))],
                              [btn('الرئيسية', 'home', ui_icon('ui_home'))]]))
+
+
+def admin_product_ad_menu(api, cid, category_id=None):
+    if cid != G['ADMIN_ID']:
+        return
+    with db() as conn:
+        cats = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct = conn.execute('SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id,""))="" ORDER BY rowid').fetchall()
+    if category_id is None:
+        rows = [[btn('📁 ' + category_label(pid, cid), 'productadcat:' + pid)] for pid in G['PRODUCTS']]
+        rows += [[btn('📁 ' + label, 'productadcat:' + pid)] for pid,label in cats if pid not in G['PRODUCTS']]
+        rows += [[btn('📦 ' + name(pid,cid), 'productadpick:' + pid)] for pid,_ in direct]
+        return send(api,cid,'📣 <b>إعلان منتج</b>\n\nاختر القسم أو المنتج المباشر:',kb(rows+[[btn('↩️ لوحة الإدارة','admin')]]))
+    ids = admin_category_product_ids(category_id)
+    rows = [[btn(name(pid,cid), 'productadpick:' + pid)] for pid in dict.fromkeys(ids)]
+    send(api,cid,'📣 اختر المنتج الذي تريد إعلانه:',kb(rows+[[btn('↩️ الأقسام','admin:productad')]]))
+
+
+def product_ad_text(pid, cid):
+    qty = product_stock(pid)
+    return (info_icon(pid,'name','✨') + ' <b>Product: ' + esc(name(pid,cid)) + '</b>\n'
+            + '➕ <b>Added:</b> ' + esc(qty) + '\n'
+            + info_icon(pid,'stock','📦') + ' <b>Current stock:</b> ' + esc(qty) + '\n'
+            + info_icon(pid,'price','💵') + ' <b>Price:</b> ' + price(cid,pid,'USD'))
+
+
+def product_ad_preview(api,cid,pid):
+    text = product_ad_text(pid,cid)
+    rows=[[btn('🛒 Buy Now','item:'+pid,style='success')],
+          [btn('🚀 إرسال الإعلان للجميع','productadsend:'+pid,style='success')],
+          [btn('↩️ اختيار منتج آخر','admin:productad')],[btn('❌ إلغاء','admin')]]
+    send(api,cid,'👁 <b>معاينة الإعلان</b>\n\n'+text,kb(rows))
+
+
+def send_product_ad_all(api,cid,pid):
+    try:
+        users=[int(x) for x in json.loads(USERS_PATH.read_text(encoding='utf-8'))]
+    except Exception:
+        users=[]
+    ok=failed=0
+    text=product_ad_text(pid,cid)
+    keyboard=kb([[btn('🛒 Buy Now','item:'+pid,style='success')]])
+    interval=1.0/25.0
+    last=0.0
+    for uid in users:
+        if uid==cid: continue
+        wait=interval-(time.monotonic()-last)
+        if wait>0: time.sleep(wait)
+        try:
+            result=send(api,uid,text,keyboard)
+            last=time.monotonic()
+            if result: ok+=1
+            else: failed+=1
+        except Exception:
+            failed+=1
+    send(api,cid,'✅ <b>تم إرسال إعلان المنتج</b>\n\nوصل إلى: <b>'+str(ok)+'</b>\nتعذر الإرسال إلى: <b>'+str(failed)+'</b>',kb([[btn('📣 إعلان منتج آخر','admin:productad',style='success')],[btn('↩️ لوحة الإدارة','admin')]]))
 
 
 def supplier_api_row(pid):
@@ -3998,6 +4055,8 @@ def action(api, cid, value):
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
+        elif arg == 'productad' and cid == G['ADMIN_ID']:
+            admin_product_ad_menu(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
             BROADCAST_BUTTON.pop(cid, None)
@@ -4011,6 +4070,12 @@ def action(api, cid, value):
             with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'productadcat' and cid == G['ADMIN_ID']:
+        admin_product_ad_menu(api,cid,arg)
+    elif prefix == 'productadpick' and cid == G['ADMIN_ID']:
+        product_ad_preview(api,cid,arg)
+    elif prefix == 'productadsend' and cid == G['ADMIN_ID']:
+        send_product_ad_all(api,cid,arg)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
         import payment_execution
@@ -5127,6 +5192,8 @@ def action(api, cid, value):
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
+        elif arg == 'productad' and cid == G['ADMIN_ID']:
+            admin_product_ad_menu(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
             BROADCAST_BUTTON.pop(cid, None)
@@ -5156,6 +5223,12 @@ def action(api, cid, value):
             return send(api, cid, '⚠️ لازم يكون الطلب مدفوع قبل التسليم.')
         G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
         return send(api, cid, f'📤 <b>تسليم الطلب #{esc(oid)}</b>\n{esc(name(pid, cid))}\n\nأرسل الآن الرسالة أو الكود أو الصورة أو الملف، وسيتم إرساله مباشرة للعميل وتسجيل الطلب كمُسلّم.')
+    elif prefix == 'productadcat' and cid == G['ADMIN_ID']:
+        admin_product_ad_menu(api,cid,arg)
+    elif prefix == 'productadpick' and cid == G['ADMIN_ID']:
+        product_ad_preview(api,cid,arg)
+    elif prefix == 'productadsend' and cid == G['ADMIN_ID']:
+        send_product_ad_all(api,cid,arg)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
         import payment_execution
@@ -7957,6 +8030,8 @@ def action(api, cid, value):
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
+        elif arg == 'productad' and cid == G['ADMIN_ID']:
+            admin_product_ad_menu(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
             BROADCAST_BUTTON.pop(cid, None)
@@ -7970,6 +8045,12 @@ def action(api, cid, value):
             with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
+    elif prefix == 'productadcat' and cid == G['ADMIN_ID']:
+        admin_product_ad_menu(api,cid,arg)
+    elif prefix == 'productadpick' and cid == G['ADMIN_ID']:
+        product_ad_preview(api,cid,arg)
+    elif prefix == 'productadsend' and cid == G['ADMIN_ID']:
+        send_product_ad_all(api,cid,arg)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
         import payment_execution
@@ -9072,6 +9153,8 @@ def action(api, cid, value):
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
+        elif arg == 'productad' and cid == G['ADMIN_ID']:
+            admin_product_ad_menu(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
             BROADCAST_BUTTON.pop(cid, None)
@@ -9101,6 +9184,12 @@ def action(api, cid, value):
             return send(api, cid, '⚠️ لازم يكون الطلب مدفوع قبل التسليم.')
         G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
         return send(api, cid, f'📤 <b>تسليم الطلب #{esc(oid)}</b>\n{esc(name(pid, cid))}\n\nأرسل الآن الرسالة أو الكود أو الصورة أو الملف، وسيتم إرساله مباشرة للعميل وتسجيل الطلب كمُسلّم.')
+    elif prefix == 'productadcat' and cid == G['ADMIN_ID']:
+        admin_product_ad_menu(api,cid,arg)
+    elif prefix == 'productadpick' and cid == G['ADMIN_ID']:
+        product_ad_preview(api,cid,arg)
+    elif prefix == 'productadsend' and cid == G['ADMIN_ID']:
+        send_product_ad_all(api,cid,arg)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
         import payment_execution
