@@ -1330,7 +1330,7 @@ def admin_products_page(api, cid):
             seen.add(category_id)
     buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
     text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
-    send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success')], [btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+    send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success')], [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_category_detail(api, cid, category_id):
@@ -1617,7 +1617,7 @@ def admin_panel(api, cid):
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
-                             [btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')],
+                             [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎁 عروض الكميات', 'admin:promotions')],
@@ -3684,8 +3684,8 @@ def action(api, cid, value):
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'supplierapi': supplier_api_menu(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
-        elif arg == 'adddirect': begin_add_direct_product(api, cid)
-        elif arg == 'addproduct': begin_add_product(api, cid)
+        elif arg in ('adddirect', 'addproduct'): begin_add_direct_product(api, cid)
+        elif arg == 'addcategoryproducts': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
@@ -4741,8 +4741,8 @@ def action(api, cid, value):
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
-        elif arg == 'adddirect': begin_add_direct_product(api, cid)
-        elif arg == 'addproduct': begin_add_product(api, cid)
+        elif arg in ('adddirect', 'addproduct'): begin_add_direct_product(api, cid)
+        elif arg == 'addcategoryproducts': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
@@ -5150,7 +5150,7 @@ def admin_products_page(api, cid):
             seen.add(category_id)
     buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
     text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
-    send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
+    send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def admin_category_detail(api, cid, category_id):
@@ -5417,7 +5417,7 @@ def admin_panel(api, cid):
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
-                             [btn('➕ إضافة قسم ومنتجات', 'admin:addproduct', style='success')],
+                             [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
@@ -7458,8 +7458,8 @@ def action(api, cid, value):
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'supplierapi': supplier_api_menu(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
-        elif arg == 'adddirect': begin_add_direct_product(api, cid)
-        elif arg == 'addproduct': begin_add_product(api, cid)
+        elif arg in ('adddirect', 'addproduct'): begin_add_direct_product(api, cid)
+        elif arg == 'addcategoryproducts': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
@@ -8501,8 +8501,8 @@ def action(api, cid, value):
         elif arg == 'editdesc': admin_text_menu(api, cid, 'description')
         elif arg == 'stock': admin_stock(api, cid)
         elif arg == 'info': admin_info_menu(api, cid)
-        elif arg == 'adddirect': begin_add_direct_product(api, cid)
-        elif arg == 'addproduct': begin_add_product(api, cid)
+        elif arg in ('adddirect', 'addproduct'): begin_add_direct_product(api, cid)
+        elif arg == 'addcategoryproducts': begin_add_product(api, cid)
         elif arg == 'myproducts': admin_products_page(api, cid)
         elif arg == 'cancelproduct' and cid == G['ADMIN_ID']:
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
