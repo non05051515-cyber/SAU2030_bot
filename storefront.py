@@ -3490,9 +3490,37 @@ def action(api, cid, value):
                 return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
             customer = row[0]
             if decision == 'accept':
+                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
+                order_pid = order_pid[0] if order_pid else ''
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                # Pandora catalogue products must never fall back to manual delivery.
+                # If a legacy/duplicate CapCut row was ordered, resolve it to the
+                # unique Pandora-linked product with the same normalized display name.
+                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
+                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
+                    with db() as link_conn:
+                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
+                            JOIN supplier_api a ON a.pid=p.pid
+                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
+                              AND p.category_id='pandora_capcut'""").fetchall()
+                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
+                    if len(matches) == 1:
+                        with db() as fix_conn:
+                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
+                        order_pid = matches[0]
                 if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
+                # A CapCut order must not silently become manual after approval.
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut:
+                    with db() as fail_conn:
+                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
+                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
+                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
@@ -4558,9 +4586,37 @@ def action(api, cid, value):
                 return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
             customer = row[0]
             if decision == 'accept':
+                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
+                order_pid = order_pid[0] if order_pid else ''
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                # Pandora catalogue products must never fall back to manual delivery.
+                # If a legacy/duplicate CapCut row was ordered, resolve it to the
+                # unique Pandora-linked product with the same normalized display name.
+                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
+                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
+                    with db() as link_conn:
+                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
+                            JOIN supplier_api a ON a.pid=p.pid
+                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
+                              AND p.category_id='pandora_capcut'""").fetchall()
+                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
+                    if len(matches) == 1:
+                        with db() as fix_conn:
+                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
+                        order_pid = matches[0]
                 if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
+                # A CapCut order must not silently become manual after approval.
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut:
+                    with db() as fail_conn:
+                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
+                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
+                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
@@ -7289,9 +7345,37 @@ def action(api, cid, value):
                 return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
             customer = row[0]
             if decision == 'accept':
+                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
+                order_pid = order_pid[0] if order_pid else ''
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                # Pandora catalogue products must never fall back to manual delivery.
+                # If a legacy/duplicate CapCut row was ordered, resolve it to the
+                # unique Pandora-linked product with the same normalized display name.
+                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
+                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
+                    with db() as link_conn:
+                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
+                            JOIN supplier_api a ON a.pid=p.pid
+                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
+                              AND p.category_id='pandora_capcut'""").fetchall()
+                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
+                    if len(matches) == 1:
+                        with db() as fix_conn:
+                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
+                        order_pid = matches[0]
                 if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
+                # A CapCut order must not silently become manual after approval.
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut:
+                    with db() as fail_conn:
+                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
+                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
+                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
@@ -8357,9 +8441,37 @@ def action(api, cid, value):
                 return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
             customer = row[0]
             if decision == 'accept':
+                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
+                order_pid = order_pid[0] if order_pid else ''
                 conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
+                # Pandora catalogue products must never fall back to manual delivery.
+                # If a legacy/duplicate CapCut row was ordered, resolve it to the
+                # unique Pandora-linked product with the same normalized display name.
+                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
+                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
+                    with db() as link_conn:
+                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
+                            JOIN supplier_api a ON a.pid=p.pid
+                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
+                              AND p.category_id='pandora_capcut'""").fetchall()
+                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
+                    if len(matches) == 1:
+                        with db() as fix_conn:
+                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
+                        order_pid = matches[0]
                 if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر المورد.')
+                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
+                # A CapCut order must not silently become manual after approval.
+                cp = custom_product(order_pid)
+                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
+                if is_capcut:
+                    with db() as fail_conn:
+                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
+                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
+                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
                 G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
                 send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
                 return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
