@@ -10,7 +10,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 import storefront as s
 
-CATEGORY_ID = "pandora_capcut"
+CATEGORY_ID = "capcut"
 CATEGORY_NAME = "CapCut"
 
 
@@ -103,9 +103,11 @@ def sync_capcut():
 
     now = s.now_saudi()
     synced = 0
+    # CapCut already exists as a built-in VEXA category. Remove the legacy
+    # auto-created duplicate and move its synced products into the built-in category.
     with s.db() as conn:
-        conn.execute("INSERT OR IGNORE INTO admin_categories(cid,name,created_at) VALUES (?,?,?)",
-                     (CATEGORY_ID, CATEGORY_NAME, now))
+        conn.execute("UPDATE admin_products SET category_id=? WHERE category_id='pandora_capcut'", (CATEGORY_ID,))
+        conn.execute("DELETE FROM admin_categories WHERE cid='pandora_capcut'")
 
     for item in items:
         product_id = s._pandora_product_id(item)
