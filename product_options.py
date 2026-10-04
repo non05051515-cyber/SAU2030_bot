@@ -165,6 +165,9 @@ def install(s, namespace):
                 conn.execute('DELETE FROM supplier_api WHERE pid=?', (arg,))
             s.send(api, cid, '✅ تم حذف ربط API لهذا المنتج.')
             return s.supplier_api_editor(api, cid, arg)
+        # Keep automatic-description admin callbacks inside the admin flow.
+        if cid == s.G['ADMIN_ID'] and prefix == 'autodesc':
+            return s.generate_product_description(api, cid, arg)
         if value == 'admin:addtocategory':
             return s.add_to_category(api, cid)
         if prefix == 'addtocategory':
