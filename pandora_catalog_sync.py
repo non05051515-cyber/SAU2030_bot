@@ -28,7 +28,10 @@ def _quote(endpoint, key, product_id, variant_id=""):
         if q.get("can_purchase", False) and q.get("unit_price") is not None:
             return Decimal(str(q["unit_price"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except Exception as exc:
-        print("CapCut quote failed:", product_id, type(exc).__name__, flush=True)
+        # A quote can legitimately be unavailable for an out-of-stock/temporarily
+        # unavailable SKU. Catalogue sync must not treat that as a bot failure.
+        code = getattr(exc, "code", "")
+        print("CapCut quote unavailable:", product_id, type(exc).__name__, code, flush=True)
     return None
 
 
