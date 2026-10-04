@@ -2552,7 +2552,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
@@ -3663,7 +3663,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
@@ -3674,7 +3674,7 @@ def category(api, cid, pid):
         rows = []
         for v in choices:
             sold_out = not in_stock(v['id'])
-            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '')
+            status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '🟢 ')
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | 💵 ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
