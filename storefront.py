@@ -33,98 +33,110 @@ SUPPORT = '@m7mmd2030_1'
 G = {}
 
 
-def db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=20)
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.execute('PRAGMA synchronous=NORMAL')
-    conn.execute('PRAGMA busy_timeout=20000')
-    conn.execute('CREATE TABLE IF NOT EXISTS preferences (cid INTEGER PRIMARY KEY, lang TEXT NOT NULL DEFAULT "ar", currency TEXT NOT NULL DEFAULT "SAR")')
-    conn.execute('CREATE TABLE IF NOT EXISTS receipts (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT)')
-    conn.execute('CREATE TABLE IF NOT EXISTS wallets (cid INTEGER PRIMARY KEY, balance_sar TEXT NOT NULL DEFAULT "0")')
-    conn.execute('CREATE TABLE IF NOT EXISTS wallet_topups (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, amount_sar TEXT NOT NULL, method TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS crypto_orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, amount_usd TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS category_icons (pid TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS ui_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
-    conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
-    conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfer_state (cid INTEGER PRIMARY KEY, step TEXT NOT NULL, recipient INTEGER, amount_sar TEXT)')
-    conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfers (id TEXT PRIMARY KEY, sender INTEGER NOT NULL, recipient INTEGER NOT NULL, amount_sar TEXT NOT NULL, created_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
-    conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_stock_overrides (pid TEXT PRIMARY KEY, stock INTEGER NOT NULL DEFAULT 0)')
-    conn.execute('CREATE TABLE IF NOT EXISTS supplier_api (pid TEXT PRIMARY KEY, endpoint TEXT NOT NULL DEFAULT "", api_key TEXT NOT NULL DEFAULT "", service_id TEXT NOT NULL DEFAULT "", enabled INTEGER NOT NULL DEFAULT 0, provider TEXT NOT NULL DEFAULT "generic", variant_id TEXT NOT NULL DEFAULT "")')
-    try:
-        conn.execute('ALTER TABLE supplier_api ADD COLUMN variant_id TEXT NOT NULL DEFAULT ""')
-    except Exception:
-        pass
-    conn.execute('CREATE TABLE IF NOT EXISTS supplier_orders (order_id TEXT PRIMARY KEY, supplier_order_id TEXT NOT NULL DEFAULT "", status TEXT NOT NULL DEFAULT "", delivery TEXT NOT NULL DEFAULT "", last_error TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL DEFAULT "")')
-    conn.execute('CREATE TABLE IF NOT EXISTS pandora_pricing (pid TEXT PRIMARY KEY, supplier_cost_usd TEXT NOT NULL DEFAULT "", margin_usd TEXT NOT NULL DEFAULT "0", updated_at TEXT NOT NULL DEFAULT "")')
-    try:
-        conn.execute('ALTER TABLE supplier_api ADD COLUMN provider TEXT NOT NULL DEFAULT "generic"')
-    except Exception:
-        pass
-    conn.execute('CREATE TABLE IF NOT EXISTS product_visibility (pid TEXT PRIMARY KEY, visible INTEGER NOT NULL CHECK(visible IN (0,1)))')
-    conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
-    cols = {row[1] for row in conn.execute('PRAGMA table_info(admin_products)').fetchall()}
-    if 'category_id' not in cols:
-        conn.execute('ALTER TABLE admin_products ADD COLUMN category_id TEXT')
-    if 'price_usd' not in cols:
-        conn.execute('ALTER TABLE admin_products ADD COLUMN price_usd TEXT')
-    if 'stock' not in cols:
-        conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
-    conn.execute('CREATE TABLE IF NOT EXISTS description_emoji (pid TEXT, lang TEXT, plain TEXT NOT NULL, html TEXT NOT NULL, PRIMARY KEY(pid,lang))')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
-    conn.execute('CREATE TABLE IF NOT EXISTS content_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
-    if not conn.execute("SELECT 1 FROM content_migrations WHERE key='concise_product_descriptions_v1'").fetchone():
-        rows = conn.execute('SELECT pid,name FROM admin_products').fetchall()
-        for product_pid, product_name in rows:
-            low = (product_name or '').lower()
-            ar_desc = ''
-            en_desc = ''
-            if 'youtube' in low and ('family' in low or 'دعوة' in product_name or 'عائل' in product_name):
-                ar_desc = 'YouTube Premium دعوة عائلية لمدة شهر.\nتفعيل على حسابك الشخصي.'
-                en_desc = 'YouTube Premium family invitation for 1 month.\nActivated on your personal account.'
-            elif 'youtube' in low and ('full' in low or 'private' in low or 'كامل' in product_name or 'خاص' in product_name):
-                ar_desc = 'YouTube Premium حساب كامل خاص لمدة شهر.\nالحساب للاستخدام الشخصي.'
-                en_desc = 'YouTube Premium private full account for 1 month.\nFor personal use.'
-            elif 'crunchy' in low and ('profile' in low or 'ملف' in product_name):
-                ar_desc = 'Crunchyroll ملف خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
-                en_desc = 'Crunchyroll private profile for 1 month.\nFor personal use.'
-            elif 'crunchy' in low and ('7d' in low or '7 day' in low or '7 أيام' in product_name or '7 ايام' in product_name):
-                ar_desc = 'Crunchyroll حساب كامل لمدة 7 أيام.\nجاهز للاستخدام.'
-                en_desc = 'Crunchyroll full account for 7 days.\nReady to use.'
-            elif 'crunchy' in low and ('1m' in low or 'month' in low or 'شهر' in product_name):
-                ar_desc = 'Crunchyroll حساب كامل لمدة شهر.\nجاهز للاستخدام.'
-                en_desc = 'Crunchyroll full account for 1 month.\nReady to use.'
-            elif 'shahid' in low or 'شاهد' in product_name:
-                ar_desc = 'Shahid VIP اشتراك خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
-                en_desc = 'Shahid VIP private subscription for 1 month.\nFor personal use.'
-            else:
-                ar_desc = 'منتج ' + product_name + '.\nيتم التسليم بعد تأكيد الطلب.'
-                en_desc = product_name + ' product.\nDelivered after order confirmation.'
-            conn.execute('UPDATE admin_products SET description=? WHERE pid=?', (ar_desc[:1500], product_pid))
-            conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)',
-                         (product_pid, 'description', 'en', en_desc[:1500]))
-        conn.execute("INSERT OR REPLACE INTO content_migrations(key,applied_at) VALUES ('concise_product_descriptions_v1', datetime('now'))")
-    conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
-    conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
-    icon_cols={row[1] for row in conn.execute('PRAGMA table_info(product_info_icons)').fetchall()}
-    if 'fallback_emoji' not in icon_cols:
-        conn.execute('ALTER TABLE product_info_icons ADD COLUMN fallback_emoji TEXT NOT NULL DEFAULT "⭐"')
-    discounts.prepare(conn)
-    product_options.prepare(conn)
-    return conn
+_DB_SCHEMA_READY = False
+_DB_SCHEMA_LOCK = threading.Lock()
 
+
+def db():
+    global _DB_SCHEMA_READY
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute('PRAGMA busy_timeout=5000')
+    if not _DB_SCHEMA_READY:
+        with _DB_SCHEMA_LOCK:
+            if not _DB_SCHEMA_READY:
+                conn.execute('PRAGMA journal_mode=WAL')
+                conn.execute('PRAGMA synchronous=NORMAL')
+                conn.execute('CREATE TABLE IF NOT EXISTS preferences (cid INTEGER PRIMARY KEY, lang TEXT NOT NULL DEFAULT "ar", currency TEXT NOT NULL DEFAULT "SAR")')
+                conn.execute('CREATE TABLE IF NOT EXISTS receipts (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT)')
+                conn.execute('CREATE TABLE IF NOT EXISTS wallets (cid INTEGER PRIMARY KEY, balance_sar TEXT NOT NULL DEFAULT "0")')
+                conn.execute('CREATE TABLE IF NOT EXISTS wallet_topups (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, amount_sar TEXT NOT NULL, method TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS crypto_orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, amount_usd TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, action TEXT NOT NULL, pid TEXT NOT NULL, created_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS announcements (pid TEXT PRIMARY KEY, announced_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS category_icons (pid TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS ui_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS admin_state (cid INTEGER PRIMARY KEY, action TEXT NOT NULL, value TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS referrals (invitee INTEGER PRIMARY KEY, referrer INTEGER NOT NULL, joined_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, purchase_rewarded INTEGER NOT NULL DEFAULT 0)')
+                conn.execute('CREATE TABLE IF NOT EXISTS referral_rewards (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer INTEGER NOT NULL, kind TEXT NOT NULL, amount_usd TEXT NOT NULL, created_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS custom_topup_state (cid INTEGER PRIMARY KEY)')
+                conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfer_state (cid INTEGER PRIMARY KEY, step TEXT NOT NULL, recipient INTEGER, amount_sar TEXT)')
+                conn.execute('CREATE TABLE IF NOT EXISTS wallet_transfers (id TEXT PRIMARY KEY, sender INTEGER NOT NULL, recipient INTEGER NOT NULL, amount_sar TEXT NOT NULL, created_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
+                conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_prices (pid TEXT PRIMARY KEY, value TEXT NOT NULL, currency TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_availability (pid TEXT PRIMARY KEY, available INTEGER NOT NULL CHECK(available IN (0,1)))')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_stock_overrides (pid TEXT PRIMARY KEY, stock INTEGER NOT NULL DEFAULT 0)')
+                conn.execute('CREATE TABLE IF NOT EXISTS supplier_api (pid TEXT PRIMARY KEY, endpoint TEXT NOT NULL DEFAULT "", api_key TEXT NOT NULL DEFAULT "", service_id TEXT NOT NULL DEFAULT "", enabled INTEGER NOT NULL DEFAULT 0, provider TEXT NOT NULL DEFAULT "generic", variant_id TEXT NOT NULL DEFAULT "")')
+                try:
+                    conn.execute('ALTER TABLE supplier_api ADD COLUMN variant_id TEXT NOT NULL DEFAULT ""')
+                except Exception:
+                    pass
+                conn.execute('CREATE TABLE IF NOT EXISTS supplier_orders (order_id TEXT PRIMARY KEY, supplier_order_id TEXT NOT NULL DEFAULT "", status TEXT NOT NULL DEFAULT "", delivery TEXT NOT NULL DEFAULT "", last_error TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL DEFAULT "")')
+                conn.execute('CREATE TABLE IF NOT EXISTS pandora_pricing (pid TEXT PRIMARY KEY, supplier_cost_usd TEXT NOT NULL DEFAULT "", margin_usd TEXT NOT NULL DEFAULT "0", updated_at TEXT NOT NULL DEFAULT "")')
+                try:
+                    conn.execute('ALTER TABLE supplier_api ADD COLUMN provider TEXT NOT NULL DEFAULT "generic"')
+                except Exception:
+                    pass
+                conn.execute('CREATE TABLE IF NOT EXISTS product_visibility (pid TEXT PRIMARY KEY, visible INTEGER NOT NULL CHECK(visible IN (0,1)))')
+                conn.execute('CREATE TABLE IF NOT EXISTS admin_products (pid TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT "", price_sar TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS admin_categories (cid TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)')
+                cols = {row[1] for row in conn.execute('PRAGMA table_info(admin_products)').fetchall()}
+                if 'category_id' not in cols:
+                    conn.execute('ALTER TABLE admin_products ADD COLUMN category_id TEXT')
+                if 'price_usd' not in cols:
+                    conn.execute('ALTER TABLE admin_products ADD COLUMN price_usd TEXT')
+                if 'stock' not in cols:
+                    conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
+                conn.execute('CREATE TABLE IF NOT EXISTS description_emoji (pid TEXT, lang TEXT, plain TEXT NOT NULL, html TEXT NOT NULL, PRIMARY KEY(pid,lang))')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS content_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
+                if not conn.execute("SELECT 1 FROM content_migrations WHERE key='concise_product_descriptions_v1'").fetchone():
+                    rows = conn.execute('SELECT pid,name FROM admin_products').fetchall()
+                    for product_pid, product_name in rows:
+                        low = (product_name or '').lower()
+                        ar_desc = ''
+                        en_desc = ''
+                        if 'youtube' in low and ('family' in low or 'دعوة' in product_name or 'عائل' in product_name):
+                            ar_desc = 'YouTube Premium دعوة عائلية لمدة شهر.\nتفعيل على حسابك الشخصي.'
+                            en_desc = 'YouTube Premium family invitation for 1 month.\nActivated on your personal account.'
+                        elif 'youtube' in low and ('full' in low or 'private' in low or 'كامل' in product_name or 'خاص' in product_name):
+                            ar_desc = 'YouTube Premium حساب كامل خاص لمدة شهر.\nالحساب للاستخدام الشخصي.'
+                            en_desc = 'YouTube Premium private full account for 1 month.\nFor personal use.'
+                        elif 'crunchy' in low and ('profile' in low or 'ملف' in product_name):
+                            ar_desc = 'Crunchyroll ملف خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
+                            en_desc = 'Crunchyroll private profile for 1 month.\nFor personal use.'
+                        elif 'crunchy' in low and ('7d' in low or '7 day' in low or '7 أيام' in product_name or '7 ايام' in product_name):
+                            ar_desc = 'Crunchyroll حساب كامل لمدة 7 أيام.\nجاهز للاستخدام.'
+                            en_desc = 'Crunchyroll full account for 7 days.\nReady to use.'
+                        elif 'crunchy' in low and ('1m' in low or 'month' in low or 'شهر' in product_name):
+                            ar_desc = 'Crunchyroll حساب كامل لمدة شهر.\nجاهز للاستخدام.'
+                            en_desc = 'Crunchyroll full account for 1 month.\nReady to use.'
+                        elif 'shahid' in low or 'شاهد' in product_name:
+                            ar_desc = 'Shahid VIP اشتراك خاص لمدة شهر.\nمخصص للاستخدام الشخصي.'
+                            en_desc = 'Shahid VIP private subscription for 1 month.\nFor personal use.'
+                        else:
+                            ar_desc = 'منتج ' + product_name + '.\nيتم التسليم بعد تأكيد الطلب.'
+                            en_desc = product_name + ' product.\nDelivered after order confirmation.'
+                        conn.execute('UPDATE admin_products SET description=? WHERE pid=?', (ar_desc[:1500], product_pid))
+                        conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)',
+                                     (product_pid, 'description', 'en', en_desc[:1500]))
+                    conn.execute("INSERT OR REPLACE INTO content_migrations(key,applied_at) VALUES ('concise_product_descriptions_v1', datetime('now'))")
+                conn.execute('CREATE TABLE IF NOT EXISTS product_info_display (pid TEXT PRIMARY KEY, show_price INTEGER NOT NULL DEFAULT 1, show_stock INTEGER NOT NULL DEFAULT 1, show_warranty INTEGER NOT NULL DEFAULT 0, warranty TEXT NOT NULL DEFAULT "")')
+                conn.execute('CREATE TABLE IF NOT EXISTS product_info_icons (pid TEXT NOT NULL, field TEXT NOT NULL, custom_emoji_id TEXT NOT NULL, PRIMARY KEY(pid,field))')
+                icon_cols={row[1] for row in conn.execute('PRAGMA table_info(product_info_icons)').fetchall()}
+                if 'fallback_emoji' not in icon_cols:
+                    conn.execute('ALTER TABLE product_info_icons ADD COLUMN fallback_emoji TEXT NOT NULL DEFAULT "⭐"')
+                discounts.prepare(conn)
+                product_options.prepare(conn)
+                return conn
+                
+                
+                conn.commit()
+                _DB_SCHEMA_READY = True
+    return conn
 
 def prefs(cid):
     with db() as conn:
