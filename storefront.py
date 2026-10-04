@@ -1771,6 +1771,23 @@ def _pandora_product_name(item):
     return str(item.get('name') or item.get('title') or item.get('product_name') or item.get('label') or item.get('id') or 'Pandora Product')
 
 
+def _pandora_category_name(item):
+    """Best-effort Pandora category label from common API payload shapes."""
+    if not isinstance(item, dict):
+        return 'Other'
+    for key in ('category_name','category','product_category','service','group','brand','type'):
+        value = item.get(key)
+        if isinstance(value, dict):
+            value = value.get('name') or value.get('title') or value.get('label') or value.get('slug') or value.get('id')
+        elif isinstance(value, list):
+            value = next((x.get('name') if isinstance(x, dict) else x for x in value if x), None)
+        if value:
+            text = str(value).strip()
+            if text:
+                return text[:60]
+    return 'Other'
+
+
 def _pandora_product_id(item):
     if not isinstance(item, dict):
         return ''
@@ -1816,13 +1833,15 @@ def pandora_catalog_open(api, cid, pid, page=0):
             product_id = _pandora_product_id(item)
             if not product_id:
                 continue
-            products.append({'id': product_id, 'name': _pandora_product_name(item)[:80], 'variants': _pandora_variants(item)})
+            products.append({'id': product_id, 'name': _pandora_product_name(item)[:80],
+                             'category': _pandora_category_name(item),
+                             'variants': _pandora_variants(item)})
         if not products:
             return send(api, cid, '⚠️ لم أستطع قراءة منتجات Pandora. تأكد أن المفتاح يملك صلاحية <code>catalog:read</code>.', kb([[btn('↩️ رجوع', 'supplierpick:' + pid)]]))
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
                          (cid, 'pandora_catalog', json.dumps({'pid': pid, 'products': products}, ensure_ascii=False)))
-        pandora_catalog_page(api, cid, page)
+        pandora_catalog_categories(api, cid)
     except Exception as exc:
         code = getattr(exc, 'code', None)
         if code == 403:
@@ -1834,28 +1853,67 @@ def pandora_catalog_open(api, cid, pid, page=0):
         send(api, cid, msg, kb([[btn('↩️ رجوع', 'supplierpick:' + pid)]]))
 
 
-def pandora_catalog_page(api, cid, page=0):
+def pandora_catalog_categories(api, cid):
     with db() as conn:
         row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='pandora_catalog'", (cid,)).fetchone()
     if not row:
         return supplier_api_menu(api, cid)
     state = json.loads(row[0])
     products = state.get('products') or []
+    grouped = {}
+    for index, product in enumerate(products):
+        category = str(product.get('category') or 'Other').strip() or 'Other'
+        grouped.setdefault(category, []).append(index)
+    categories = sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0].lower()))
+    state['pandora_categories'] = [{'name': name, 'items': items} for name, items in categories]
+    with db() as conn:
+        conn.execute('UPDATE admin_state SET value=? WHERE cid=? AND action="pandora_catalog"',
+                     (json.dumps(state, ensure_ascii=False), cid))
+    rows = []
+    for cidx, (category, items) in enumerate(categories):
+        rows.append([btn('📁 ' + category[:38] + ' • ' + str(len(items)), 'pandoracat:' + str(cidx) + ':0')])
+    rows.append([btn('↩️ رجوع', 'supplierpick:' + state.get('pid',''))])
+    send(api, cid, '🔎 <b>أقسام Pandora</b>\n\nاختر القسم، وسيظهر عدد المنتجات الموجودة داخله:', kb(rows))
+
+
+def pandora_catalog_page(api, cid, category_index=0, page=0):
+    with db() as conn:
+        row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='pandora_catalog'", (cid,)).fetchone()
+    if not row:
+        return supplier_api_menu(api, cid)
+    state = json.loads(row[0])
+    products = state.get('products') or []
+    categories = state.get('pandora_categories') or []
+    try:
+        category_index = int(category_index)
+        category = categories[category_index]
+    except Exception:
+        return pandora_catalog_categories(api, cid)
+    indices = category.get('items') or []
     page = max(0, int(page or 0))
     per_page = 8
     start = page * per_page
-    if start >= len(products) and page:
-        page = 0; start = 0
+    if start >= len(indices) and page:
+        page = 0
+        start = 0
     rows = []
-    for index in range(start, min(start + per_page, len(products))):
+    for pos in range(start, min(start + per_page, len(indices))):
+        index = indices[pos]
+        if index >= len(products):
+            continue
         label = products[index].get('name') or products[index].get('id')
         rows.append([btn('📦 ' + str(label)[:45], 'pandorap:' + str(index))])
     nav = []
-    if page > 0: nav.append(btn('⬅️ السابق', 'pandorapage:' + str(page-1)))
-    if start + per_page < len(products): nav.append(btn('التالي ➡️', 'pandorapage:' + str(page+1)))
-    if nav: rows.append(nav)
-    rows.append([btn('↩️ رجوع', 'supplierpick:' + state.get('pid',''))])
-    send(api, cid, '🔎 <b>منتجات Pandora</b>\n\nاختر المنتج المطابق لمنتج VEXA:', kb(rows))
+    if page > 0:
+        nav.append(btn('⬅️ السابق', 'pandoracat:' + str(category_index) + ':' + str(page-1)))
+    if start + per_page < len(indices):
+        nav.append(btn('التالي ➡️', 'pandoracat:' + str(category_index) + ':' + str(page+1)))
+    if nav:
+        rows.append(nav)
+    rows.append([btn('↩️ أقسام Pandora', 'pandoracategories')])
+    rows.append([btn('↩️ إعداد API', 'supplierpick:' + state.get('pid',''))])
+    send(api, cid, '📁 <b>' + esc(category.get('name','Pandora')) + '</b>\n'
+         '📦 عدد المنتجات: <b>' + str(len(indices)) + '</b>\n\nاختر المنتج المطابق لمنتج VEXA:', kb(rows))
 
 
 def pandora_catalog_product(api, cid, index):
@@ -1867,7 +1925,7 @@ def pandora_catalog_product(api, cid, index):
     try:
         index = int(index); product = products[index]
     except Exception:
-        return pandora_catalog_page(api, cid, 0)
+        return pandora_catalog_categories(api, cid)
     variants = product.get('variants') or []
     if len(variants) == 1:
         return pandora_catalog_save(api, cid, index, 0)
@@ -1879,7 +1937,7 @@ def pandora_catalog_product(api, cid, index):
                          (state['pid'], endpoint, api_key, product['id'], enabled, 'pandora', variant_id))
         return send(api, cid, '✅ تم حفظ Product ID تلقائيًا.\n⚠️ Pandora لم يُرجع Variant لهذا المنتج؛ أضف Variant ID يدويًا.', kb([[btn('↩️ إعداد API', 'supplierpick:' + state['pid'])]]))
     rows = [[btn('🧩 ' + str(v.get('name') or v.get('id'))[:45], 'pandorav:' + str(index) + ':' + str(i))] for i,v in enumerate(variants[:20])]
-    rows.append([btn('↩️ المنتجات', 'pandorapage:0')])
+    rows.append([btn('↩️ أقسام Pandora', 'pandoracategories')])
     send(api, cid, '🧩 <b>' + esc(product.get('name','Pandora')) + '</b>\n\nاختر الـ Variant:', kb(rows))
 
 
@@ -1893,7 +1951,7 @@ def pandora_catalog_save(api, cid, pindex, vindex):
         product = products[int(pindex)]
         variant = (product.get('variants') or [])[int(vindex)]
     except Exception:
-        return pandora_catalog_page(api, cid, 0)
+        return pandora_catalog_categories(api, cid)
     pid = state['pid']
     endpoint, api_key, _, enabled, _, _ = supplier_api_row(pid)
     with db() as conn:
@@ -3386,7 +3444,12 @@ def action(api, cid, value):
     elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
         pandora_catalog_open(api, cid, arg, 0)
     elif prefix == 'pandorapage' and cid == G['ADMIN_ID']:
-        pandora_catalog_page(api, cid, arg)
+        pandora_catalog_categories(api, cid)
+    elif prefix == 'pandoracategories' and cid == G['ADMIN_ID']:
+        pandora_catalog_categories(api, cid)
+    elif prefix == 'pandoracat' and cid == G['ADMIN_ID']:
+        cidx, _, page = arg.partition(':')
+        pandora_catalog_page(api, cid, cidx or 0, page or 0)
     elif prefix == 'pandorap' and cid == G['ADMIN_ID']:
         pandora_catalog_product(api, cid, arg)
     elif prefix == 'pandorav' and cid == G['ADMIN_ID']:
@@ -4417,7 +4480,12 @@ def action(api, cid, value):
     elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
         pandora_catalog_open(api, cid, arg, 0)
     elif prefix == 'pandorapage' and cid == G['ADMIN_ID']:
-        pandora_catalog_page(api, cid, arg)
+        pandora_catalog_categories(api, cid)
+    elif prefix == 'pandoracategories' and cid == G['ADMIN_ID']:
+        pandora_catalog_categories(api, cid)
+    elif prefix == 'pandoracat' and cid == G['ADMIN_ID']:
+        cidx, _, page = arg.partition(':')
+        pandora_catalog_page(api, cid, cidx or 0, page or 0)
     elif prefix == 'pandorap' and cid == G['ADMIN_ID']:
         pandora_catalog_product(api, cid, arg)
     elif prefix == 'pandorav' and cid == G['ADMIN_ID']:
