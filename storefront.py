@@ -1499,9 +1499,31 @@ def pandora_quote_cost(pid, quantity=1):
         return None
     quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
         dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
-    if not quote.get('can_purchase', False) or quote.get('unit_price') is None:
+    if not quote.get('can_purchase', False):
         return None
-    return Decimal(str(quote.get('unit_price'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    # Pandora may expose the authenticated account price under a special/customer
+    # price field while unit_price can be the public/default price.
+    candidates = (
+        'special_price', 'your_special_price', 'customer_price', 'account_price',
+        'user_price', 'discounted_price', 'net_price', 'unit_price'
+    )
+    containers = [quote]
+    for key in ('data', 'quote', 'pricing', 'price'):
+        value = quote.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    for obj in containers:
+        for key in candidates:
+            value = obj.get(key)
+            if value is None:
+                continue
+            if isinstance(value, dict):
+                value = value.get('amount') or value.get('value') or value.get('usd')
+            try:
+                return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except Exception:
+                pass
+    return None
 
 
 def pandora_refresh_price(pid):
@@ -5159,9 +5181,31 @@ def pandora_quote_cost(pid, quantity=1):
         return None
     quote = _supplier_json_request(endpoint.rstrip('/') + '/quotes', api_key, 'POST',
         dict({'product_id': product_id, 'quantity': int(quantity or 1)}, **({'variant_id': variant_id} if variant_id else {})))
-    if not quote.get('can_purchase', False) or quote.get('unit_price') is None:
+    if not quote.get('can_purchase', False):
         return None
-    return Decimal(str(quote.get('unit_price'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    # Pandora may expose the authenticated account price under a special/customer
+    # price field while unit_price can be the public/default price.
+    candidates = (
+        'special_price', 'your_special_price', 'customer_price', 'account_price',
+        'user_price', 'discounted_price', 'net_price', 'unit_price'
+    )
+    containers = [quote]
+    for key in ('data', 'quote', 'pricing', 'price'):
+        value = quote.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    for obj in containers:
+        for key in candidates:
+            value = obj.get(key)
+            if value is None:
+                continue
+            if isinstance(value, dict):
+                value = value.get('amount') or value.get('value') or value.get('usd')
+            try:
+                return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except Exception:
+                pass
+    return None
 
 
 def pandora_refresh_price(pid):
