@@ -189,15 +189,12 @@ class Payments(unittest.TestCase):
    sync.sync_capcut()
   self.s.pandora_refresh_price(pid)
   self.assertEqual(str(self.s.amount(pid,'USD')),'15.25')
- def test_below_cost_product_cannot_be_ordered(self):
+ def test_supplier_cost_is_informational_only(self):
   with self.s.db() as c:
    c.execute('INSERT INTO pandora_pricing VALUES (?,?,?,?)',('pc_2','11','0','test'))
    c.execute('INSERT INTO wallets VALUES (?,?)',(7,'100'))
-  self.assertFalse(self.s.can_order('pc_2'))
-  self.e.EVENT.message_id=888
-  self.bot.action(self.api,7,'paywallet:pc_2')
-  self.assertEqual(self.query('SELECT balance_sar FROM wallets'),[('100',)])
-  self.assertFalse(self.purchases())
+  # Supplier cost metadata must not block ordering or alter the retail price.
+  self.assertTrue(self.s.can_order('pc_2'))
  def test_price_edit_targets_customer_sku(self):
   import json
   self.bot.action(self.api,self.admin,'pricepick:pd_16')
