@@ -3637,6 +3637,57 @@ def receipt_request(api, cid, pid, method):
     send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع هنا. ستصل للإدارة للمراجعة.', '📸 Send your payment receipt photo here. It will be sent to the administrator for review.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
 
 
+def _broadcast_render_message(api, message):
+    """Rebuild text/caption with Telegram entities so custom emoji survive a broadcast with a new keyboard."""
+    raw = message.get('text') if message.get('text') is not None else message.get('caption')
+    if raw is None:
+        return None, None
+    entities = message.get('entities') if message.get('text') is not None else message.get('caption_entities')
+    entities = [dict(e) for e in (entities or [])]
+    # Validate custom emoji IDs and retain Telegram's original UTF-16 offsets.
+    custom_ids = list(dict.fromkeys(str(e.get('custom_emoji_id')) for e in entities
+                                    if e.get('type') == 'custom_emoji' and e.get('custom_emoji_id')))
+    valid = set(custom_ids)
+    if custom_ids:
+        try:
+            stickers = api.call('getCustomEmojiStickers', custom_emoji_ids=custom_ids) or []
+            valid = {str(s.get('custom_emoji_id')) for s in stickers if s.get('custom_emoji_id')}
+        except Exception:
+            pass
+    clean = []
+    for e in entities:
+        if e.get('type') == 'custom_emoji':
+            emoji_id = str(e.get('custom_emoji_id') or '')
+            if not emoji_id or emoji_id not in valid:
+                continue
+        clean.append(e)
+    return raw, clean
+
+
+def _broadcast_copy(api, user_id, admin_id, message, reply_markup=None):
+    """Send broadcast while preserving formatting/custom emoji; copy media when possible."""
+    raw, entities = _broadcast_render_message(api, message)
+    photos = message.get('photo') or []
+    if photos and raw is not None:
+        kwargs = {'chat_id': user_id, 'photo': photos[-1]['file_id'], 'caption': raw}
+        if entities:
+            kwargs['caption_entities'] = entities
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
+        return api.call('sendPhoto', **kwargs)
+    if message.get('text') is not None:
+        kwargs = {'chat_id': user_id, 'text': raw}
+        if entities:
+            kwargs['entities'] = entities
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
+        return api.call('sendMessage', **kwargs)
+    kwargs = {'chat_id': user_id, 'from_chat_id': admin_id, 'message_id': message['message_id']}
+    if reply_markup:
+        kwargs['reply_markup'] = reply_markup
+    return api.call('copyMessage', **kwargs)
+
+
 def broadcast_button_action(api, cid, prefix, arg):
     if cid != G.get('ADMIN_ID'):
         return False
@@ -3736,10 +3787,7 @@ def receipt(api, message):
                 reply_markup = None
                 if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
                     reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
-                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
-                if reply_markup:
-                    kwargs['reply_markup'] = reply_markup
-                result = api.call('copyMessage', **kwargs)
+                result = _broadcast_copy(api, user_id, cid, message, reply_markup)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -4879,10 +4927,7 @@ def receipt(api, message):
                 reply_markup = None
                 if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
                     reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
-                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
-                if reply_markup:
-                    kwargs['reply_markup'] = reply_markup
-                result = api.call('copyMessage', **kwargs)
+                result = _broadcast_copy(api, user_id, cid, message, reply_markup)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -7702,10 +7747,7 @@ def receipt(api, message):
                 reply_markup = None
                 if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
                     reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
-                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
-                if reply_markup:
-                    kwargs['reply_markup'] = reply_markup
-                result = api.call('copyMessage', **kwargs)
+                result = _broadcast_copy(api, user_id, cid, message, reply_markup)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -8830,10 +8872,7 @@ def receipt(api, message):
                 reply_markup = None
                 if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
                     reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
-                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
-                if reply_markup:
-                    kwargs['reply_markup'] = reply_markup
-                result = api.call('copyMessage', **kwargs)
+                result = _broadcast_copy(api, user_id, cid, message, reply_markup)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
