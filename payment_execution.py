@@ -5,6 +5,8 @@ or delivery credentials are logged. Supplier submission uses a persisted payload
 and a stable idempotency key, including after an ambiguous network failure.
 """
 import json
+import io
+import urllib.parse
 import re
 import threading
 import time
@@ -131,6 +133,24 @@ def claim(s, oid, original, resolved):
     return (owner, job) if changed else (None, job)
 
 
+def _send_delivery_file(api, cid, oid, product_name, items):
+    clean=[str(x).strip() for x in (items or []) if str(x).strip()]
+    if not clean:return None
+    content=('\n'.join(clean)+'\n').encode('utf-8')
+    boundary='----VEXADeliveryBoundary'
+    filename='order-'+str(oid)+'-'+''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in str(product_name))[:45]+'.txt'
+    fields={'chat_id':str(cid),'caption':'📄 1 item → '+str(product_name)+'\nKeep this file private and store it somewhere safe.'}
+    body=b''
+    for k,v in fields.items():
+        body+=('--'+boundary+'\r\nContent-Disposition: form-data; name="'+k+'"\r\n\r\n'+v+'\r\n').encode('utf-8')
+    body+=('--'+boundary+'\r\nContent-Disposition: form-data; name="document"; filename="'+filename+'"\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n').encode('utf-8')+content+b'\r\n'
+    body+=('--'+boundary+'--\r\n').encode('utf-8')
+    req=urllib.request.Request(api.u+'sendDocument',data=body,headers={'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
+    try:
+        with urllib.request.urlopen(req,timeout=40) as r:return r.status<300
+    except Exception as exc:
+        print('Delivery file send failed:',type(exc).__name__,flush=True);return False
+
 def fulfill(s, api, oid):
     with s.db() as c:
         order = c.execute('SELECT cid,pid,status,usd FROM orders WHERE id=?', (oid,)).fetchone()
@@ -192,9 +212,17 @@ def fulfill(s, api, oid):
                 status=excluded.status,delivery=excluded.delivery,last_error=excluded.last_error,updated_at=excluded.updated_at''',
                 (oid,supplier_id,status,json.dumps(items) if items else '', '',s.now_saudi()))
         if items:
-            sent = s.send(api,cid,s.supplier_delivery_text(items,cid),s.menu(cid))
-            if not sent:
-                raise RuntimeError('telegram_delivery_failed')
+            product_name=s.name(original,cid)
+            clean=[str(x).strip() for x in items if str(x).strip()]
+            body='\n'.join('<code>'+s.esc(x)+'</code>' for x in clean)
+            text=('🛒 <b>Thank you for your purchase!</b>\nYour order is complete and ready below.\n\n'
+                  '✨ <b>Order:</b> #'+s.esc(str(oid))+'\n'
+                  '➕ <b>'+s.esc(product_name)+' ×1</b>\n\n'
+                  '📩 <b>Your item</b>\nTap and hold any delivered line below to copy it.\n\n'+body+
+                  '\n\n📎 <b>Instructions:</b>\nDelivered automatically after payment.')
+            sent=s.send(api,cid,text,s.menu(cid))
+            if not sent: raise RuntimeError('telegram_delivery_failed')
+            _send_delivery_file(api,cid,oid,product_name,items)
             with s.db() as c:
                 c.execute('UPDATE orders SET status=? WHERE id=?',('delivered',oid))
                 c.execute('UPDATE payment_execution SET notified=1 WHERE order_id=? AND lease_owner=?',(oid,owner))
