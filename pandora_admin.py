@@ -144,12 +144,9 @@ def install(s):
     restore_saved_capcut_prices(s)
     old_can_order=s.can_order
     def can_order(pid):
-        if not old_can_order(pid):return False
-        import payment_execution
-        resolved=payment_execution.resolve_pid(s,pid)
-        cost=s.pandora_pricing_row(resolved)[0]
-        sale=s.amount(pid,'USD')
-        return not (cost and sale is not None and sale < Decimal(cost))
+        # Pandora supplier cost is informational only. It must never block a
+        # customer order or change the manually configured VEXA retail price.
+        return old_can_order(pid)
     s.can_order=can_order
     s.supplier_api_editor=lambda api,cid,pid:editor(s,api,cid,pid)
     s.pandora_catalog_product=lambda api,cid,index:save(s,api,cid,index)
