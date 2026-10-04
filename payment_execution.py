@@ -137,6 +137,8 @@ def _send_delivery_file(api, cid, oid, product_name, items):
     clean=[str(x).strip() for x in (items or []) if str(x).strip()]
     if not clean:return None
     content=('\n'.join(clean)+'\n').encode('utf-8')
+    base=getattr(api,'u',None)
+    if not base:return False
     boundary='----VEXADeliveryBoundary'
     filename='order-'+str(oid)+'-'+''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in str(product_name))[:45]+'.txt'
     fields={'chat_id':str(cid),'caption':'📄 1 item → '+str(product_name)+'\nKeep this file private and store it somewhere safe.'}
@@ -145,7 +147,7 @@ def _send_delivery_file(api, cid, oid, product_name, items):
         body+=('--'+boundary+'\r\nContent-Disposition: form-data; name="'+k+'"\r\n\r\n'+v+'\r\n').encode('utf-8')
     body+=('--'+boundary+'\r\nContent-Disposition: form-data; name="document"; filename="'+filename+'"\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n').encode('utf-8')+content+b'\r\n'
     body+=('--'+boundary+'--\r\n').encode('utf-8')
-    req=urllib.request.Request(api.u+'sendDocument',data=body,headers={'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
+    req=urllib.request.Request(base+'sendDocument',data=body,headers={'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
     try:
         with urllib.request.urlopen(req,timeout=40) as r:return r.status<300
     except Exception as exc:
