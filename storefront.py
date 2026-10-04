@@ -838,7 +838,8 @@ def admin_text_editor(api, cid, field, pid, lang=None):
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'product_text', json.dumps([pid, field, lang])))
     label = 'الاسم الجديد (حتى 120 حرفًا)' if field == 'name' else 'الوصف الجديد (حتى 1500 حرف، ويمكن استخدام عدة أسطر)'
-    send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.') + '\nسيحل النص الجديد محل الاسم القديم بالكامل.',
+    hint = ('\n\nيمكنك أيضًا تحويل (Forward) رسالة الوصف من أي مكان إلى البوت وسيتم حفظ نصها وتنسيقها.' if field == 'description' else '')
+    send(api, cid, 'أرسل ' + label + (' بالعربية.' if lang == 'ar' else ' بالإنجليزية.') + '\nسيحل النص الجديد محل النص القديم بالكامل.' + hint,
          kb(([[btn('🗑 إزالة الأيقونة المتحركة', 'removenameicon:' + pid)]] if field == 'name' else []) +
             [[btn('إلغاء', 'admin')]]))
 
@@ -980,7 +981,7 @@ def handle_admin_text(api, message):
         row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='product_text'", (cid,)).fetchone()
     if not row:
         return False
-    text = (message.get('text') or '').strip()
+    text = (message.get('text') or message.get('caption') or '').strip()
     if text.startswith('/') or text in G.get('MENU', {}):
         with db() as conn:
             conn.execute("DELETE FROM admin_state WHERE cid=? AND action='product_text'", (cid,))
