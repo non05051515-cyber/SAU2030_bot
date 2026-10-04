@@ -1571,8 +1571,9 @@ def handle_admin_product(api, message):
             conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
             for new_pid in saved_product_ids:
                 conn.execute("INSERT OR REPLACE INTO channel_publish_choices VALUES (?,'pending')", (new_pid,))
-        # Verify the rows really exist before claiming success. Direct products
-        # must have a SQL NULL category_id (not "", "None", or a stale category).
+        # Verify the rows really exist before claiming success. Recompute here
+        # so this block is safe in every duplicated handler definition.
+        is_direct = bool(payload.get('direct'))
         with db() as conn:
             if is_direct:
                 for new_pid in saved_product_ids:
@@ -5415,8 +5416,9 @@ def handle_admin_product(api, message):
             conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
             for new_pid in saved_product_ids:
                 conn.execute("INSERT OR REPLACE INTO channel_publish_choices VALUES (?,'pending')", (new_pid,))
-        # Verify the rows really exist before claiming success. Direct products
-        # must have a SQL NULL category_id (not "", "None", or a stale category).
+        # Verify the rows really exist before claiming success. Recompute here
+        # so this block is safe in every duplicated handler definition.
+        is_direct = bool(payload.get('direct'))
         with db() as conn:
             if is_direct:
                 for new_pid in saved_product_ids:
