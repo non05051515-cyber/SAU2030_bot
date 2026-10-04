@@ -581,9 +581,24 @@ def stock_editor(api, cid, pid, value=None):
 
 
 def text_override(pid, field, lang, default):
+    pid = LEGACY.get(pid, pid)
     with db() as conn:
-        row = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (LEGACY.get(pid, pid), field, lang)).fetchone()
-    return row[0] if row else default
+        row = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (pid, field, lang)).fetchone()
+        if row:
+            return row[0]
+        other_lang = 'en' if lang == 'ar' else 'ar'
+        other = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (pid, field, other_lang)).fetchone()
+    # Older/imported products may only have one language. Translate it lazily
+    # when the customer switches language, then cache the result.
+    source = other[0] if other and other[0] else default
+    if source and field in ('description','name'):
+        translated = auto_translate(source, lang)
+        if translated and translated.strip() and translated.strip() != source.strip():
+            translated = translated[:1500 if field == 'description' else 120]
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, translated))
+            return translated
+    return default
 
 
 def product_description(pid, cid=0):
@@ -766,10 +781,21 @@ def admin_text_menu(api, cid, field, category_id=None):
 
 def category_description_html(pid, cid):
     # Category copy is independent of product descriptions, even when IDs match.
+    lang = prefs(cid)[0]
     with db() as conn:
-        row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?",
-                           (pid, prefs(cid)[0])).fetchone()
-    return row[0] if row else None
+        row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
+        if row:
+            return row[0]
+        other_lang = 'en' if lang == 'ar' else 'ar'
+        other = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, other_lang)).fetchone()
+    if other and other[0]:
+        translated = auto_translate(re.sub(r'<[^>]+>', '', other[0]), lang)
+        if translated and translated.strip() and translated.strip() != re.sub(r'<[^>]+>', '', other[0]).strip():
+            translated = esc(translated[:1500])
+            with db() as conn:
+                conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', lang, translated))
+            return translated
+    return None
 
 
 def category_label(pid, cid=0):
