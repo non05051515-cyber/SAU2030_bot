@@ -3236,7 +3236,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
@@ -3259,7 +3259,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
@@ -4426,7 +4426,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
@@ -4450,7 +4450,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
@@ -7154,7 +7154,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
@@ -7177,7 +7177,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
@@ -8329,7 +8329,7 @@ def category(api, cid, pid):
                 continue
             sold_out = not available or int(stock or 0) <= 0
             qty = int(stock or 0)
-            label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+            label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
@@ -8353,7 +8353,7 @@ def category(api, cid, pid):
                     continue
                 qty = int(stock or 0)
                 sold_out = (not bool(available)) or qty <= 0
-                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                label = ('🔴 ' if sold_out else '🟢 ') + compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
