@@ -2178,10 +2178,11 @@ def tick_customer_activity(api):
 def admin_icons(api, cid):
     if cid != G['ADMIN_ID']:
         return home(api, cid)
-    send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر أين تريد إضافة الأيقونة:',
-         kb([[btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
-             [btn('📁 أسماء الأقسام', 'iconmenu:categories')],
-             [btn('🏠 أيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
+    send(api, cid, '➕ <b>الأسماء والأيقونات</b>\n\nمن هنا تستطيع تعديل الاسم كاملًا أو حذف الاسم/الأيقونة ثم إضافتهما من جديد:',
+         kb([[btn('✏️ تعديل الاسم كاملًا', 'admin:buttonlabels', style='success')],
+             [btn('📦 أسماء وأيقونات المنتجات', 'iconmenu:products', style='primary')],
+             [btn('📁 أسماء وأيقونات الأقسام', 'iconmenu:categories')],
+             [btn('🏠 أسماء وأيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
              [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
@@ -2275,8 +2276,15 @@ def begin_icon_setup(api, cid, pid):
         label = row[1] if row else pid
     else:
         label = cp[1]
-    send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بـ <b>{esc(label)}</b>.\n\nأرسل رمزًا مخصصًا واحدًا فقط، أو اضغط إلغاء.',
-         kb([[btn('❌ إلغاء', 'cancelicon')]]))
+    extra = []
+    if pid in UI_ICON_LABELS:
+        extra = [[btn('✏️ تعديل الاسم كاملًا', 'buttonlabel:' + pid, style='success')],
+                 [btn('🗑 مسح الاسم والأيقونة', 'resetbuttonlabel:' + pid, style='danger')]]
+    else:
+        extra = [[btn('✏️ تعديل الاسم كاملًا', 'txtpick:name:' + pid, style='success')],
+                 [btn('🗑 إزالة الأيقونة', 'removenameicon:' + pid, style='danger')]]
+    send(api, cid, f'أرسل الآن الأيقونة المتحركة الخاصة بـ <b>{esc(label)}</b>.\n\nويمكنك من هنا تعديل الاسم كاملًا أو إزالة الأيقونة ثم كتابته من جديد.',
+         kb(extra + [[btn('❌ إلغاء', 'cancelicon')]]))
 
 
 def handle_admin_icon(api, message):
