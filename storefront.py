@@ -1638,7 +1638,7 @@ def fulfill_paid_order(api, order_id):
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not enabled:
         return False
-    if provider == 'pandora' and endpoint and api_key and product_id and variant_id:
+    if provider == 'pandora' and endpoint and api_key and product_id:
         return pandora_fulfill_order(api, order_id)
     return False
 
@@ -5439,7 +5439,7 @@ def fulfill_paid_order(api, order_id):
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not enabled:
         return False
-    if provider == 'pandora' and endpoint and api_key and product_id and variant_id:
+    if provider == 'pandora' and endpoint and api_key and product_id:
         return pandora_fulfill_order(api, order_id)
     return False
 
