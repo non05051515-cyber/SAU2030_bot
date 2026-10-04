@@ -2881,9 +2881,19 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
-    # Three categories per row. If exactly two categories remain, keep them
-    # together on the same final row (for example: computer + Telegram).
-    rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    # Keep three columns, but make the last two categories share one row.
+    # This explicitly fixes layouts where built-in/custom category counts leave
+    # computer and Telegram as two separate full-width rows.
+    if len(buttons) >= 2:
+        head = buttons[:-2]
+        rows = [head[i:i+3] for i in range(0, len(head), 3)]
+        if rows and len(rows[-1]) < 3:
+            tail = rows.pop() + buttons[-2:]
+            rows.extend([tail[i:i+3] for i in range(0, len(tail), 3)])
+        else:
+            rows.append(buttons[-2:])
+    else:
+        rows = [buttons] if buttons else []
     # Standalone products appear directly below the category grid. Their status is
     # shown only by the button background: green when available, red otherwise.
     for pid, available, stock in direct_products:
@@ -4145,9 +4155,19 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
-    # Three categories per row. If exactly two categories remain, keep them
-    # together on the same final row (for example: computer + Telegram).
-    rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    # Keep three columns, but make the last two categories share one row.
+    # This explicitly fixes layouts where built-in/custom category counts leave
+    # computer and Telegram as two separate full-width rows.
+    if len(buttons) >= 2:
+        head = buttons[:-2]
+        rows = [head[i:i+3] for i in range(0, len(head), 3)]
+        if rows and len(rows[-1]) < 3:
+            tail = rows.pop() + buttons[-2:]
+            rows.extend([tail[i:i+3] for i in range(0, len(tail), 3)])
+        else:
+            rows.append(buttons[-2:])
+    else:
+        rows = [buttons] if buttons else []
     for pid, available, stock in direct_products:
         if not product_visible(pid):
             continue
@@ -6749,9 +6769,19 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
-    # Three categories per row. If exactly two categories remain, keep them
-    # together on the same final row (for example: computer + Telegram).
-    rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    # Keep three columns, but make the last two categories share one row.
+    # This explicitly fixes layouts where built-in/custom category counts leave
+    # computer and Telegram as two separate full-width rows.
+    if len(buttons) >= 2:
+        head = buttons[:-2]
+        rows = [head[i:i+3] for i in range(0, len(head), 3)]
+        if rows and len(rows[-1]) < 3:
+            tail = rows.pop() + buttons[-2:]
+            rows.extend([tail[i:i+3] for i in range(0, len(tail), 3)])
+        else:
+            rows.append(buttons[-2:])
+    else:
+        rows = [buttons] if buttons else []
     for pid, available, stock in direct_products:
         if not product_visible(pid):
             continue
@@ -7999,9 +8029,19 @@ def products(api, cid):
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
-    # Three categories per row. If exactly two categories remain, keep them
-    # together on the same final row (for example: computer + Telegram).
-    rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    # Keep three columns, but make the last two categories share one row.
+    # This explicitly fixes layouts where built-in/custom category counts leave
+    # computer and Telegram as two separate full-width rows.
+    if len(buttons) >= 2:
+        head = buttons[:-2]
+        rows = [head[i:i+3] for i in range(0, len(head), 3)]
+        if rows and len(rows[-1]) < 3:
+            tail = rows.pop() + buttons[-2:]
+            rows.extend([tail[i:i+3] for i in range(0, len(tail), 3)])
+        else:
+            rows.append(buttons[-2:])
+    else:
+        rows = [buttons] if buttons else []
     for pid, available, stock in direct_products:
         if not product_visible(pid):
             continue
