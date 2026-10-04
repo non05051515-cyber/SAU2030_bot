@@ -1609,7 +1609,7 @@ def admin_product_detail(api, cid, pid):
                 [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
                 [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
-                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+                [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
         if pid not in VARIANTS and pid not in G['PRODUCTS']:
             return admin_products_page(api, cid)
@@ -1622,7 +1622,7 @@ def admin_product_detail(api, cid, pid):
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
                 [btn('📦 تعديل التوفر/الكمية', 'admin:stock')],
-                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+                [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     text = ('📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description or '') +
             '\n\n💵 ' + price(cid, pid, 'USD') +
             '\n📦 الكمية: ' + esc(qty) +
@@ -5459,7 +5459,7 @@ def admin_product_detail(api, cid, pid):
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
-                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+                [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
         if pid not in VARIANTS and pid not in G['PRODUCTS']:
             return admin_products_page(api, cid)
@@ -5471,7 +5471,7 @@ def admin_product_detail(api, cid, pid):
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn('📦 تعديل التوفر/الكمية', 'admin:stock')],
-                [btn('↩️ القسم', 'mycategory:' + category_id)]]
+                [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     text = ('📦 <b>' + esc(product_name) + '</b>\n\n' + esc(description or '') +
             '\n\n💵 ' + price(cid, pid, 'USD') +
             '\n📦 الكمية: ' + esc(qty) +
