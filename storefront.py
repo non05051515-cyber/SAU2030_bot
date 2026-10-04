@@ -1098,8 +1098,11 @@ def handle_admin_photo(api, message):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_photos VALUES (?,?)', (row[0], file_id))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    parent = 'myproduct:' + row[0] if custom_product(row[0]) else 'admin:photos'
-    send(api, cid, '✅ تم حفظ صورة المنتج.', kb([[btn('👁 معاينة المنتج', ('item:' if row[0] in VARIANTS or custom_product(row[0]) else 'product:') + row[0])], [btn('↩️ رجوع للمنتج', parent)], [btn('🖼️ منتج آخر', 'admin:photos')], [btn('لوحة الإدارة', 'admin')]]))
+    pid = row[0]
+    cp = custom_product(pid)
+    category_id = VARIANTS.get(pid, {}).get('category') if pid in VARIANTS else (cp[5] if cp else pid)
+    parent = 'myproduct:' + pid if cp else 'photocat:' + category_id
+    send(api, cid, '✅ تم حفظ صورة المنتج.', kb([[btn('👁 معاينة المنتج', ('item:' if pid in VARIANTS or cp else 'product:') + pid)], [btn('↩️ رجوع للمنتجات', parent)], [btn('🖼️ منتج آخر', 'photocat:' + category_id)], [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
