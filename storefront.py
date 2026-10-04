@@ -3504,6 +3504,9 @@ def receipt(api, message):
         return True
     if handle_admin_photo(api, message):
         return True
+    # Consume the add-product wizard before generic admin text handlers.
+    if handle_admin_product(api, message):
+        return True
     # Product price/stock/warranty icon input must be consumed before the
     # generic admin text handler, otherwise Telegram sends us back to the
     # product-info menu without saving the selected emoji.
@@ -4583,6 +4586,9 @@ def receipt(api, message):
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
+        return True
+    # Consume the add-product wizard before generic admin text handlers.
+    if handle_admin_product(api, message):
         return True
     # Product price/stock/warranty icon input must be consumed before the
     # generic admin text handler, otherwise Telegram sends us back to the
@@ -7325,6 +7331,9 @@ def receipt(api, message):
         return True
     if handle_admin_photo(api, message):
         return True
+    # Consume the add-product wizard before generic admin text handlers.
+    if handle_admin_product(api, message):
+        return True
     # Product price/stock/warranty icon input must be consumed before the
     # generic admin text handler, otherwise Telegram sends us back to the
     # product-info menu without saving the selected emoji.
@@ -8389,6 +8398,9 @@ def receipt(api, message):
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
+        return True
+    # Consume the add-product wizard before generic admin text handlers.
+    if handle_admin_product(api, message):
         return True
     # Product price/stock/warranty icon input must be consumed before the
     # generic admin text handler, otherwise Telegram sends us back to the
