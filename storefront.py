@@ -4090,11 +4090,18 @@ def products(api, cid):
     buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    for pid, available, stock in direct_products:
+        if not product_visible(pid):
+            continue
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
-
 
 def settings(api, cid, kind):
     if kind == 'lang':
@@ -6632,11 +6639,18 @@ def products(api, cid):
     buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    for pid, available, stock in direct_products:
+        if not product_visible(pid):
+            continue
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
-
 
 def settings(api, cid, kind):
     if kind == 'lang':
@@ -7850,11 +7864,18 @@ def products(api, cid):
     buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    for pid, available, stock in direct_products:
+        if not product_visible(pid):
+            continue
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
-
 
 def settings(api, cid, kind):
     if kind == 'lang':
