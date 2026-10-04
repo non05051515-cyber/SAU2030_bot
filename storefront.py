@@ -871,33 +871,82 @@ def generate_product_description(api,cid,pid):
     if cid != G['ADMIN_ID']:
         return home(api,cid)
     pid=LEGACY.get(pid,pid)
-    title=name(pid,cid).strip()
-    short=title if len(title)<=42 else title[:39].rstrip()+'…'
-    sp,ss,sw,w=info_display(pid)
-    cp=custom_product(pid)
-    category=VARIANTS.get(pid,{}).get('category') or (cp[5] if cp else '')
-    low=(title+' '+str(category)).lower()
-    if 'capcut' in low:
-        ar='🎬 <b>'+esc(short)+'</b>\n\n✨ اشتراك CapCut Pro جاهز للاستخدام.\n⚡ تسليم تلقائي بعد تأكيد الدفع.\n📦 اختر الكمية المناسبة ثم أكمل الطلب.'
-        en='🎬 <b>'+esc(short)+'</b>\n\n✨ CapCut Pro subscription ready to use.\n⚡ Automatic delivery after payment confirmation.\n📦 Choose your quantity and complete the order.'
-    else:
-        ar='✨ <b>'+esc(short)+'</b>\n\n✅ منتج رقمي جاهز للطلب.\n⚡ تسليم سريع بعد تأكيد الدفع.\n📦 اختر الكمية المناسبة ثم أكمل الطلب.'
-        en='✨ <b>'+esc(short)+'</b>\n\n✅ Digital product ready to order.\n⚡ Fast delivery after payment confirmation.\n📦 Choose your quantity and complete the order.'
-    if sw and w:
-        ar += '\n🛡 الضمان: '+esc(str(w))
-        en += '\n🛡 Warranty: '+esc(str(w))
-    ar_plain=re.sub(r'<[^>]+>','',ar)
-    en_plain=re.sub(r'<[^>]+>','',en)
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(pid,'description','ar',ar_plain))
-        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(pid,'description','en',en_plain))
-        conn.execute('INSERT OR REPLACE INTO description_emoji(pid,lang,plain,html) VALUES (?,?,?,?)',(pid,'ar',ar_plain,ar))
-        conn.execute('INSERT OR REPLACE INTO description_emoji(pid,lang,plain,html) VALUES (?,?,?,?)',(pid,'en',en_plain,en))
-    send(api,cid,'✅ تم توليد وصف مختصر تلقائيًا بالعربية والإنجليزية.\n\n'+ar,
-         kb([[btn('👁 معاينة المنتج',('item:' if pid in VARIANTS or custom_product(pid) else 'product:')+pid)],
-             [btn('✏️ تعديل الوصف يدويًا','txtpick:description:'+pid)],
-             [btn('↩️ لوحة الإدارة','admin')]]))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'auto_description',pid))
+    send(api,cid,'✨ <b>ترتيب وصف المنتج</b>\n\nحوّل (Forward) لي أي وصف للمنتج من أي مكان، أو أرسل النص هنا.\n\nسأرتبه وأحذف الكلام غير الضروري مثل الهدايا 🎁 والعروض والأسعار القديمة والروابط واسم المتجر، ثم أعرضه لك قبل الحفظ.',
+         kb([[btn('❌ إلغاء','admin:editdesc')]]))
 
+
+def clean_forwarded_description(text):
+    lines=[]
+    skip_words=('🎁','gift','gifts','هدية','هدايا','promotion','promotions','promo','عرض خاص','العروض','خصم','discount',
+                'http://','https://','t.me/','telegram.me/','contact us','تواصل معنا','متجرنا','our store')
+    for raw in text.splitlines():
+        line=raw.strip()
+        if not line:
+            continue
+        low=line.lower()
+        if any(word in low for word in skip_words):
+            continue
+        if re.search(r'(?:\$|usd|sar|ر\.س|ريال)\s*\d|\d+(?:\.\d+)?\s*(?:usd|sar|ر\.س|ريال)',low):
+            continue
+        line=re.sub(r'\s{2,}',' ',line)
+        if line not in lines:
+            lines.append(line)
+    cleaned='\n'.join(lines).strip()
+    if len(cleaned)>900:
+        cleaned=cleaned[:900].rsplit('\n',1)[0].rstrip()
+    return cleaned
+
+
+def handle_auto_description(api,message):
+    cid=message.get('chat',{}).get('id')
+    if cid!=G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row=conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='auto_description'",(cid,)).fetchone()
+    if not row:
+        return False
+    text=(message.get('text') or message.get('caption') or '').strip()
+    if text.startswith('/') or text in G.get('MENU',{}):
+        with db() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='auto_description'",(cid,))
+        return False
+    cleaned=clean_forwarded_description(text)
+    if not cleaned:
+        send(api,cid,'ما بقي نص مناسب بعد التنظيف. حوّل وصفًا آخر أو أرسل النص مباشرة.',kb([[btn('❌ إلغاء','admin:editdesc')]]))
+        return True
+    pid=LEGACY.get(row[0],row[0])
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'auto_description_preview',json.dumps([pid,cleaned])))
+    send(api,cid,'✨ <b>معاينة الوصف بعد الترتيب</b>\n\n'+esc(cleaned),
+         kb([[btn('✅ حفظ الوصف','autodescsave:'+pid,style='success')],
+             [btn('🔄 إرسال وصف آخر','autodesc:'+pid)],
+             [btn('❌ إلغاء','admin:editdesc')]]))
+    return True
+
+
+def save_auto_description(api,cid,pid):
+    if cid!=G['ADMIN_ID']:
+        return
+    with db() as conn:
+        row=conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='auto_description_preview'",(cid,)).fetchone()
+    if not row:
+        return generate_product_description(api,cid,pid)
+    saved_pid,cleaned=json.loads(row[0])
+    if LEGACY.get(pid,pid)!=saved_pid:
+        return
+    translated_en=auto_translate(cleaned,'en')[:1500]
+    with db() as conn:
+        conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(saved_pid,'description','ar',cleaned))
+        conn.execute('DELETE FROM description_emoji WHERE pid=? AND lang=?',(saved_pid,'ar'))
+        if translated_en:
+            conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(saved_pid,'description','en',translated_en))
+            conn.execute('DELETE FROM description_emoji WHERE pid=? AND lang=?',(saved_pid,'en'))
+        conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
+    send(api,cid,'✅ تم حفظ الوصف المرتب'+(' وتحديث الإنجليزية تلقائيًا.' if translated_en else '.'),
+         kb([[btn('👁 معاينة المنتج',('item:' if saved_pid in VARIANTS or custom_product(saved_pid) else 'product:')+saved_pid)],
+             [btn('✏️ وصف منتج آخر','admin:editdesc')],[btn('↩️ لوحة الإدارة','admin')]]))
 
 def handle_info_icon(api,message):
     cid=message.get('chat',{}).get('id')
@@ -1031,6 +1080,8 @@ def handle_admin_text(api, message):
             conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         send(api, cid, '✅ تم تحديث الكمية إلى <b>' + esc(qty) + '</b>.')
         stock_editor(api, cid, pid)
+        return True
+    if handle_auto_description(api, message):
         return True
     with db() as conn:
         row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='product_text'", (cid,)).fetchone()
@@ -3728,6 +3779,8 @@ def action(api, cid, value):
         admin_text_editor(api, cid, field, pid)
     elif prefix == 'autodesc' and cid == G['ADMIN_ID']:
         generate_product_description(api,cid,arg)
+    elif prefix == 'autodescsave' and cid == G['ADMIN_ID']:
+        save_auto_description(api,cid,arg)
     elif prefix == 'txtedit':
         parts = arg.split(':', 2)
         if len(parts) == 3:
