@@ -1412,6 +1412,7 @@ def supplier_api_menu(api, cid, category_id=None):
     if category_id is None:
         cats = [(pid, ('YouTube' if pid == 'youtube' else name(pid, cid))) for pid in G['PRODUCTS']]
         cats += [(pid, label) for pid, label in custom_cats if pid not in G['PRODUCTS']]
+        cats.sort(key=lambda item: (0 if str(item[0]).lower() == 'capcut' or 'capcut' in str(item[1]).lower() else 1, str(item[1]).lower()))
         rows = [[btn(label, 'suppliercat:' + pid)] for pid, label in cats]
         send(api, cid, '🔌 <b>ربط API بالمنتج</b>\n\nاختر القسم:', kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
         return
@@ -1533,7 +1534,21 @@ def pandora_fulfill_order(api, internal_order_id):
 
 
 def fulfill_paid_order(api, order_id):
-    # Manual fulfillment mode: supplier integrations are intentionally disabled.
+    """Run the configured supplier exactly once after payment approval.
+
+    Pandora uses supplier_orders + client_order_reference + Idempotency-Key,
+    so retries/restarts cannot create duplicate supplier orders.
+    """
+    with db() as conn:
+        row = conn.execute('SELECT pid,status FROM orders WHERE id=?', (order_id,)).fetchone()
+    if not row or row[1] != 'paid':
+        return False
+    pid = row[0]
+    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if not enabled:
+        return False
+    if provider == 'pandora' and endpoint and api_key and product_id and variant_id:
+        return pandora_fulfill_order(api, order_id)
     return False
 
 
@@ -1573,6 +1588,88 @@ def supplier_test_connection(api, cid, pid):
         send(api, cid, '❌ فشل اختبار الاتصال: <code>' + esc(type(exc).__name__) + '</code>')
 
 
+def _pandora_bool(value, default=True):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    return str(value).strip().lower() not in ('0','false','no','off','disabled','unavailable','out_of_stock','sold_out')
+
+
+def _pandora_stock_value(item):
+    if not isinstance(item, dict):
+        return None
+    for key in ('stock','quantity','qty','available_stock','inventory','remaining'):
+        value = item.get(key)
+        if isinstance(value, dict):
+            value = value.get('available') or value.get('quantity') or value.get('stock')
+        try:
+            if value is not None:
+                return max(0, int(float(value)))
+        except Exception:
+            pass
+    return None
+
+
+def pandora_sync_product(pid):
+    """Refresh local availability/stock from the linked Pandora product/variant."""
+    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if not (provider == 'pandora' and endpoint and api_key and product_id and variant_id):
+        return None
+    try:
+        payload = _supplier_json_request(endpoint.rstrip('/') + '/products?limit=100', api_key, timeout=20)
+        target_product = None
+        for item in _pandora_list(payload):
+            if _pandora_product_id(item) == str(product_id):
+                target_product = item
+                break
+        if not target_product:
+            return None
+
+        target_variant = None
+        raw_variants = target_product.get('variants') or target_product.get('options') or target_product.get('skus') or []
+        if isinstance(raw_variants, dict):
+            raw_variants = raw_variants.get('data') or raw_variants.get('items') or list(raw_variants.values())
+        if isinstance(raw_variants, list):
+            for variant in raw_variants:
+                if not isinstance(variant, dict):
+                    continue
+                vid = str(variant.get('id') or variant.get('variant_id') or variant.get('variantId') or variant.get('sku') or '')
+                if vid == str(variant_id):
+                    target_variant = variant
+                    break
+
+        source = target_variant or target_product
+        stock = _pandora_stock_value(source)
+        if stock is None:
+            stock = _pandora_stock_value(target_product)
+        available_value = source.get('available') if isinstance(source, dict) else None
+        if available_value is None and isinstance(source, dict):
+            available_value = source.get('is_available')
+        if available_value is None and isinstance(source, dict):
+            available_value = source.get('active')
+        available = _pandora_bool(available_value, True)
+        if stock is not None:
+            available = available and stock > 0
+
+        with db() as conn:
+            if custom_product(pid):
+                if stock is not None:
+                    conn.execute('UPDATE admin_products SET stock=?,available=? WHERE pid=?', (stock, 1 if available else 0, pid))
+                else:
+                    conn.execute('UPDATE admin_products SET available=? WHERE pid=?', (1 if available else 0, pid))
+            else:
+                if stock is not None:
+                    conn.execute('INSERT OR REPLACE INTO product_stock_overrides(pid,stock) VALUES (?,?)', (pid, stock))
+                conn.execute('INSERT OR REPLACE INTO product_availability(pid,available) VALUES (?,?)', (pid, 1 if available else 0))
+        return {'stock': stock, 'available': available}
+    except Exception as exc:
+        print('Pandora stock sync failed:', pid, type(exc).__name__, flush=True)
+        return None
+
+
 def supplier_api_editor(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return
@@ -1580,6 +1677,9 @@ def supplier_api_editor(api, cid, pid):
     if pid not in VARIANTS and pid not in G['PRODUCTS'] and not custom_product(pid):
         return supplier_api_menu(api, cid)
     endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if provider == 'pandora' and service_id and variant_id:
+        pandora_sync_product(pid)
+        endpoint, api_key, service_id, enabled, provider, variant_id = supplier_api_row(pid)
     masked = ('••••••' + api_key[-4:]) if api_key else 'غير مضاف'
     text = ('🔌 <b>' + esc(name(pid, cid)) + '</b>\n\n'
             'المورد: <b>' + esc('Pandora Digital' if provider == 'pandora' else 'Generic API') + '</b>\n'
@@ -1748,10 +1848,14 @@ def pandora_catalog_save(api, cid, pindex, vindex):
     pid = state['pid']
     endpoint, api_key, _, enabled, _, _ = supplier_api_row(pid)
     with db() as conn:
-        conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET service_id=excluded.service_id,variant_id=excluded.variant_id,provider="pandora"',
-                     (pid, endpoint, api_key, str(product['id']), enabled, 'pandora', str(variant['id'])))
+        conn.execute('INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id) VALUES (?,?,?,?,?,?,?) ON CONFLICT(pid) DO UPDATE SET service_id=excluded.service_id,variant_id=excluded.variant_id,provider="pandora",enabled=1',
+                     (pid, endpoint, api_key, str(product['id']), 1, 'pandora', str(variant['id'])))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-    send(api, cid, '✅ تم ربط المنتج تلقائيًا مع Pandora.\n\nProduct ID: <code>' + esc(product['id']) + '</code>\nVariant ID: <code>' + esc(variant['id']) + '</code>')
+    sync = pandora_sync_product(pid)
+    sync_text = ''
+    if sync:
+        sync_text = '\n📦 المخزون: <b>' + esc(sync.get('stock') if sync.get('stock') is not None else 'غير محدد') + '</b>\nالحالة: <b>' + ('🟢 متوفر' if sync.get('available') else '🔴 غير متوفر') + '</b>'
+    send(api, cid, '✅ تم ربط المنتج وتفعيل Pandora تلقائيًا.\n\nProduct ID: <code>' + esc(product['id']) + '</code>\nVariant ID: <code>' + esc(variant['id']) + '</code>' + sync_text)
     supplier_api_editor(api, cid, pid)
 
 
