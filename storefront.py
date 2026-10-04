@@ -1550,7 +1550,7 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
-                pid = 'custom_' + uuid.uuid4().hex
+                pid = 'custom_' + uuid.uuid4().hex[:12]
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 sar = (usd * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
@@ -1604,11 +1604,12 @@ def admin_product_detail(api, cid, pid):
         _, product_name, description, price_usd, available, category_id, stock = cp
         qty = int(stock or 0)
         is_available = bool(available and qty > 0)
+        token = pid[len('custom_'):] if pid.startswith('custom_') else pid
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
-                [btn(('🙈 إخفاء من المتجر' if product_visible(pid) else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if product_visible(pid) else 'success')],
-                [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
+                [btn(('🙈 إخفاء من المتجر' if product_visible(pid) else '👁 إظهار في المتجر'), 'myproducttoggle:' + token, style='danger' if product_visible(pid) else 'success')],
+                [btn('🗑 حذف المنتج', 'myproductdelete:' + token, style='danger')],
                 [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
         if pid not in VARIANTS and pid not in G['PRODUCTS']:
@@ -3787,10 +3788,22 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
@@ -4933,10 +4946,22 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
@@ -5408,7 +5433,7 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
-                pid = 'custom_' + uuid.uuid4().hex
+                pid = 'custom_' + uuid.uuid4().hex[:12]
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 sar = (usd * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
@@ -7617,10 +7642,22 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
@@ -8759,10 +8796,22 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        raw_pid = value.split(':', 1)[1] if ':' in value else arg
+        direct_pid = raw_pid
+        if raw_pid and not custom_product(raw_pid):
+            with db() as conn:
+                hit = conn.execute("SELECT pid FROM admin_products WHERE pid=? OR (pid LIKE 'custom_%' AND substr(pid,8)=?) LIMIT 1", (raw_pid, raw_pid)).fetchone()
+            if hit:
+                direct_pid = hit[0]
         delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
