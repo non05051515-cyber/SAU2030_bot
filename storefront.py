@@ -992,19 +992,26 @@ def handle_admin_text(api, message):
         send(api, cid, f'أرسل نصًا غير فارغ لا يتجاوز {limit} حرفًا.' + (' الاسم يكون في سطر واحد.' if field == 'name' else ''), kb([[btn('إلغاء', 'admin')]]))
         return True
     translated_en = auto_translate(text, 'en')[:limit] if lang == 'ar' else None
+    translated_ar = auto_translate(text, 'ar')[:limit] if lang == 'en' else None
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, text))
         if translated_en:
             conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, 'en', translated_en))
+        if translated_ar:
+            conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, 'ar', translated_ar))
         if field == 'description':
             conn.execute('INSERT OR REPLACE INTO description_emoji VALUES (?,?,?,?)',
                          (pid, lang, text, description_message_html(message, text)))
             if translated_en:
                 conn.execute('DELETE FROM description_emoji WHERE pid=? AND lang=?', (pid, 'en'))
+            if translated_ar:
+                conn.execute('DELETE FROM description_emoji WHERE pid=? AND lang=?', (pid, 'ar'))
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
     confirmation = '✅ تم حفظ ' + ('اسم المنتج' if field == 'name' else 'وصف المنتج')
     if translated_en:
         confirmation += '\n🌐 وتم تحديث النسخة الإنجليزية تلقائيًا.'
+    if translated_ar:
+        confirmation += '\n🇸🇦 وتم إنشاء النسخة العربية تلقائيًا.'
     confirmation += '\n\n' + (description_message_html(message, text) if field == 'description' else esc(text))
     send(api, cid, confirmation, kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
     return True
