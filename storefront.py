@@ -1607,7 +1607,7 @@ def admin_product_detail(api, cid, pid):
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
                 [btn('🔗 ربط / إدارة Pandora', 'supplierpick:' + pid, style='primary')],
-                [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
+                [btn(('🙈 إخفاء من المتجر' if product_visible(pid) else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if product_visible(pid) else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                 [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
@@ -1633,8 +1633,11 @@ def admin_product_detail(api, cid, pid):
 def toggle_admin_product(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return
+    # Visibility is independent from stock/availability: hidden products disappear
+    # from the customer storefront but remain manageable in the admin panel.
+    visible = product_visible(pid)
     with db() as conn:
-        conn.execute('UPDATE admin_products SET available=CASE available WHEN 1 THEN 0 ELSE 1 END WHERE pid=?', (pid,))
+        conn.execute('INSERT OR REPLACE INTO product_visibility(pid,visible) VALUES (?,?)', (pid, 0 if visible else 1))
     admin_product_detail(api, cid, pid)
 
 
@@ -3784,9 +3787,11 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        toggle_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        delete_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
     elif prefix == 'stockpick':
@@ -4928,9 +4933,11 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        toggle_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        delete_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
     elif prefix == 'stockpick':
@@ -5457,7 +5464,7 @@ def admin_product_detail(api, cid, pid):
         is_available = bool(available and qty > 0)
         rows = [[btn('🖼️ إضافة/تعديل صورة المنتج', 'photopick:' + pid)],
                 [btn('💵 تعديل السعر', 'pricepick:' + pid)],
-                [btn(('🙈 إخفاء من المتجر' if available else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if available else 'success')],
+                [btn(('🙈 إخفاء من المتجر' if product_visible(pid) else '👁 إظهار في المتجر'), 'myproducttoggle:' + pid, style='danger' if product_visible(pid) else 'success')],
                 [btn('🗑 حذف المنتج', 'myproductdelete:' + pid, style='danger')],
                 [btn('↩️ منتجاتي', 'admin:myproducts') if not category_id else btn('↩️ القسم', 'mycategory:' + category_id)]]
     else:
@@ -5482,8 +5489,11 @@ def admin_product_detail(api, cid, pid):
 def toggle_admin_product(api, cid, pid):
     if cid != G['ADMIN_ID']:
         return
+    # Visibility is independent from stock/availability: hidden products disappear
+    # from the customer storefront but remain manageable in the admin panel.
+    visible = product_visible(pid)
     with db() as conn:
-        conn.execute('UPDATE admin_products SET available=CASE available WHEN 1 THEN 0 ELSE 1 END WHERE pid=?', (pid,))
+        conn.execute('INSERT OR REPLACE INTO product_visibility(pid,visible) VALUES (?,?)', (pid, 0 if visible else 1))
     admin_product_detail(api, cid, pid)
 
 
@@ -7607,9 +7617,11 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        toggle_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        delete_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
     elif prefix == 'stockpick':
@@ -8747,9 +8759,11 @@ def action(api, cid, value):
         direct_pid = value.split(':', 1)[1] if ':' in value else arg
         admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
-        toggle_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        toggle_admin_product(api, cid, direct_pid)
     elif prefix == 'myproductdelete':
-        delete_admin_product(api, cid, arg)
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        delete_admin_product(api, cid, direct_pid)
     elif prefix == 'stockcat':
         admin_stock(api, cid, arg)
     elif prefix == 'stockpick':
