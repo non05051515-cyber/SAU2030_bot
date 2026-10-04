@@ -54,9 +54,18 @@ def sku_kind(label):
 
 def resolve_pid(s, pid):
     with s.db() as c:
-        direct = c.execute('SELECT provider,service_id FROM supplier_api WHERE pid=?', (pid,)).fetchone()
-    # Disabled/incomplete Pandora bindings must be blocked, never remapped or manual.
+        direct = c.execute('SELECT provider,service_id,enabled,variant_id FROM supplier_api WHERE pid=?', (pid,)).fetchone()
+    # Resolve disabled legacy aliases by identical supplier identity only.
+    legacy = s.VARIANTS.get(pid,{}).get('category') == 'capcut' or pid.startswith('capcut_')
     if direct and direct[0] == 'pandora':
+        if direct[2] or not legacy:
+            return pid
+        with s.db() as c:
+            same = c.execute('''SELECT p.pid FROM admin_products p JOIN supplier_api a ON a.pid=p.pid
+                WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id=? AND a.variant_id=? ORDER BY p.rowid''',
+                (direct[1],direct[3])).fetchall()
+        if same:
+            return same[0][0]
         return pid
     if not is_capcut(s, pid):
         return pid

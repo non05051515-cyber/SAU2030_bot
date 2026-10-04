@@ -132,4 +132,12 @@ class Payments(unittest.TestCase):
    c.execute('INSERT INTO supplier_api(pid,service_id,enabled,provider) VALUES (?,?,?,?)',('pc_duplicate','other-product',1,'pandora'))
   oid=self.order();self.bot.action(self.api,self.admin,'payreview:accept:'+oid)
   self.assertFalse(self.purchases());self.assertEqual(self.bot.PENDING_ADMIN_DELIVERY,{})
+ def test_actual_disabled_pd17_alias_matches_active_same_supplier_id(self):
+  with self.s.db() as c:
+   c.execute('INSERT INTO supplier_api(pid,service_id,enabled,provider) VALUES (?,?,?,?)',('pd_17','prd_3',0,'pandora'))
+  oid=self.order('pd_17');self.bot.action(self.api,self.admin,'payreview:accept:'+oid)
+  self.assertEqual(self.query('SELECT original_pid,supplier_pid FROM payment_execution'),[('pd_17','pc_3')])
+  self.assertEqual(self.query('SELECT status,pid FROM orders'),[('delivered','pd_17')])
+  self.assertEqual(self.purchases()[0][2]['product_id'],'prd_3')
+  self.assertEqual(self.bot.PENDING_ADMIN_DELIVERY,{})
 if __name__=='__main__':unittest.main()

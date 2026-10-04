@@ -15,4 +15,8 @@ def report(s):
             FROM orders o LEFT JOIN supplier_api a ON a.pid=o.pid
             LEFT JOIN supplier_orders so ON so.order_id=o.id
             ORDER BY o.rowid DESC LIMIT 15""").fetchall()
+    import payment_execution
+    routing = [{'order_id':r[0],'saved_pid':r[1],'resolved_pid':payment_execution.resolve_pid(s,r[1])}
+               for r in orders if payment_execution.is_capcut(s,r[1])]
+    print('VEXA CapCut routing: '+json.dumps(routing),flush=True)
     print('VEXA payment metadata: '+json.dumps({'products':products,'orders':orders},ensure_ascii=False),flush=True)
