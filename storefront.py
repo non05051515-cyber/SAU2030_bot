@@ -867,9 +867,12 @@ def handle_info_icon(api,message):
         conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,str(emoji),fallback))
         conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
     if pid == '__global__':
-        admin_info_menu(api,cid)
+        field_label = 'السعر' if field == 'price' else 'الكمية'
+        send(api,cid,'✅ <b>تم حفظ أيقونة '+field_label+' بنجاح</b>\n\nستظهر الأيقونة الجديدة بجانب '+field_label+' في جميع المنتجات.',
+             kb([[btn('↩️ بيانات المنتج الظاهرة','admin:info',style='success')],[btn('🛍 معاينة المنتجات','products')]]))
     else:
-        admin_info_editor(api,cid,pid)
+        send(api,cid,'✅ <b>تم حفظ الأيقونة بنجاح</b>\n\nستظهر الآن في بيانات هذا المنتج.',
+             kb([[btn('↩️ إعدادات المنتج','infopick:'+pid,style='success')],[btn('🛍 معاينة المنتجات','products')]]))
     return True
 
 def handle_info_warranty(api,message):
