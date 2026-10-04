@@ -43,6 +43,27 @@ class Payments(unittest.TestCase):
  def query(self,q,args=()):
   with self.s.db() as c:return c.execute(q,args).fetchall()
  def purchases(self):return [r for r in self.requests if r[0].endswith('/orders') and r[1]=='POST']
+ def test_recover_verified_legacy_prices_once_and_preserve_later_edits(self):
+  import pandora_admin
+  pid='pc_prd_2ja9dtvu95-mwgfu'
+  with self.s.db() as c:
+   c.execute('UPDATE admin_products SET pid=?,price_usd=? WHERE pid=?',(pid,'0.15','pc_3'))
+   c.execute('INSERT INTO product_prices VALUES (?,?,?)',('pd_17','0.38','USD'))
+   c.execute('INSERT INTO product_prices VALUES (?,?,?)',(pid,'0.15','USD'))
+  pandora_admin.restore_saved_capcut_prices(self.s)
+  self.assertEqual(self.s.amount(pid,'USD'),__import__('decimal').Decimal('0.38'))
+  with self.s.db() as c:c.execute('UPDATE product_prices SET value=? WHERE pid=?',('0.15',pid))
+  pandora_admin.restore_saved_capcut_prices(self.s)
+  self.assertEqual(self.s.amount(pid,'USD'),__import__('decimal').Decimal('0.15'))
+ def test_recovery_does_not_replace_new_manual_price(self):
+  import pandora_admin
+  pid='pc_prd_88qi7o6gb9gdyowp'
+  with self.s.db() as c:
+   c.execute('UPDATE admin_products SET pid=?,price_usd=? WHERE pid=?',(pid,'1.29','pc_2'))
+   c.execute('INSERT INTO product_prices VALUES (?,?,?)',('pd_16','2.00','USD'))
+   c.execute('INSERT INTO product_prices VALUES (?,?,?)',(pid,'3.00','USD'))
+  pandora_admin.restore_saved_capcut_prices(self.s)
+  self.assertEqual(self.s.amount(pid,'USD'),__import__('decimal').Decimal('3.00'))
  def test_actual_receipt_and_final_accept_callback(self):
   with self.s.db() as c:
    c.execute('INSERT INTO receipts VALUES (?,?,?,?,?)',(7,'pd_16','bank','20','75'))

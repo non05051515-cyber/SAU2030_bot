@@ -120,7 +120,28 @@ def action(s,api,cid,value):
     return True
 
 
+def restore_saved_capcut_prices(s):
+    """One-time recovery of verified legacy retail prices; preserve later edits."""
+    rows=(('pd_17','pc_prd_2ja9dtvu95-mwgfu','0.38','0.15'),
+          ('pd_16','pc_prd_88qi7o6gb9gdyowp','2.00','1.29'))
+    with s.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        c.execute('CREATE TABLE IF NOT EXISTS price_recoveries (pid TEXT PRIMARY KEY, value TEXT NOT NULL)')
+        for legacy,pid,saved,previous in rows:
+            if c.execute('SELECT 1 FROM price_recoveries WHERE pid=?',(pid,)).fetchone():continue
+            old=c.execute('SELECT value,currency FROM product_prices WHERE pid=?',(legacy,)).fetchone()
+            current=c.execute('SELECT value,currency FROM product_prices WHERE pid=?',(pid,)).fetchone()
+            mirror=c.execute('SELECT price_usd FROM admin_products WHERE pid=?',(pid,)).fetchone()
+            if old!=(saved,'USD') or current!=(previous,'USD') or not mirror or mirror[0]!=previous:continue
+            c.execute("UPDATE product_prices SET value=?,currency='USD' WHERE pid=?",(saved,pid))
+            c.execute('UPDATE admin_products SET price_usd=?,price_sar=? WHERE pid=?',
+                      (saved,str((Decimal(saved)*s.RATE).quantize(Decimal('0.01'))),pid))
+            c.execute('INSERT INTO price_recoveries VALUES (?,?)',(pid,saved))
+            print('VEXA recovered saved retail: '+pid+' = '+saved+' USD',flush=True)
+
+
 def install(s):
+    restore_saved_capcut_prices(s)
     old_can_order=s.can_order
     def can_order(pid):
         if not old_can_order(pid):return False
