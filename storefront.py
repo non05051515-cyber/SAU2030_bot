@@ -1170,8 +1170,12 @@ def admin_photo_menu(api, cid, category_id=None):
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + conn.execute('SELECT cid,name FROM admin_categories').fetchall()
         custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
+        direct_products = conn.execute(
+            'SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id, ""))="" ORDER BY rowid'
+        ).fetchall()
     if category_id is None:
         rows = [[btn(label, 'photocat:' + pid)] for pid, label in cats]
+        rows += [[btn(name(pid, cid) or label, 'photopick:' + pid)] for pid, label in direct_products]
     else:
         ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid), 'photopick:' + pid)] for pid in ids]
@@ -1267,8 +1271,13 @@ def admin_prices(api, cid, category_id=None):
     if category_id is None:
         with db() as conn:
             custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+            direct_products = conn.execute(
+                'SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id, ""))="" ORDER BY rowid'
+            ).fetchall()
         rows = [[btn(p['name'], 'pricecat:' + pid)] for pid, p in G['PRODUCTS'].items()]
         rows += [[btn(label, 'pricecat:' + pid)] for pid, label in custom_categories]
+        rows += [[btn((name(pid, cid) or label) + ' | ' + price(cid, pid, 'USD'), 'pricepick:' + pid)]
+                 for pid, label in direct_products]
     else:
         ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'USD'), 'pricepick:' + pid)] for pid in ids]
@@ -5163,8 +5172,12 @@ def admin_photo_menu(api, cid, category_id=None):
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         cats = [(pid, p['name']) for pid, p in G['PRODUCTS'].items()] + conn.execute('SELECT cid,name FROM admin_categories').fetchall()
         custom_ids = [r[0] for r in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', (category_id,)).fetchall()] if category_id else []
+        direct_products = conn.execute(
+            'SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id, ""))="" ORDER BY rowid'
+        ).fetchall()
     if category_id is None:
         rows = [[btn(label, 'photocat:' + pid)] for pid, label in cats]
+        rows += [[btn(name(pid, cid) or label, 'photopick:' + pid)] for pid, label in direct_products]
     else:
         ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid), 'photopick:' + pid)] for pid in ids]
@@ -5222,8 +5235,13 @@ def admin_prices(api, cid, category_id=None):
     if category_id is None:
         with db() as conn:
             custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+            direct_products = conn.execute(
+                'SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id, ""))="" ORDER BY rowid'
+            ).fetchall()
         rows = [[btn(p['name'], 'pricecat:' + pid)] for pid, p in G['PRODUCTS'].items()]
         rows += [[btn(label, 'pricecat:' + pid)] for pid, label in custom_categories]
+        rows += [[btn((name(pid, cid) or label) + ' | ' + price(cid, pid, 'USD'), 'pricepick:' + pid)]
+                 for pid, label in direct_products]
     else:
         ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid) + ' | ' + price(cid, pid, 'USD'), 'pricepick:' + pid)] for pid in ids]
