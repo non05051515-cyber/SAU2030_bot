@@ -15,13 +15,17 @@ USERS_FILE = Path('/data/users.json')
 PRODUCT_BROADCAST = {}
 DELIVERY_WORKER = None
 DELIVERY_LOCK = threading.Lock()
+LAST_BROADCAST_TICK = 0.0
 
 
 def tick_product_broadcast(api):
-    """Resume queued deliveries after a restart without blocking getUpdates."""
+    global LAST_BROADCAST_TICK
+    now = time.monotonic()
+    if now - LAST_BROADCAST_TICK < 30:
+        return
+    LAST_BROADCAST_TICK = now
     if DELIVERY_WORKER and DELIVERY_LOCK.acquire(blocking=False):
         threading.Thread(target=_run_product_worker, args=(api,), daemon=True).start()
-
 
 def _run_product_worker(api):
     try:
