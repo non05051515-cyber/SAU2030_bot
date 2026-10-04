@@ -94,7 +94,10 @@ def page(s, api, cid, pid):
     parent = v['category'] if v else cp[5] if cp else None
     rows.append([button(s,'↩️ رجوع','product:'+parent if parent else 'products','ui_back')])
     text = '<b>'+s.esc(s.name(pid,cid))+'</b>\n\n'+s.info_block(pid,cid)
-    text += f'\n👛 رصيدك: {s.wallet_balance(cid):.2f} ر.س\n\n'+s.product_description_html(pid,cid)
+    balance_usd = (s.wallet_balance(cid) / s.RATE).quantize(s.Decimal('0.01'), rounding=s.ROUND_HALF_UP)
+    balance_icon_id = s.ui_icon('ui_wallet_balance')
+    balance_icon = ('<tg-emoji emoji-id="' + s.esc(balance_icon_id) + '">👛</tg-emoji>') if balance_icon_id else '👛'
+    text += '\n' + balance_icon + f' رصيدك: {balance_usd:.2f} USD\n\n' + s.product_description_html(pid,cid)
     if s.can_order(pid):
         unit = s.amount(pid,'SAR')
         text += f'\n\n🛍 الكمية المختارة: {qty}\n💰 الإجمالي قبل الخصم: {unit*qty:.2f} ر.س\nاختر الكمية للانتقال إلى الدفع.'
