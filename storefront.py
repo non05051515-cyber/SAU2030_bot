@@ -1505,8 +1505,9 @@ def pandora_quote_cost(pid, quantity=1):
         # Prefer account-specific/special fields over public/base price.
         keys = (
             'special_price', 'your_special_price', 'customer_price', 'account_price',
-            'user_price', 'member_price', 'reseller_price', 'wholesale_price',
-            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price'
+            'user_price', 'member_price', 'reseller_price',
+            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price',
+            'price', 'base_price', 'retail_price'
         )
         for key in keys:
             value = obj.get(key)
@@ -5229,8 +5230,9 @@ def pandora_quote_cost(pid, quantity=1):
         # Prefer account-specific/special fields over public/base price.
         keys = (
             'special_price', 'your_special_price', 'customer_price', 'account_price',
-            'user_price', 'member_price', 'reseller_price', 'wholesale_price',
-            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price'
+            'user_price', 'member_price', 'reseller_price',
+            'discounted_price', 'sale_price', 'final_price', 'net_price', 'unit_price',
+            'price', 'base_price', 'retail_price'
         )
         for key in keys:
             value = obj.get(key)
