@@ -1182,7 +1182,25 @@ def handle_admin_text(api, message):
     if translated_ar:
         confirmation += '\n🇸🇦 وتم إنشاء النسخة العربية تلقائيًا.'
     confirmation += '\n\n' + (description_message_html(message, text) if field == 'description' else esc(text))
-    send(api, cid, confirmation, kb([[btn('تعديل منتج آخر', 'admin:editname' if field == 'name' else 'admin:editdesc')], [btn('لوحة الإدارة', 'admin')]]))
+    if field == 'description':
+        # Keep the admin on the product they just edited instead of dropping
+        # them back to the generic/main menu (especially Telegram products).
+        preview_action = ('item:' if pid in VARIANTS or custom_product(pid) else 'product:') + pid
+        parent_category = None
+        with db() as conn:
+            prow = conn.execute('SELECT category_id FROM admin_products WHERE pid=?', (pid,)).fetchone()
+            if prow and prow[0]:
+                parent_category = prow[0]
+        rows = [[btn('👁 معاينة المنتج', preview_action, style='success')],
+                [btn('✏️ تعديل الوصف مرة أخرى', 'txtpick:description:' + pid)]]
+        if parent_category:
+            rows.append([btn('↩️ منتجات القسم', 'txtcat:description:' + parent_category)])
+        rows.append([btn('↩️ أوصاف المنتجات', 'admin:editdesc')])
+        send(api, cid, confirmation, kb(rows))
+    else:
+        send(api, cid, confirmation, kb([[btn('✏️ تعديل الاسم مرة أخرى', 'txtpick:name:' + pid)],
+                                         [btn('تعديل منتج آخر', 'admin:editname')],
+                                         [btn('لوحة الإدارة', 'admin')]]))
     return True
 
 
