@@ -1624,6 +1624,31 @@ def pandora_fulfill_order(api, internal_order_id):
         return True
 
 
+def _resolve_capcut_supplier_pid(pid):
+    """Map legacy/duplicate CapCut rows to the Pandora-backed catalogue row."""
+    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
+    if enabled and provider == 'pandora' and endpoint and api_key and product_id:
+        return pid
+    cp = custom_product(pid)
+    cat_name = str(custom_category(cp[5])[1] if cp and cp[5] and custom_category(cp[5]) else '')
+    product_name = str(cp[1] if cp else name(pid, 0))
+    hay = (cat_name + ' ' + product_name).lower().replace(' ', '')
+    if 'capcut' not in hay:
+        return pid
+    wanted = re.sub(r'[^a-z0-9]+', '', product_name.lower())
+    with db() as conn:
+        rows = conn.execute("""SELECT p.pid,p.name FROM admin_products p
+            JOIN supplier_api a ON a.pid=p.pid
+            WHERE p.category_id='pandora_capcut' AND a.provider='pandora'
+              AND a.enabled=1 AND a.service_id<>''""").fetchall()
+    exact = [rp for rp,rn in rows if re.sub(r'[^a-z0-9]+', '', str(rn).lower()) == wanted]
+    if len(exact) == 1:
+        return exact[0]
+    # Legacy rows can have shortened names. Match on normalized token containment.
+    fuzzy = [rp for rp,rn in rows if wanted and (wanted in re.sub(r'[^a-z0-9]+','',str(rn).lower()) or re.sub(r'[^a-z0-9]+','',str(rn).lower()) in wanted)]
+    return fuzzy[0] if len(fuzzy) == 1 else pid
+
+
 def fulfill_paid_order(api, order_id):
     """Run the configured supplier exactly once after payment approval.
 
@@ -1634,7 +1659,10 @@ def fulfill_paid_order(api, order_id):
         row = conn.execute('SELECT pid,status FROM orders WHERE id=?', (order_id,)).fetchone()
     if not row or row[1] != 'paid':
         return False
-    pid = row[0]
+    pid = _resolve_capcut_supplier_pid(row[0])
+    if pid != row[0]:
+        with db() as conn:
+            conn.execute('UPDATE orders SET pid=? WHERE id=?', (pid, order_id))
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not enabled:
         return False
@@ -5491,7 +5519,10 @@ def fulfill_paid_order(api, order_id):
         row = conn.execute('SELECT pid,status FROM orders WHERE id=?', (order_id,)).fetchone()
     if not row or row[1] != 'paid':
         return False
-    pid = row[0]
+    pid = _resolve_capcut_supplier_pid(row[0])
+    if pid != row[0]:
+        with db() as conn:
+            conn.execute('UPDATE orders SET pid=? WHERE id=?', (pid, order_id))
     endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
     if not enabled:
         return False
