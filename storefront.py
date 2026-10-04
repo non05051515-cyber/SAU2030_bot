@@ -2872,7 +2872,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
@@ -3981,7 +3981,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
@@ -6600,7 +6600,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
@@ -7709,7 +7709,7 @@ def category(api, cid, pid):
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
     description = product_description(pid, cid)
-    text = esc(name(pid, cid)) + '\n\n' + esc(price(cid, pid)) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
+    text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
     card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
