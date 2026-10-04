@@ -1571,6 +1571,19 @@ def handle_admin_product(api, message):
             conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
             for new_pid in saved_product_ids:
                 conn.execute("INSERT OR REPLACE INTO channel_publish_choices VALUES (?,'pending')", (new_pid,))
+        # Verify the rows really exist before claiming success. Direct products
+        # must have a SQL NULL category_id (not "", "None", or a stale category).
+        with db() as conn:
+            if is_direct:
+                for new_pid in saved_product_ids:
+                    conn.execute('UPDATE admin_products SET category_id=NULL WHERE pid=?', (new_pid,))
+            verified = conn.execute(
+                'SELECT COUNT(*) FROM admin_products WHERE pid IN (' + ','.join('?' for _ in saved_product_ids) + ')',
+                tuple(saved_product_ids)
+            ).fetchone()[0] if saved_product_ids else 0
+        if verified != len(saved_product_ids):
+            send(api, cid, '❌ لم يكتمل حفظ المنتج في قاعدة البيانات. حاول مرة أخرى.')
+            return True
         send(api, cid, '✅ تم حفظ المنتجات وظهرت في المتجر.\\n\\n📣 هل تريد نشرها في القناة الآن أم لاحقًا؟',
              kb([[btn('📣 نشر الآن', 'channel:publish_new:' + ','.join(saved_product_ids), style='success')],
                  [btn('🕒 لاحقًا', 'channel:defer_new:' + ','.join(saved_product_ids))]]))
@@ -5396,6 +5409,19 @@ def handle_admin_product(api, message):
             conn.execute('CREATE TABLE IF NOT EXISTS channel_publish_choices (pid TEXT PRIMARY KEY, status TEXT NOT NULL)')
             for new_pid in saved_product_ids:
                 conn.execute("INSERT OR REPLACE INTO channel_publish_choices VALUES (?,'pending')", (new_pid,))
+        # Verify the rows really exist before claiming success. Direct products
+        # must have a SQL NULL category_id (not "", "None", or a stale category).
+        with db() as conn:
+            if is_direct:
+                for new_pid in saved_product_ids:
+                    conn.execute('UPDATE admin_products SET category_id=NULL WHERE pid=?', (new_pid,))
+            verified = conn.execute(
+                'SELECT COUNT(*) FROM admin_products WHERE pid IN (' + ','.join('?' for _ in saved_product_ids) + ')',
+                tuple(saved_product_ids)
+            ).fetchone()[0] if saved_product_ids else 0
+        if verified != len(saved_product_ids):
+            send(api, cid, '❌ لم يكتمل حفظ المنتج في قاعدة البيانات. حاول مرة أخرى.')
+            return True
         send(api, cid, '✅ تم حفظ المنتجات وظهرت في المتجر.\\n\\n📣 هل تريد نشرها في القناة الآن أم لاحقًا؟',
              kb([[btn('📣 نشر الآن', 'channel:publish_new:' + ','.join(saved_product_ids), style='success')],
                  [btn('🕒 لاحقًا', 'channel:defer_new:' + ','.join(saved_product_ids))]]))
