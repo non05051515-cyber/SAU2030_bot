@@ -2474,7 +2474,7 @@ def admin_icon_products(api, cid):
         if pid in seen:
             continue
         seen.add(pid)
-        buttons.append(btn(product_name, 'seticon:' + pid, ui_icon(pid)))
+        buttons.append(btn(name(pid, cid) or product_name, 'seticon:' + pid, ui_icon(pid)))
 
     # Standalone built-in products that are not represented by variants.
     for pid, product in G['PRODUCTS'].items():
@@ -6379,7 +6379,7 @@ def admin_icon_products(api, cid):
         if pid in seen:
             continue
         seen.add(pid)
-        buttons.append(btn(product_name, 'seticon:' + pid, ui_icon(pid)))
+        buttons.append(btn(name(pid, cid) or product_name, 'seticon:' + pid, ui_icon(pid)))
 
     # Standalone built-in products that are not represented by variants.
     for pid, product in G['PRODUCTS'].items():
