@@ -147,7 +147,7 @@ def sync_capcut():
                     VALUES (?,?,?,?,1,'pandora',?)
                     ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,api_key=excluded.api_key,
                     service_id=excluded.service_id,enabled=1,provider='pandora',variant_id=excluded.variant_id""",
-                    (pid, endpoint, key, product_id, variant_id))
+                    (pid, endpoint, '', product_id, variant_id))
                 if cost is not None:
                     existing_margin = conn.execute("SELECT margin_usd FROM pandora_pricing WHERE pid=?", (pid,)).fetchone()
                     margin = existing_margin[0] if existing_margin else "0"
@@ -179,4 +179,5 @@ def run():
         time.sleep(3)
         sync_capcut()
     except Exception as exc:
-        print("CapCut Pandora sync error:", type(exc).__name__, str(exc)[:180], flush=True)
+        print("CapCut Pandora sync error:", type(exc).__name__, flush=True)
+

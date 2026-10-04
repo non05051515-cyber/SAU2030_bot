@@ -1199,6 +1199,9 @@ def add_to_category(api, cid, category_id=None):
 
 
 def show_extended_category(api, cid, category_id):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, category_id):
+        return True
     """Include owner-added products alongside a built-in category's products."""
     if category_id not in G['PRODUCTS']:
         return False
@@ -1533,142 +1536,18 @@ def pandora_set_margin(pid, margin):
 
 
 def pandora_fulfill_order(api, internal_order_id):
-    with db() as conn:
-        order = conn.execute('SELECT cid,pid,status FROM orders WHERE id=?', (internal_order_id,)).fetchone()
-        snap = conn.execute('SELECT quantity FROM quantity_snapshots WHERE scope=? AND key=?', ('order', internal_order_id)).fetchone()
-        existing = conn.execute('SELECT supplier_order_id,status,delivery FROM supplier_orders WHERE order_id=?', (internal_order_id,)).fetchone()
-    if not order:
-        return False
-    cid, pid, order_status = order
-    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
-    if not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-        return False
-    quantity = int(snap[0]) if snap and snap[0] else 1
-
-    try:
-        supplier_order_id = existing[0] if existing and existing[0] else ''
-        result = None
-
-        if supplier_order_id:
-            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
-        else:
-            quote = _supplier_json_request(
-                endpoint.rstrip('/') + '/quotes', api_key, 'POST',
-                dict({'product_id': product_id, 'quantity': quantity}, **({'variant_id': variant_id} if variant_id else {}))
-            )
-            if not quote.get('can_purchase', False):
-                raise RuntimeError('Supplier cannot fulfill now')
-            unit_price = quote.get('unit_price')
-            price_version = quote.get('price_version')
-            if unit_price is None or not price_version:
-                raise RuntimeError('Invalid quote response')
-            current_cost = Decimal(str(unit_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            _, margin_raw, _ = pandora_pricing_row(pid)
-            configured_margin = Decimal(str(margin_raw or '0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            with db() as conn:
-                paid = conn.execute('SELECT usd FROM orders WHERE id=?', (internal_order_id,)).fetchone()
-            paid_unit = (Decimal(str(paid[0] if paid and paid[0] else '0')) / Decimal(quantity)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            if paid_unit < (current_cost + configured_margin):
-                raise RuntimeError('Pandora price changed below configured margin')
-            expected_unit_price = float(current_cost)
-            payload = {
-                'product_id': product_id,
-                'quantity': quantity,
-                'expected_unit_price': expected_unit_price,
-                'price_version': price_version,
-                'client_order_reference': internal_order_id
-            }
-            if variant_id:
-                payload['variant_id'] = variant_id
-            idem = 'vexa-' + internal_order_id
-            result = _supplier_json_request(
-                endpoint.rstrip('/') + '/orders', api_key, 'POST', payload,
-                {'Idempotency-Key': idem}
-            )
-            supplier_order_id = str(result.get('id') or '')
-            with db() as conn:
-                conn.execute('INSERT OR REPLACE INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?)',
-                             (internal_order_id, supplier_order_id, str(result.get('status') or ''), '', '', now_saudi()))
-
-        # Short polling window for orders that finish just after creation.
-        for _ in range(5):
-            delivery = (result or {}).get('delivery') or {}
-            items = delivery.get('items') or []
-            status = str((result or {}).get('status') or '')
-            if items:
-                text = supplier_delivery_text(items, cid)
-                with db() as conn:
-                    conn.execute('UPDATE supplier_orders SET status=?,delivery=?,last_error="",updated_at=? WHERE order_id=?',
-                                 (status or 'delivered', json.dumps(items, ensure_ascii=False), now_saudi(), internal_order_id))
-                    conn.execute('UPDATE orders SET status="paid" WHERE id=?', (internal_order_id,))
-                send(api, cid, text, menu(cid))
-                send(api, G['ADMIN_ID'], '✅ <b>تسليم تلقائي عبر Pandora</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالعميل: <code>' + esc(cid) + '</code>\nالمنتج: ' + esc(name(pid, cid)))
-                return True
-            if not supplier_order_id or status.lower() in ('failed','rejected','cancelled'):
-                break
-            time.sleep(1.2)
-            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
-
-        with db() as conn:
-            conn.execute('UPDATE supplier_orders SET status=?,last_error=?,updated_at=? WHERE order_id=?',
-                         (str((result or {}).get('status') or 'pending'), 'delivery_pending', now_saudi(), internal_order_id))
-        send(api, cid, tr(cid, '✅ تم استلام طلبك وهو قيد التجهيز التلقائي. سيتم متابعته من الإدارة إذا تأخر التسليم.', '✅ Your order was received and is being processed automatically. Administration will follow up if delivery is delayed.'))
-        send(api, G['ADMIN_ID'], '⚠️ <b>طلب Pandora بانتظار التسليم</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nSupplier order: <code>' + esc(supplier_order_id or 'unknown') + '</code>')
-        return True
-    except Exception as exc:
-        with db() as conn:
-            conn.execute('INSERT INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status,last_error=excluded.last_error,updated_at=excluded.updated_at',
-                         (internal_order_id, existing[0] if existing else '', 'error', '', type(exc).__name__, now_saudi()))
-        send(api, G['ADMIN_ID'], '❌ <b>فشل تنفيذ طلب Pandora تلقائيًا</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالخطأ: <code>' + esc(type(exc).__name__) + '</code>')
-        send(api, cid, tr(cid, '✅ تم الدفع، لكن تعذر التسليم التلقائي الآن. تم تحويل الطلب للإدارة لإكماله بدون إعادة الدفع.', '✅ Payment was received, but automatic delivery failed. The order was sent to administration; you do not need to pay again.'))
-        return True
+    import payment_execution
+    return payment_execution.fulfill(sys.modules[__name__], api, internal_order_id)
 
 
 def _resolve_capcut_supplier_pid(pid):
-    """Map legacy/duplicate CapCut rows to the Pandora-backed catalogue row."""
-    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
-    if enabled and provider == 'pandora' and endpoint and api_key and product_id:
-        return pid
-    cp = custom_product(pid)
-    cat_name = str(custom_category(cp[5])[1] if cp and cp[5] and custom_category(cp[5]) else '')
-    product_name = str(cp[1] if cp else name(pid, 0))
-    hay = (cat_name + ' ' + product_name).lower().replace(' ', '')
-    if 'capcut' not in hay:
-        return pid
-    wanted = re.sub(r'[^a-z0-9]+', '', product_name.lower())
-    with db() as conn:
-        rows = conn.execute("""SELECT p.pid,p.name FROM admin_products p
-            JOIN supplier_api a ON a.pid=p.pid
-            WHERE p.category_id='pandora_capcut' AND a.provider='pandora'
-              AND a.enabled=1 AND a.service_id<>''""").fetchall()
-    exact = [rp for rp,rn in rows if re.sub(r'[^a-z0-9]+', '', str(rn).lower()) == wanted]
-    if len(exact) == 1:
-        return exact[0]
-    # Legacy rows can have shortened names. Match on normalized token containment.
-    fuzzy = [rp for rp,rn in rows if wanted and (wanted in re.sub(r'[^a-z0-9]+','',str(rn).lower()) or re.sub(r'[^a-z0-9]+','',str(rn).lower()) in wanted)]
-    return fuzzy[0] if len(fuzzy) == 1 else pid
+    import payment_execution
+    return payment_execution.resolve_pid(sys.modules[__name__], pid)
 
 
 def fulfill_paid_order(api, order_id):
-    """Run the configured supplier exactly once after payment approval.
-
-    Pandora uses supplier_orders + client_order_reference + Idempotency-Key,
-    so retries/restarts cannot create duplicate supplier orders.
-    """
-    with db() as conn:
-        row = conn.execute('SELECT pid,status FROM orders WHERE id=?', (order_id,)).fetchone()
-    if not row or row[1] != 'paid':
-        return False
-    pid = _resolve_capcut_supplier_pid(row[0])
-    if pid != row[0]:
-        with db() as conn:
-            conn.execute('UPDATE orders SET pid=? WHERE id=?', (pid, order_id))
-    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
-    if not enabled:
-        return False
-    if provider == 'pandora' and endpoint and api_key and product_id:
-        return pandora_fulfill_order(api, order_id)
-    return False
+    import payment_execution
+    return payment_execution.fulfill(sys.modules[__name__], api, order_id)
 
 
 def supplier_test_connection(api, cid, pid):
@@ -2846,6 +2725,9 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
 
 
 def category(api, cid, pid):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, pid):
+        return True
     if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
@@ -3237,24 +3119,8 @@ def pay_with_crypto(api, cid, pid):
 
 
 def check_crypto_order(api, cid, order_id):
-    with db() as conn:
-        row = conn.execute('SELECT pid,external_id,status,amount_usd FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
-    if not row:
-        return products(api, cid)
-    pid, invoice_id, status, paid_usd = row
-    if status == 'paid':
-        return send(api, cid, tr(cid, '✅ هذه الفاتورة مدفوعة وتم إرسال الطلب.', '✅ This invoice is paid and the order was sent.'), menu(cid))
-    if not crypto_paid(invoice_id):
-        return send(api, cid, tr(cid, 'لم يصل الدفع بعد. أكمل الفاتورة ثم أعد التحقق.', 'Payment has not arrived yet. Complete the invoice and check again.'),
-                    kb([[btn(tr(cid, '🔄 تحقق مرة أخرى', '🔄 Check again'), 'checkorder:' + order_id)], nav(cid, 'buy:' + pid)]))
-    with db() as conn:
-        changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
-    if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
-        if fulfill_paid_order(api, saved_order_id):
-            return
-    send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
+    import payment_execution
+    return payment_execution.crypto_check(sys.modules[__name__], api, cid, order_id)
 
 
 def receipt_request(api, cid, pid, method):
@@ -3429,7 +3295,8 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
-    add_order(cid, pid, method, 'review', usd=usd, sar=sar)
+    import payment_execution
+    payment_execution.receipt_order(sys.modules[__name__], cid, pid, method, usd, sar, message['message_id'])
     with db() as conn:
         conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
@@ -3512,49 +3379,8 @@ def action(api, cid, value):
         else: admin_panel(api, cid)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
-        with db() as conn:
-            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
-            if not row or row[1] != 'review':
-                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
-            customer = row[0]
-            if decision == 'accept':
-                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
-                order_pid = order_pid[0] if order_pid else ''
-                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
-                # Pandora catalogue products must never fall back to manual delivery.
-                # If a legacy/duplicate CapCut row was ordered, resolve it to the
-                # unique Pandora-linked product with the same normalized display name.
-                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
-                    with db() as link_conn:
-                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
-                            JOIN supplier_api a ON a.pid=p.pid
-                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
-                              AND p.category_id='pandora_capcut'""").fetchall()
-                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
-                    if len(matches) == 1:
-                        with db() as fix_conn:
-                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
-                        order_pid = matches[0]
-                if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
-                # A CapCut order must not silently become manual after approval.
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut:
-                    with db() as fail_conn:
-                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
-                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
-                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
-                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
-                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
-                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
-            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
-        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
-        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+        import payment_execution
+        return payment_execution.approve(sys.modules[__name__], api, cid, decision, oid)
     elif prefix == 'infocat':
         admin_info_menu(api,cid,arg)
     elif prefix == 'infopick':
@@ -3655,7 +3481,6 @@ def action(api, cid, value):
         if not endpoint: missing.append('رابط API')
         if not api_key: missing.append('مفتاح API')
         if provider == 'pandora' and not service_id: missing.append('Product ID')
-        if provider == 'pandora' and not variant_id: missing.append('Variant ID')
         if missing:
             send(api, cid, '⚠️ تم حفظ الموجود، لكن باقي قبل التفعيل: <b>' + esc(' + '.join(missing)) + '</b>.\n\nإذا هدفك فقط تجربة المفتاح الآن اضغط 🧪 اختبار الاتصال.')
             supplier_api_editor(api, cid, pid)
@@ -4010,6 +3835,9 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
 
 
 def category(api, cid, pid):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, pid):
+        return True
     if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
@@ -4332,24 +4160,8 @@ def pay_with_crypto(api, cid, pid):
 
 
 def check_crypto_order(api, cid, order_id):
-    with db() as conn:
-        row = conn.execute('SELECT pid,external_id,status,amount_usd FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
-    if not row:
-        return products(api, cid)
-    pid, invoice_id, status, paid_usd = row
-    if status == 'paid':
-        return send(api, cid, tr(cid, '✅ هذه الفاتورة مدفوعة وتم إرسال الطلب.', '✅ This invoice is paid and the order was sent.'), menu(cid))
-    if not crypto_paid(invoice_id):
-        return send(api, cid, tr(cid, 'لم يصل الدفع بعد. أكمل الفاتورة ثم أعد التحقق.', 'Payment has not arrived yet. Complete the invoice and check again.'),
-                    kb([[btn(tr(cid, '🔄 تحقق مرة أخرى', '🔄 Check again'), 'checkorder:' + order_id)], nav(cid, 'buy:' + pid)]))
-    with db() as conn:
-        changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
-    if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
-        if fulfill_paid_order(api, saved_order_id):
-            return
-    send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
+    import payment_execution
+    return payment_execution.crypto_check(sys.modules[__name__], api, cid, order_id)
 
 
 def receipt_request(api, cid, pid, method):
@@ -4514,7 +4326,8 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
-    add_order(cid, pid, method, 'review', usd=usd, sar=sar)
+    import payment_execution
+    payment_execution.receipt_order(sys.modules[__name__], cid, pid, method, usd, sar, message['message_id'])
     with db() as conn:
         conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
@@ -4594,6 +4407,9 @@ def action(api, cid, value):
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'orderdeliver' and cid == G['ADMIN_ID']:
+        import payment_execution
+        if payment_execution.guard_delivery(sys.modules[__name__], arg):
+            return send(api, cid, '⚠️ التسليم اليدوي محظور لطلبات Pandora.')
         oid = arg
         with db() as conn:
             row = conn.execute('SELECT cid,status,pid FROM orders WHERE id=?', (oid,)).fetchone()
@@ -4608,49 +4424,8 @@ def action(api, cid, value):
         return send(api, cid, f'📤 <b>تسليم الطلب #{esc(oid)}</b>\n{esc(name(pid, cid))}\n\nأرسل الآن الرسالة أو الكود أو الصورة أو الملف، وسيتم إرساله مباشرة للعميل وتسجيل الطلب كمُسلّم.')
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
-        with db() as conn:
-            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
-            if not row or row[1] != 'review':
-                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
-            customer = row[0]
-            if decision == 'accept':
-                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
-                order_pid = order_pid[0] if order_pid else ''
-                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
-                # Pandora catalogue products must never fall back to manual delivery.
-                # If a legacy/duplicate CapCut row was ordered, resolve it to the
-                # unique Pandora-linked product with the same normalized display name.
-                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
-                    with db() as link_conn:
-                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
-                            JOIN supplier_api a ON a.pid=p.pid
-                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
-                              AND p.category_id='pandora_capcut'""").fetchall()
-                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
-                    if len(matches) == 1:
-                        with db() as fix_conn:
-                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
-                        order_pid = matches[0]
-                if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
-                # A CapCut order must not silently become manual after approval.
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut:
-                    with db() as fail_conn:
-                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
-                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
-                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
-                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
-                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
-                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
-            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
-        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
-        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+        import payment_execution
+        return payment_execution.approve(sys.modules[__name__], api, cid, decision, oid)
     elif prefix == 'infocat':
         admin_info_menu(api, cid, arg)
     elif prefix == 'infopick':
@@ -5084,6 +4859,9 @@ def add_to_category(api, cid, category_id=None):
 
 
 def show_extended_category(api, cid, category_id):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, category_id):
+        return True
     """Include owner-added products alongside a built-in category's products."""
     if category_id not in G['PRODUCTS']:
         return False
@@ -5418,117 +5196,13 @@ def pandora_set_margin(pid, margin):
 
 
 def pandora_fulfill_order(api, internal_order_id):
-    with db() as conn:
-        order = conn.execute('SELECT cid,pid,status FROM orders WHERE id=?', (internal_order_id,)).fetchone()
-        snap = conn.execute('SELECT quantity FROM quantity_snapshots WHERE scope=? AND key=?', ('order', internal_order_id)).fetchone()
-        existing = conn.execute('SELECT supplier_order_id,status,delivery FROM supplier_orders WHERE order_id=?', (internal_order_id,)).fetchone()
-    if not order:
-        return False
-    cid, pid, order_status = order
-    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
-    if not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-        return False
-    quantity = int(snap[0]) if snap and snap[0] else 1
-
-    try:
-        supplier_order_id = existing[0] if existing and existing[0] else ''
-        result = None
-
-        if supplier_order_id:
-            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
-        else:
-            quote = _supplier_json_request(
-                endpoint.rstrip('/') + '/quotes', api_key, 'POST',
-                dict({'product_id': product_id, 'quantity': quantity}, **({'variant_id': variant_id} if variant_id else {}))
-            )
-            if not quote.get('can_purchase', False):
-                raise RuntimeError('Supplier cannot fulfill now')
-            unit_price = quote.get('unit_price')
-            price_version = quote.get('price_version')
-            if unit_price is None or not price_version:
-                raise RuntimeError('Invalid quote response')
-            current_cost = Decimal(str(unit_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            _, margin_raw, _ = pandora_pricing_row(pid)
-            configured_margin = Decimal(str(margin_raw or '0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            with db() as conn:
-                paid = conn.execute('SELECT usd FROM orders WHERE id=?', (internal_order_id,)).fetchone()
-            paid_unit = (Decimal(str(paid[0] if paid and paid[0] else '0')) / Decimal(quantity)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            if paid_unit < (current_cost + configured_margin):
-                raise RuntimeError('Pandora price changed below configured margin')
-            expected_unit_price = float(current_cost)
-            payload = {
-                'product_id': product_id,
-                'quantity': quantity,
-                'expected_unit_price': expected_unit_price,
-                'price_version': price_version,
-                'client_order_reference': internal_order_id
-            }
-            if variant_id:
-                payload['variant_id'] = variant_id
-            idem = 'vexa-' + internal_order_id
-            result = _supplier_json_request(
-                endpoint.rstrip('/') + '/orders', api_key, 'POST', payload,
-                {'Idempotency-Key': idem}
-            )
-            supplier_order_id = str(result.get('id') or '')
-            with db() as conn:
-                conn.execute('INSERT OR REPLACE INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?)',
-                             (internal_order_id, supplier_order_id, str(result.get('status') or ''), '', '', now_saudi()))
-
-        # Short polling window for orders that finish just after creation.
-        for _ in range(5):
-            delivery = (result or {}).get('delivery') or {}
-            items = delivery.get('items') or []
-            status = str((result or {}).get('status') or '')
-            if items:
-                text = supplier_delivery_text(items, cid)
-                with db() as conn:
-                    conn.execute('UPDATE supplier_orders SET status=?,delivery=?,last_error="",updated_at=? WHERE order_id=?',
-                                 (status or 'delivered', json.dumps(items, ensure_ascii=False), now_saudi(), internal_order_id))
-                    conn.execute('UPDATE orders SET status="paid" WHERE id=?', (internal_order_id,))
-                send(api, cid, text, menu(cid))
-                send(api, G['ADMIN_ID'], '✅ <b>تسليم تلقائي عبر Pandora</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالعميل: <code>' + esc(cid) + '</code>\nالمنتج: ' + esc(name(pid, cid)))
-                return True
-            if not supplier_order_id or status.lower() in ('failed','rejected','cancelled'):
-                break
-            time.sleep(1.2)
-            result = _supplier_json_request(endpoint.rstrip('/') + '/orders/' + urllib.parse.quote(str(supplier_order_id)), api_key)
-
-        with db() as conn:
-            conn.execute('UPDATE supplier_orders SET status=?,last_error=?,updated_at=? WHERE order_id=?',
-                         (str((result or {}).get('status') or 'pending'), 'delivery_pending', now_saudi(), internal_order_id))
-        send(api, cid, tr(cid, '✅ تم استلام طلبك وهو قيد التجهيز التلقائي. سيتم متابعته من الإدارة إذا تأخر التسليم.', '✅ Your order was received and is being processed automatically. Administration will follow up if delivery is delayed.'))
-        send(api, G['ADMIN_ID'], '⚠️ <b>طلب Pandora بانتظار التسليم</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nSupplier order: <code>' + esc(supplier_order_id or 'unknown') + '</code>')
-        return True
-    except Exception as exc:
-        with db() as conn:
-            conn.execute('INSERT INTO supplier_orders(order_id,supplier_order_id,status,delivery,last_error,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status,last_error=excluded.last_error,updated_at=excluded.updated_at',
-                         (internal_order_id, existing[0] if existing else '', 'error', '', type(exc).__name__, now_saudi()))
-        send(api, G['ADMIN_ID'], '❌ <b>فشل تنفيذ طلب Pandora تلقائيًا</b>\nالطلب: <code>' + esc(internal_order_id) + '</code>\nالخطأ: <code>' + esc(type(exc).__name__) + '</code>')
-        send(api, cid, tr(cid, '✅ تم الدفع، لكن تعذر التسليم التلقائي الآن. تم تحويل الطلب للإدارة لإكماله بدون إعادة الدفع.', '✅ Payment was received, but automatic delivery failed. The order was sent to administration; you do not need to pay again.'))
-        return True
+    import payment_execution
+    return payment_execution.fulfill(sys.modules[__name__], api, internal_order_id)
 
 
 def fulfill_paid_order(api, order_id):
-    """Run the configured supplier exactly once after payment approval.
-
-    Pandora uses supplier_orders + client_order_reference + Idempotency-Key,
-    so retries/restarts cannot create duplicate supplier orders.
-    """
-    with db() as conn:
-        row = conn.execute('SELECT pid,status FROM orders WHERE id=?', (order_id,)).fetchone()
-    if not row or row[1] != 'paid':
-        return False
-    pid = _resolve_capcut_supplier_pid(row[0])
-    if pid != row[0]:
-        with db() as conn:
-            conn.execute('UPDATE orders SET pid=? WHERE id=?', (pid, order_id))
-    endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(pid)
-    if not enabled:
-        return False
-    if provider == 'pandora' and endpoint and api_key and product_id:
-        return pandora_fulfill_order(api, order_id)
-    return False
+    import payment_execution
+    return payment_execution.fulfill(sys.modules[__name__], api, order_id)
 
 
 def supplier_test_connection(api, cid, pid):
@@ -6704,6 +6378,9 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
 
 
 def category(api, cid, pid):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, pid):
+        return True
     if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
@@ -7095,24 +6772,8 @@ def pay_with_crypto(api, cid, pid):
 
 
 def check_crypto_order(api, cid, order_id):
-    with db() as conn:
-        row = conn.execute('SELECT pid,external_id,status,amount_usd FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
-    if not row:
-        return products(api, cid)
-    pid, invoice_id, status, paid_usd = row
-    if status == 'paid':
-        return send(api, cid, tr(cid, '✅ هذه الفاتورة مدفوعة وتم إرسال الطلب.', '✅ This invoice is paid and the order was sent.'), menu(cid))
-    if not crypto_paid(invoice_id):
-        return send(api, cid, tr(cid, 'لم يصل الدفع بعد. أكمل الفاتورة ثم أعد التحقق.', 'Payment has not arrived yet. Complete the invoice and check again.'),
-                    kb([[btn(tr(cid, '🔄 تحقق مرة أخرى', '🔄 Check again'), 'checkorder:' + order_id)], nav(cid, 'buy:' + pid)]))
-    with db() as conn:
-        changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
-    if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
-        if fulfill_paid_order(api, saved_order_id):
-            return
-    send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
+    import payment_execution
+    return payment_execution.crypto_check(sys.modules[__name__], api, cid, order_id)
 
 
 def receipt_request(api, cid, pid, method):
@@ -7287,7 +6948,8 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
-    add_order(cid, pid, method, 'review', usd=usd, sar=sar)
+    import payment_execution
+    payment_execution.receipt_order(sys.modules[__name__], cid, pid, method, usd, sar, message['message_id'])
     with db() as conn:
         conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
@@ -7370,49 +7032,8 @@ def action(api, cid, value):
         else: admin_panel(api, cid)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
-        with db() as conn:
-            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
-            if not row or row[1] != 'review':
-                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
-            customer = row[0]
-            if decision == 'accept':
-                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
-                order_pid = order_pid[0] if order_pid else ''
-                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
-                # Pandora catalogue products must never fall back to manual delivery.
-                # If a legacy/duplicate CapCut row was ordered, resolve it to the
-                # unique Pandora-linked product with the same normalized display name.
-                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
-                    with db() as link_conn:
-                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
-                            JOIN supplier_api a ON a.pid=p.pid
-                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
-                              AND p.category_id='pandora_capcut'""").fetchall()
-                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
-                    if len(matches) == 1:
-                        with db() as fix_conn:
-                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
-                        order_pid = matches[0]
-                if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
-                # A CapCut order must not silently become manual after approval.
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut:
-                    with db() as fail_conn:
-                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
-                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
-                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
-                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
-                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
-                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
-            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
-        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
-        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+        import payment_execution
+        return payment_execution.approve(sys.modules[__name__], api, cid, decision, oid)
     elif prefix == 'infocat':
         admin_info_menu(api,cid,arg)
     elif prefix == 'infopick':
@@ -7513,7 +7134,6 @@ def action(api, cid, value):
         if not endpoint: missing.append('رابط API')
         if not api_key: missing.append('مفتاح API')
         if provider == 'pandora' and not service_id: missing.append('Product ID')
-        if provider == 'pandora' and not variant_id: missing.append('Variant ID')
         if missing:
             send(api, cid, '⚠️ تم حفظ الموجود، لكن باقي قبل التفعيل: <b>' + esc(' + '.join(missing)) + '</b>.\n\nإذا هدفك فقط تجربة المفتاح الآن اضغط 🧪 اختبار الاتصال.')
             supplier_api_editor(api, cid, pid)
@@ -7868,6 +7488,9 @@ def grok_cards(api, cid, choices, show_heading=True, default_image="assets/grok.
 
 
 def category(api, cid, pid):
+    import payment_execution
+    if payment_execution.capcut_category(sys.modules[__name__], api, cid, pid):
+        return True
     if not category_visible(pid):
         return products(api, cid)
     p = G['PRODUCTS'].get(pid)
@@ -8190,24 +7813,8 @@ def pay_with_crypto(api, cid, pid):
 
 
 def check_crypto_order(api, cid, order_id):
-    with db() as conn:
-        row = conn.execute('SELECT pid,external_id,status,amount_usd FROM crypto_orders WHERE id=? AND cid=?', (order_id, cid)).fetchone()
-    if not row:
-        return products(api, cid)
-    pid, invoice_id, status, paid_usd = row
-    if status == 'paid':
-        return send(api, cid, tr(cid, '✅ هذه الفاتورة مدفوعة وتم إرسال الطلب.', '✅ This invoice is paid and the order was sent.'), menu(cid))
-    if not crypto_paid(invoice_id):
-        return send(api, cid, tr(cid, 'لم يصل الدفع بعد. أكمل الفاتورة ثم أعد التحقق.', 'Payment has not arrived yet. Complete the invoice and check again.'),
-                    kb([[btn(tr(cid, '🔄 تحقق مرة أخرى', '🔄 Check again'), 'checkorder:' + order_id)], nav(cid, 'buy:' + pid)]))
-    with db() as conn:
-        changed = conn.execute('UPDATE crypto_orders SET status="paid" WHERE id=? AND status="pending"', (order_id,)).rowcount
-    if changed:
-        saved_order_id = add_order(cid, pid, 'cryptopay', 'paid', usd=paid_usd, sar=(Decimal(paid_usd)*RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), quantity=product_options.snapshot(sys.modules[__name__], 'crypto', order_id))
-        send(api, G['ADMIN_ID'], f'💠 <b>طلب Crypto Pay مدفوع #{saved_order_id}</b>\n\n' + esc(name(pid, cid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "order", saved_order_id)}\nالسعر المدفوع: {paid_usd} USD\nالعميل: <code>{cid}</code>')
-        if fulfill_paid_order(api, saved_order_id):
-            return
-    send(api, cid, tr(cid, '✅ تم الدفع وإرسال الطلب للإدارة.', '✅ Payment received and the order was sent to administration.'), menu(cid))
+    import payment_execution
+    return payment_execution.crypto_check(sys.modules[__name__], api, cid, order_id)
 
 
 def receipt_request(api, cid, pid, method):
@@ -8372,7 +7979,8 @@ def receipt(api, message):
     if not forwarded:
         send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
         return True
-    add_order(cid, pid, method, 'review', usd=usd, sar=sar)
+    import payment_execution
+    payment_execution.receipt_order(sys.modules[__name__], cid, pid, method, usd, sar, message['message_id'])
     with db() as conn:
         conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
         conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
@@ -8452,6 +8060,9 @@ def action(api, cid, value):
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'orderdeliver' and cid == G['ADMIN_ID']:
+        import payment_execution
+        if payment_execution.guard_delivery(sys.modules[__name__], arg):
+            return send(api, cid, '⚠️ التسليم اليدوي محظور لطلبات Pandora.')
         oid = arg
         with db() as conn:
             row = conn.execute('SELECT cid,status,pid FROM orders WHERE id=?', (oid,)).fetchone()
@@ -8466,49 +8077,8 @@ def action(api, cid, value):
         return send(api, cid, f'📤 <b>تسليم الطلب #{esc(oid)}</b>\n{esc(name(pid, cid))}\n\nأرسل الآن الرسالة أو الكود أو الصورة أو الملف، وسيتم إرساله مباشرة للعميل وتسجيل الطلب كمُسلّم.')
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
         decision, _, oid = arg.partition(':')
-        with db() as conn:
-            row = conn.execute('SELECT cid,status FROM orders WHERE id=?', (oid,)).fetchone()
-            if not row or row[1] != 'review':
-                return send(api, cid, '⚠️ الطلب غير موجود أو تمت معالجته مسبقاً.')
-            customer = row[0]
-            if decision == 'accept':
-                order_pid = conn.execute('SELECT pid FROM orders WHERE id=?', (oid,)).fetchone()
-                order_pid = order_pid[0] if order_pid else ''
-                conn.execute('UPDATE orders SET status="paid" WHERE id=? AND status="review"', (oid,))
-                # Pandora catalogue products must never fall back to manual delivery.
-                # If a legacy/duplicate CapCut row was ordered, resolve it to the
-                # unique Pandora-linked product with the same normalized display name.
-                endpoint, api_key, product_id, enabled, provider, variant_id = supplier_api_row(order_pid)
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut and not (enabled and provider == 'pandora' and endpoint and api_key and product_id):
-                    wanted = re.sub(r'[^a-z0-9]+', '', str(name(order_pid, cid)).lower())
-                    with db() as link_conn:
-                        candidates = link_conn.execute("""SELECT p.pid,p.name FROM admin_products p
-                            JOIN supplier_api a ON a.pid=p.pid
-                            WHERE a.provider='pandora' AND a.enabled=1 AND a.service_id<>''
-                              AND p.category_id='pandora_capcut'""").fetchall()
-                    matches = [p for p,n in candidates if re.sub(r'[^a-z0-9]+', '', str(n).lower()) == wanted]
-                    if len(matches) == 1:
-                        with db() as fix_conn:
-                            fix_conn.execute('UPDATE orders SET pid=? WHERE id=?', (matches[0], oid))
-                        order_pid = matches[0]
-                if fulfill_paid_order(api, oid):
-                    return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b> وبدأ التنفيذ التلقائي عبر Pandora.')
-                # A CapCut order must not silently become manual after approval.
-                cp = custom_product(order_pid)
-                is_capcut = bool(cp and cp[5] and 'capcut' in str(custom_category(cp[5]) or '').lower().replace(' ', ''))
-                if is_capcut:
-                    with db() as fail_conn:
-                        fail_conn.execute('UPDATE orders SET status="review" WHERE id=? AND status="paid"', (oid,))
-                    send(api, customer, '⏳ <b>تم قبول الدفع.</b>\n\nطلب CapCut قيد التحقق من الربط التلقائي، ولا تحتاج لإعادة الدفع.')
-                    return send(api, cid, f'⚠️ الطلب <b>#{esc(oid)}</b> هو CapCut لكن ربط Pandora غير مكتمل. لم يتم تحويله للتسليم اليدوي ولم يتم الخصم من Pandora.')
-                G['PENDING_ADMIN_DELIVERY'][G['ADMIN_ID']]={'customer':customer,'order_id':oid}
-                send(api, customer, '✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
-                return send(api, cid, f'✅ تم قبول الطلب <b>#{esc(oid)}</b>.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> له مباشرة.')
-            conn.execute('UPDATE orders SET status="rejected" WHERE id=? AND status="review"', (oid,))
-        send(api, customer, '❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى إعادة المحاولة أو التواصل مع الدعم.')
-        send(api, cid, f'❌ تم رفض الطلب <b>#{esc(oid)}</b> وإبلاغ العميل.')
+        import payment_execution
+        return payment_execution.approve(sys.modules[__name__], api, cid, decision, oid)
     elif prefix == 'infocat':
         admin_info_menu(api, cid, arg)
     elif prefix == 'infopick':
@@ -8740,3 +8310,4 @@ def install(namespace):
                          'المحفظة 👛': 'wallet', 'الضمان 🛡': 'warranty',
                          'Start 🚀': 'start', 'Products 🛍': 'products', 'Support 💬': 'support'})
     namespace['MENU'] = menu_actions
+

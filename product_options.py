@@ -150,7 +150,6 @@ def install(s, namespace):
             if not endpoint: missing.append('رابط API')
             if not api_key: missing.append('مفتاح API')
             if provider == 'pandora' and not service_id: missing.append('Product ID')
-            if provider == 'pandora' and not variant_id: missing.append('Variant ID')
             if missing:
                 s.send(api, cid, '⚠️ تم حفظ الموجود، لكن باقي قبل التفعيل: <b>' + s.esc(' + '.join(missing)) + '</b>.\n\nإذا هدفك فقط تجربة المفتاح الآن اضغط 🧪 اختبار الاتصال.')
                 return s.supplier_api_editor(api, cid, arg)
@@ -255,3 +254,4 @@ def install(s, namespace):
     namespace['handle_action']=action
     namespace['handle_receipt']=receipt
     namespace['tick_stock_alerts']=tick
+

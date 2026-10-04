@@ -152,6 +152,14 @@ def handle_admin_delivery(a,m):
  x=PENDING_ADMIN_DELIVERY.get(ADMIN_ID)
  if not x:return False
  customer=x['customer']
+ if x.get('order_id') and payment_execution.guard_delivery(storefront,x['order_id']):
+  PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
+  send(a,ADMIN_ID,'⚠️ التسليم اليدوي محظور لطلبات Pandora.')
+  return True
+ if x.get('review_id'):
+  PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
+  send(a,ADMIN_ID,'⚠️ يجب اعتماد الطلب من لوحة الطلبات قبل التسليم.')
+  return True
  try:
   a.call('copyMessage',chat_id=customer,from_chat_id=ADMIN_ID,message_id=m['message_id'])
   if x.get('order_id'):
@@ -167,17 +175,8 @@ def handle_admin_delivery(a,m):
  return True
 def action(a,c,x):
  if x.startswith('adminpay:') and c==ADMIN_ID:
-  _,decision,rid=x.split(':',2);r=PAYMENT_REVIEWS.get(rid)
-  if not r:return send(a,c,'⚠️ هذا الطلب غير موجود أو تمت معالجته.')
-  customer=r['customer']
-  if decision=='accept':
-   send(a,customer,'✅ <b>تم قبول الدفع.</b>\n\nسيتم إرسال طلبك لك قريباً.')
-   PENDING_ADMIN_DELIVERY[ADMIN_ID]={'customer':customer,'review_id':rid}
-   PAYMENT_REVIEWS.pop(rid,None)
-   return send(a,c,'✅ تم قبول الدفع.\n\n📤 أرسل الآن أي رسالة أو صورة أو ملف تريد إرساله للعميل.\nسيتم إرسال <b>الرسالة التالية فقط</b> للعميل مباشرة.')
-  PAYMENT_REVIEWS.pop(rid,None)
-  send(a,customer,'❌ <b>تم رفض إثبات الدفع.</b>\n\nيرجى التواصل مع الدعم أو إعادة المحاولة.')
-  return send(a,c,'❌ تم رفض إثبات الدفع وإبلاغ العميل.')
+  _,decision,rid=x.split(':',2)
+  return payment_execution.legacy_review(storefront,a,c,decision,rid)
  if x.startswith('lang:'):
   set_lang(c,x.split(':',1)[1]);show_home(a,c)
  elif x in ('home','enter_store'):show_home(a,c)
@@ -198,16 +197,9 @@ def action(a,c,x):
  elif x=='api':send(a,c,tr(c,'🔗 سيتم إضافة إعدادات API لاحقاً.','🔗 API settings will be added later.'),keyboard(c))
  elif x=='warranty':send(a,c,tr(c,'🛡 سيتم إضافة سياسة الضمان هنا.','🛡 Warranty policy will be added here.'),keyboard(c))
 MENU={'💎 الإحالات':'referrals','💎 Referrals':'referrals','🚀 ابدأ':'start','🚀 Start':'start','🛍 المنتجات':'products','🛍 Products':'products','💬 الدعم':'support','💬 Support':'support','👛 المحفظة':'wallet','👛 Wallet':'wallet','🔗 API':'api','🛡 الضمان':'warranty','🛡 Warranty':'warranty','🌐 اللغة':'language','🌐 Language':'language'}
-# Embedded CapCut/Pandora sync (kept in bot.py so Railway always ships it)
-_CAPCUT_SYNC_SOURCE = "\"\"\"Automatic Pandora -> VEXA catalogue sync for CapCut.\\n\\nDeployment marker: bundled with bot startup commit.\n\nRuns outside Telegram callback handling so supplier latency never blocks the bot UI.\n\"\"\"\nimport os\nimport re\nimport time\nimport urllib.parse\nfrom decimal import Decimal, ROUND_HALF_UP\n\nimport storefront as s\n\nCATEGORY_ID = \"pandora_capcut\"\nCATEGORY_NAME = \"CapCut\"\n\n\ndef _slug(value):\n    value = re.sub(r\"[^a-zA-Z0-9_-]+\", \"_\", str(value or \"\")).strip(\"_\").lower()\n    return value[:48] or \"item\"\n\n\ndef _quote(endpoint, key, product_id, variant_id=\"\"):\n    payload = {\"product_id\": product_id, \"quantity\": 1}\n    if variant_id:\n        payload[\"variant_id\"] = variant_id\n    try:\n        q = s._supplier_json_request(endpoint.rstrip(\"/\") + \"/quotes\", key, \"POST\", payload, timeout=12)\n        if q.get(\"can_purchase\", False) and q.get(\"unit_price\") is not None:\n            return Decimal(str(q[\"unit_price\"])).quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)\n    except Exception as exc:\n        # A quote can legitimately be unavailable for an out-of-stock/temporarily\n        # unavailable SKU. Catalogue sync must not treat that as a bot failure.\n        code = getattr(exc, \"code\", \"\")\n        print(\"CapCut quote unavailable:\", product_id, type(exc).__name__, code, flush=True)\n    return None\n\n\ndef _stock(source):\n    try:\n        value = s._pandora_stock_value(source)\n        return max(0, int(value)) if value is not None else 1\n    except Exception:\n        return 1\n\n\ndef sync_capcut():\n    endpoint = (os.getenv(\"PANDORA_API_BASE\") or \"https://api.pandoradigital.shop/api/v1\").strip()\n    key = (os.getenv(\"PANDORA_API_KEY\") or \"\").strip()\n    if not key:\n        print(\"CapCut sync skipped: Pandora key missing\", flush=True)\n        return\n\n    # Fetch the full Pandora catalogue page-by-page. Some accounts expose more\n    # than the first page, so never assume /products?limit=100 is exhaustive.\n    all_products = []\n    seen_ids = set()\n    page = 1\n    while page <= 100:\n        url = endpoint.rstrip(\"/\") + \"/products?\" + urllib.parse.urlencode({\"limit\": 100, \"page\": page})\n        payload = s._supplier_json_request(url, key, timeout=20)\n        batch = s._pandora_list(payload)\n        if not batch:\n            break\n        added = 0\n        for item in batch:\n            product_id = str(s._pandora_product_id(item) or \"\")\n            marker = product_id or repr(item)\n            if marker in seen_ids:\n                continue\n            seen_ids.add(marker)\n            all_products.append(item)\n            added += 1\n        # Stop when Pandora repeats the same page, or explicitly reports no next page.\n        if added == 0:\n            break\n        meta = payload if isinstance(payload, dict) else {}\n        pagination = meta.get(\"pagination\") or meta.get(\"meta\") or {}\n        has_next = pagination.get(\"has_next\")\n        if has_next is False:\n            break\n        next_page = pagination.get(\"next_page\") or pagination.get(\"nextPage\")\n        if next_page:\n            try:\n                page = int(next_page)\n                continue\n            except Exception:\n                pass\n        if len(batch) < 100:\n            break\n        page += 1\n\n    items = []\n    for item in all_products:\n        name = s._pandora_product_name(item)\n        category = s._pandora_category_name(item)\n        haystack = (name + \" \" + category).lower().replace(\" \", \"\")\n        if \"capcut\" in haystack or \"capcutpro\" in haystack:\n            items.append(item)\n    print(\"Pandora catalogue scan:\", len(all_products), \"total;\", len(items), \"CapCut matches\", flush=True)\n    if not items:\n        print(\"CapCut sync: no Pandora products found\", flush=True)\n        return\n\n    now = s.now_saudi()\n    synced = 0\n    with s.db() as conn:\n        conn.execute(\"INSERT OR IGNORE INTO admin_categories(cid,name,created_at) VALUES (?,?,?)\",\n                     (CATEGORY_ID, CATEGORY_NAME, now))\n\n    for item in items:\n        product_id = s._pandora_product_id(item)\n        product_name = s._pandora_product_name(item).strip()\n        variants = s._pandora_variants(item) or [{\"id\": \"\", \"name\": \"\"}]\n        raw_variants = item.get(\"variants\") or item.get(\"options\") or item.get(\"skus\") or []\n        if isinstance(raw_variants, dict):\n            raw_variants = raw_variants.get(\"data\") or raw_variants.get(\"items\") or list(raw_variants.values())\n        if not isinstance(raw_variants, list):\n            raw_variants = []\n\n        for variant in variants:\n            variant_id = str(variant.get(\"id\") or \"\")\n            variant_name = str(variant.get(\"name\") or \"\").strip()\n            display = product_name\n            if variant_name and variant_name.lower() not in (\"default\", product_name.lower()):\n                display = product_name + \" • \" + variant_name\n            pid = \"pc_\" + _slug(product_id + \"_\" + variant_id)\n            source = item\n            for rv in raw_variants:\n                if isinstance(rv, dict) and str(rv.get(\"id\") or rv.get(\"variant_id\") or rv.get(\"variantId\") or rv.get(\"sku\") or \"\") == variant_id:\n                    source = rv\n                    break\n            stock = _stock(source)\n            available = 1 if stock > 0 else 0\n            cost = _quote(endpoint, key, product_id, variant_id)\n\n            with s.db() as conn:\n                old = conn.execute(\"SELECT price_usd FROM admin_products WHERE pid=?\", (pid,)).fetchone()\n                price = str(cost if cost is not None else Decimal(str(old[0] if old and old[0] else \"0\")))\n                desc = \"CapCut عبر Pandora Digital. التسليم تلقائي بعد تأكيد الدفع.\"\n                conn.execute(\"\"\"INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock)\n                    VALUES (?,?,?,?,?,?,?,?,?)\n                    ON CONFLICT(pid) DO UPDATE SET name=excluded.name,description=excluded.description,\n                    available=excluded.available,category_id=excluded.category_id,stock=excluded.stock\"\"\",\n                    (pid, display, desc, str((Decimal(price or \"0\") * s.RATE).quantize(Decimal(\"0.01\"))),\n                     available, now, CATEGORY_ID, price, stock))\n                conn.execute(\"\"\"INSERT INTO supplier_api(pid,endpoint,api_key,service_id,enabled,provider,variant_id)\n                    VALUES (?,?,?,?,1,'pandora',?)\n                    ON CONFLICT(pid) DO UPDATE SET endpoint=excluded.endpoint,api_key=excluded.api_key,\n                    service_id=excluded.service_id,enabled=1,provider='pandora',variant_id=excluded.variant_id\"\"\",\n                    (pid, endpoint, key, product_id, variant_id))\n                if cost is not None:\n                    existing_margin = conn.execute(\"SELECT margin_usd FROM pandora_pricing WHERE pid=?\", (pid,)).fetchone()\n                    margin = existing_margin[0] if existing_margin else \"0\"\n                    sale = (cost + Decimal(str(margin or \"0\"))).quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)\n                    conn.execute(\"\"\"INSERT INTO pandora_pricing(pid,supplier_cost_usd,margin_usd,updated_at)\n                        VALUES (?,?,?,?) ON CONFLICT(pid) DO UPDATE SET supplier_cost_usd=excluded.supplier_cost_usd,updated_at=excluded.updated_at\"\"\",\n                        (pid, str(cost), str(margin), now))\n                    conn.execute(\"INSERT OR REPLACE INTO product_prices(pid,value,currency) VALUES (?,?,?)\",\n                                 (pid, str(sale), \"USD\"))\n            synced += 1\n\n    with s.db() as conn:\n        cats = conn.execute(\"SELECT cid,name FROM admin_categories WHERE lower(name) LIKE '%capcut%' OR lower(name) LIKE '%cap cut%'\").fetchall()\n        diag = []\n        for cat_id, cat_name in cats:\n            total = conn.execute(\"SELECT COUNT(*) FROM admin_products WHERE category_id=?\", (cat_id,)).fetchone()[0]\n            linked = conn.execute(\"\"\"SELECT COUNT(*) FROM admin_products p JOIN supplier_api a ON a.pid=p.pid\n                WHERE p.category_id=? AND a.provider='pandora' AND a.enabled=1\"\"\", (cat_id,)).fetchone()[0]\n            visible = conn.execute(\"\"\"SELECT COUNT(*) FROM admin_products p LEFT JOIN product_visibility v ON v.pid=p.pid\n                WHERE p.category_id=? AND COALESCE(v.visible,1)=1\"\"\", (cat_id,)).fetchone()[0]\n            diag.append((cat_id, cat_name, total, linked, visible))\n    print(\"CapCut category diagnostic:\", diag, flush=True)\n    print(\"CapCut Pandora sync complete:\", synced, \"products\", flush=True)\n\n\ndef run():\n    try:\n        # Let the Telegram polling loop start first.\n        time.sleep(3)\n        sync_capcut()\n    except Exception as exc:\n        print(\"CapCut Pandora sync error:\", type(exc).__name__, str(exc)[:180], flush=True)\n"
-
 def _run_embedded_capcut_sync():
- try:
-  ns={'__name__':'vexa_capcut_sync'}
-  exec(_CAPCUT_SYNC_SOURCE, ns, ns)
-  ns['run']()
- except Exception as e:
-  print('CapCut embedded sync error:',type(e).__name__,str(e)[:180],flush=True)
+ import pandora_catalog_sync
+ pandora_catalog_sync.run()
 
 def main():
  t=os.getenv('BOT_TOKEN')
@@ -222,7 +214,7 @@ def main():
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
   # Keep all background services, but avoid hammering SQLite every 2 seconds.
-  jobs=[('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
+  jobs=[('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
   last={}
   while True:
    now=time.monotonic()
@@ -235,6 +227,9 @@ def main():
  import threading
  threading.Thread(target=maintenance_loop,name='bot-maintenance',daemon=True).start()
  threading.Thread(target=_run_embedded_capcut_sync,daemon=True).start()
+ import payment_diagnostics
+ payment_diagnostics.report(storefront)
+ print('VEXA callback handler:', action.__module__ + '.' + action.__qualname__, flush=True)
  offset=0;print('Bot running...',flush=True)
  last_poll_log=0
  while True:
@@ -260,6 +255,7 @@ def main():
      if c:
       save_user(c)
       data=q.get('data','home')
+      payment_execution.EVENT.message_id=q.get('message',{}).get('message_id')
       if customer_inbox.action(a,c,data):continue
       if telegram_payments.action(a,c,data):continue
       storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
@@ -324,4 +320,8 @@ product_options.install(storefront, globals())
 import welcome_editor
 welcome_editor.install(globals())
 
+import payment_execution
+payment_execution.install(storefront, globals())
+
 if __name__=='__main__':main()
+
