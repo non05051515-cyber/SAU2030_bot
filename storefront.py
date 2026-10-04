@@ -2890,6 +2890,14 @@ def products(api, cid):
         rows.append(buttons[split_at:split_at+2])
         rows.append(buttons[split_at+2:split_at+4])
     else:
+        # Balance category rows so one category is never left alone.
+    rows = []
+    if len(buttons) > 3 and len(buttons) % 3 == 1:
+        split_at = len(buttons) - 4
+        rows.extend([buttons[i:i+3] for i in range(0, split_at, 3)])
+        rows.append(buttons[split_at:split_at+2])
+        rows.append(buttons[split_at+2:split_at+4])
+    else:
         rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     # Standalone products appear directly below the category grid. Their status is
     # shown only by the button background: green when available, red otherwise.
@@ -4154,6 +4162,14 @@ def products(api, cid):
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep category rows visually balanced: never leave a single category alone.
     # If count mod 3 == 1, make the final two rows 2 + 2; otherwise keep rows of 3.
+    rows = []
+    if len(buttons) > 3 and len(buttons) % 3 == 1:
+        split_at = len(buttons) - 4
+        rows.extend([buttons[i:i+3] for i in range(0, split_at, 3)])
+        rows.append(buttons[split_at:split_at+2])
+        rows.append(buttons[split_at+2:split_at+4])
+    else:
+        # Balance category rows so one category is never left alone.
     rows = []
     if len(buttons) > 3 and len(buttons) % 3 == 1:
         split_at = len(buttons) - 4
@@ -6772,6 +6788,14 @@ def products(api, cid):
         rows.append(buttons[split_at:split_at+2])
         rows.append(buttons[split_at+2:split_at+4])
     else:
+        # Balance category rows so one category is never left alone.
+    rows = []
+    if len(buttons) > 3 and len(buttons) % 3 == 1:
+        split_at = len(buttons) - 4
+        rows.extend([buttons[i:i+3] for i in range(0, split_at, 3)])
+        rows.append(buttons[split_at:split_at+2])
+        rows.append(buttons[split_at+2:split_at+4])
+    else:
         rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
     for pid, available, stock in direct_products:
         if not product_visible(pid):
@@ -8022,6 +8046,14 @@ def products(api, cid):
     buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep category rows visually balanced: never leave a single category alone.
     # If count mod 3 == 1, make the final two rows 2 + 2; otherwise keep rows of 3.
+    rows = []
+    if len(buttons) > 3 and len(buttons) % 3 == 1:
+        split_at = len(buttons) - 4
+        rows.extend([buttons[i:i+3] for i in range(0, split_at, 3)])
+        rows.append(buttons[split_at:split_at+2])
+        rows.append(buttons[split_at+2:split_at+4])
+    else:
+        # Balance category rows so one category is never left alone.
     rows = []
     if len(buttons) > 3 and len(buttons) % 3 == 1:
         split_at = len(buttons) - 4
