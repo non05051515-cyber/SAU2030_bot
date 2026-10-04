@@ -1,5 +1,6 @@
 """Bilingual catalogue extension; preserves the existing bot/admin entry points."""
 import html
+import re
 import sys
 import discounts
 import payment_methods
