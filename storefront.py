@@ -1767,7 +1767,10 @@ def admin_product_ad_menu(api, cid, category_id=None):
 
 def product_ad_text(pid, cid):
     qty = product_stock(pid)
-    return (info_icon(pid,'name','✨') + ' <b>Product: ' + esc(name(pid,cid)) + '</b>\n'
+    # Product icon comes from the same icon selected in the admin icon manager.
+    product_icon_id = ui_icon(pid)
+    product_icon = ('<tg-emoji emoji-id="' + esc(product_icon_id) + '">✨</tg-emoji>') if product_icon_id else '✨'
+    return (product_icon + ' <b>Product: ' + esc(name(pid,cid)) + '</b>\n'
             + '➕ <b>Added:</b> ' + esc(qty) + '\n'
             + info_icon(pid,'stock','📦') + ' <b>Current stock:</b> ' + esc(qty) + '\n'
             + info_icon(pid,'price','💵') + ' <b>Price:</b> ' + price(cid,pid,'USD'))
