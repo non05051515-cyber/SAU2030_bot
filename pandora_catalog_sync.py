@@ -47,13 +47,53 @@ def sync_capcut():
         print("CapCut sync skipped: Pandora key missing", flush=True)
         return
 
-    payload = s._supplier_json_request(endpoint.rstrip("/") + "/products?limit=100", key, timeout=20)
+    # Fetch the full Pandora catalogue page-by-page. Some accounts expose more
+    # than the first page, so never assume /products?limit=100 is exhaustive.
+    all_products = []
+    seen_ids = set()
+    page = 1
+    while page <= 100:
+        url = endpoint.rstrip("/") + "/products?" + urllib.parse.urlencode({"limit": 100, "page": page})
+        payload = s._supplier_json_request(url, key, timeout=20)
+        batch = s._pandora_list(payload)
+        if not batch:
+            break
+        added = 0
+        for item in batch:
+            product_id = str(s._pandora_product_id(item) or "")
+            marker = product_id or repr(item)
+            if marker in seen_ids:
+                continue
+            seen_ids.add(marker)
+            all_products.append(item)
+            added += 1
+        # Stop when Pandora repeats the same page, or explicitly reports no next page.
+        if added == 0:
+            break
+        meta = payload if isinstance(payload, dict) else {}
+        pagination = meta.get("pagination") or meta.get("meta") or {}
+        has_next = pagination.get("has_next")
+        if has_next is False:
+            break
+        next_page = pagination.get("next_page") or pagination.get("nextPage")
+        if next_page:
+            try:
+                page = int(next_page)
+                continue
+            except Exception:
+                pass
+        if len(batch) < 100:
+            break
+        page += 1
+
     items = []
-    for item in s._pandora_list(payload):
+    for item in all_products:
         name = s._pandora_product_name(item)
         category = s._pandora_category_name(item)
-        if "capcut" in (name + " " + category).lower():
+        haystack = (name + " " + category).lower().replace(" ", "")
+        if "capcut" in haystack or "capcutpro" in haystack:
             items.append(item)
+    print("Pandora catalogue scan:", len(all_products), "total;", len(items), "CapCut matches", flush=True)
     if not items:
         print("CapCut sync: no Pandora products found", flush=True)
         return
