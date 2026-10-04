@@ -3779,7 +3779,10 @@ def action(api, cid, value):
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
-        admin_product_detail(api, cid, arg)
+        # Admin-created direct products use long UUID ids. Do not pass them
+        # through legacy aliases; open the exact stored product id.
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
         toggle_admin_product(api, cid, arg)
     elif prefix == 'myproductdelete':
@@ -4920,7 +4923,10 @@ def action(api, cid, value):
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
-        admin_product_detail(api, cid, arg)
+        # Admin-created direct products use long UUID ids. Do not pass them
+        # through legacy aliases; open the exact stored product id.
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
         toggle_admin_product(api, cid, arg)
     elif prefix == 'myproductdelete':
@@ -7596,7 +7602,10 @@ def action(api, cid, value):
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
-        admin_product_detail(api, cid, arg)
+        # Admin-created direct products use long UUID ids. Do not pass them
+        # through legacy aliases; open the exact stored product id.
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
         toggle_admin_product(api, cid, arg)
     elif prefix == 'myproductdelete':
@@ -8733,7 +8742,10 @@ def action(api, cid, value):
     elif prefix == 'mycategory':
         admin_category_detail(api, cid, arg)
     elif prefix == 'myproduct':
-        admin_product_detail(api, cid, arg)
+        # Admin-created direct products use long UUID ids. Do not pass them
+        # through legacy aliases; open the exact stored product id.
+        direct_pid = value.split(':', 1)[1] if ':' in value else arg
+        admin_product_detail(api, cid, direct_pid)
     elif prefix == 'myproducttoggle':
         toggle_admin_product(api, cid, arg)
     elif prefix == 'myproductdelete':
