@@ -1318,6 +1318,7 @@ def admin_products_page(api, cid):
         return home(api, cid)
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid DESC').fetchall()
+        direct_products = conn.execute('SELECT pid,name,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid DESC').fetchall()
     seen = set()
     categories = []
     for category_id in G['PRODUCTS']:
@@ -1329,7 +1330,14 @@ def admin_products_page(api, cid):
             categories.append((category_id, category_name))
             seen.add(category_id)
     buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
-    text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
+    # Standalone products do not belong to a category, so manage them directly here.
+    for pid, stored_name, available, stock in direct_products:
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        display_name = text_override(pid, 'name', prefs(cid)[0], stored_name).strip() or stored_name
+        buttons.append([btn(('✅ ' if is_available else '🔴 ') + display_name + ' • ' + price(cid, pid, 'USD') + ' • ' + compact_stock(qty),
+                            'myproduct:' + pid, style='success' if is_available else 'danger')])
+    text = '📦 <b>منتجاتي</b>\n\nاختر القسم أو المنتج المباشر الذي تريد إدارته:'
     send(api, cid, text, kb(buttons + [[btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success')], [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
@@ -5173,6 +5181,7 @@ def admin_products_page(api, cid):
         return home(api, cid)
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid DESC').fetchall()
+        direct_products = conn.execute('SELECT pid,name,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid DESC').fetchall()
     seen = set()
     categories = []
     for category_id in G['PRODUCTS']:
@@ -5184,7 +5193,14 @@ def admin_products_page(api, cid):
             categories.append((category_id, category_name))
             seen.add(category_id)
     buttons = [[btn('📁 ' + esc(category_name), 'mycategory:' + category_id)] for category_id, category_name in categories]
-    text = '📦 <b>منتجاتي</b>\n\nاختر القسم، ثم المنتج الذي تريد إدارته أو ربطه بالـ API:'
+    # Standalone products do not belong to a category, so manage them directly here.
+    for pid, stored_name, available, stock in direct_products:
+        qty = int(stock or 0)
+        is_available = bool(available and qty > 0)
+        display_name = text_override(pid, 'name', prefs(cid)[0], stored_name).strip() or stored_name
+        buttons.append([btn(('✅ ' if is_available else '🔴 ') + display_name + ' • ' + price(cid, pid, 'USD') + ' • ' + compact_stock(qty),
+                            'myproduct:' + pid, style='success' if is_available else 'danger')])
+    text = '📦 <b>منتجاتي</b>\n\nاختر القسم أو المنتج المباشر الذي تريد إدارته:'
     send(api, cid, text, kb(buttons + [[btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')], [btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
