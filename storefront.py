@@ -397,7 +397,7 @@ UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
     'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
-    'ui_api': '🔗 API', 'ui_warranty': '🛡 الضمان',
+    'ui_api': '🔗 API', 'ui_warranty': '🛡 الضمان', 'ui_volt': '⚡ VEXA VOLT',
     'ui_community': '📢 مجتمع VEXA STORE',
     'ui_wallet_balance': '💰 أيقونة رصيد المحفظة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
@@ -2460,9 +2460,36 @@ def admin_icons(api, cid):
          kb([[btn('✏️ تعديل الاسم كاملًا', 'admin:buttonlabels', style='success')],
              [btn('📦 أسماء وأيقونات المنتجات', 'iconmenu:products', style='primary')],
              [btn('📁 أسماء وأيقونات الأقسام', 'iconmenu:categories')],
-             [btn('🎛 أزرار الواجهة الرئيسية', 'iconmenu:mainbuttons', style='success')],
+             [btn('⌨️ أزرار قائمة تيليجرام السفلية', 'iconmenu:telegrambottom', style='success')],
+             [btn('🎛 أزرار الواجهة الرئيسية', 'iconmenu:mainbuttons')],
              [btn('🏠 بقية أزرار المتجر', 'iconmenu:buttons', style='primary')],
              [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+
+TELEGRAM_BOTTOM_BUTTONS = (
+    ('ui_start', '🚀 ابدأ'),
+    ('ui_products', '🛍 المنتجات'),
+    ('ui_volt', '⚡ VEXA VOLT'),
+    ('ui_account', '👛 المحفظة'),
+    ('ui_api', '🔗 API'),
+    ('ui_warranty', '🛡 الضمان'),
+    ('ui_language', '🌐 اللغة / Language'),
+    ('ui_currency', '💱 العملة / Currency'),
+    ('ui_referrals', '💎 الإحالات'),
+    ('ui_chatgpt', 'التحدث مع ChatGPT'),
+    ('ui_admin', '🧾 لوحة الطلبات'),
+)
+
+def admin_telegram_bottom_buttons(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    rows = []
+    for key, default in TELEGRAM_BOTTOM_BUTTONS:
+        rows.append([btn(ui_label(key, default), 'seticon:' + key, ui_icon(key))])
+    send(api, cid,
+         '⌨️ <b>أزرار قائمة تيليجرام السفلية</b>\n\nهذه فقط الأزرار التي تظهر أسفل المحادثة. اختر الاسم الذي تريد تعديله أو تغيير أيقونته:',
+         kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
 
 
 MAIN_CUSTOMIZABLE_BUTTONS = (
@@ -4005,6 +4032,7 @@ def action(api, cid, value):
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
         elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
+        elif arg == 'telegrambottom': admin_telegram_bottom_buttons(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -5079,6 +5107,7 @@ def action(api, cid, value):
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
         elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
+        elif arg == 'telegrambottom': admin_telegram_bottom_buttons(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -7900,6 +7929,7 @@ def action(api, cid, value):
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
         elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
+        elif arg == 'telegrambottom': admin_telegram_bottom_buttons(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -8974,6 +9004,7 @@ def action(api, cid, value):
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
         elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
+        elif arg == 'telegrambottom': admin_telegram_bottom_buttons(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
