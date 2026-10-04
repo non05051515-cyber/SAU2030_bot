@@ -1542,12 +1542,17 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
-                pid = 'custom_' + uuid.uuid4().hex[:10]
+                pid = 'custom_' + uuid.uuid4().hex
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 sar = (usd * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
                              (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
                 saved_product_ids.append(pid)
+                # Pin both language names to this unique product ID so it can never
+                # inherit a legacy label/icon from another catalogue entry.
+                conn.execute('DELETE FROM product_text WHERE pid=?', (pid,))
+                conn.execute('DELETE FROM category_icons WHERE pid=?', (pid,))
+                conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'name', 'ar', product['name']))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'name', 'en', product['name_en']))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'description', 'en', product['description_en']))
                 if 'description_html' in product:
@@ -5354,12 +5359,17 @@ def handle_admin_product(api, message):
                 conn.execute('INSERT INTO admin_categories(cid,name,created_at) VALUES (?,?,?)', (category_id, payload['category_name'], now_saudi()))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (category_id, 'name', 'en', auto_translate(payload['category_name'], 'en')[:100]))
             for product in payload['products']:
-                pid = 'custom_' + uuid.uuid4().hex[:10]
+                pid = 'custom_' + uuid.uuid4().hex
                 usd = Decimal(product['price_usd']).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 sar = (usd * RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,1,?,?,?,?)',
                              (pid, product['name'], product.get('description',''), str(sar), now_saudi(), category_id, str(usd), int(product.get('stock',1))))
                 saved_product_ids.append(pid)
+                # Pin both language names to this unique product ID so it can never
+                # inherit a legacy label/icon from another catalogue entry.
+                conn.execute('DELETE FROM product_text WHERE pid=?', (pid,))
+                conn.execute('DELETE FROM category_icons WHERE pid=?', (pid,))
+                conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'name', 'ar', product['name']))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'name', 'en', product['name_en']))
                 conn.execute('INSERT OR REPLACE INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid, 'description', 'en', product['description_en']))
                 if 'description_html' in product:
