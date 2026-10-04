@@ -159,6 +159,17 @@ def sync_capcut():
                                  (pid, str(sale), "USD"))
             synced += 1
 
+    with s.db() as conn:
+        cats = conn.execute("SELECT cid,name FROM admin_categories WHERE lower(name) LIKE '%capcut%' OR lower(name) LIKE '%cap cut%'").fetchall()
+        diag = []
+        for cat_id, cat_name in cats:
+            total = conn.execute("SELECT COUNT(*) FROM admin_products WHERE category_id=?", (cat_id,)).fetchone()[0]
+            linked = conn.execute("""SELECT COUNT(*) FROM admin_products p JOIN supplier_api a ON a.pid=p.pid
+                WHERE p.category_id=? AND a.provider='pandora' AND a.enabled=1""", (cat_id,)).fetchone()[0]
+            visible = conn.execute("""SELECT COUNT(*) FROM admin_products p LEFT JOIN product_visibility v ON v.pid=p.pid
+                WHERE p.category_id=? AND COALESCE(v.visible,1)=1""", (cat_id,)).fetchone()[0]
+            diag.append((cat_id, cat_name, total, linked, visible))
+    print("CapCut category diagnostic:", diag, flush=True)
     print("CapCut Pandora sync complete:", synced, "products", flush=True)
 
 
