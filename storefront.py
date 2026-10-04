@@ -1765,23 +1765,47 @@ def admin_product_ad_menu(api, cid, category_id=None):
     send(api,cid,'📣 اختر المنتج الذي تريد إعلانه:',kb(rows+[[btn('↩️ الأقسام','admin:productad')]]))
 
 
+def _utf16_len(value):
+    return len(str(value).encode('utf-16-le')) // 2
+
+def product_ad_payload(pid, cid):
+    qty = str(product_stock(pid))
+    title = name(pid,cid)
+    value_price = price(cid,pid,'USD')
+    text = '✨ Product: ' + title + '\n➕ Added: ' + qty + '\n📦 Current stock: ' + qty + '\n💵 Price: ' + value_price
+    entities = []
+    # Bold each complete line, matching the source advertisement style.
+    offset = 0
+    for line in text.splitlines(True):
+        visible = line.rstrip('\n')
+        entities.append({'type':'bold','offset':offset,'length':_utf16_len(visible)})
+        offset += _utf16_len(line)
+    def custom_entity(symbol, emoji_id):
+        if not emoji_id: return
+        pos = text.find(symbol)
+        if pos < 0: return
+        off = _utf16_len(text[:pos])
+        entities.append({'type':'custom_emoji','offset':off,'length':_utf16_len(symbol),'custom_emoji_id':str(emoji_id)})
+    custom_entity('✨', ui_icon(pid))
+    with db() as conn:
+        stock_row=conn.execute('SELECT custom_emoji_id FROM product_info_icons WHERE pid=? AND field=?',('__global__','stock')).fetchone()
+        price_row=conn.execute('SELECT custom_emoji_id FROM product_info_icons WHERE pid=? AND field=?',('__global__','price')).fetchone()
+    custom_entity('📦', stock_row[0] if stock_row else None)
+    custom_entity('💵', price_row[0] if price_row else None)
+    return text, entities
+
 def product_ad_text(pid, cid):
-    qty = product_stock(pid)
-    # Product icon comes from the same icon selected in the admin icon manager.
-    product_icon_id = ui_icon(pid)
-    product_icon = ('<tg-emoji emoji-id="' + esc(product_icon_id) + '">✨</tg-emoji>') if product_icon_id else '✨'
-    return (product_icon + ' <b>Product: ' + esc(name(pid,cid)) + '</b>\n'
-            + '➕ <b>Added:</b> ' + esc(qty) + '\n'
-            + info_icon(pid,'stock','📦') + ' <b>Current stock:</b> ' + esc(qty) + '\n'
-            + info_icon(pid,'price','💵') + ' <b>Price:</b> ' + price(cid,pid,'USD'))
+    # HTML fallback for old call sites; previews/sends use entity payload below.
+    text, _ = product_ad_payload(pid,cid)
+    return '<b>' + esc(text).replace('\\n','</b>\\n<b>') + '</b>'
 
 
 def product_ad_preview(api,cid,pid):
-    text = product_ad_text(pid,cid)
+    text, entities = product_ad_payload(pid,cid)
     rows=[[btn('🛒 Buy Now','item:'+pid,style='success')],
           [btn('🚀 إرسال الإعلان للجميع','productadsend:'+pid,style='success')],
           [btn('↩️ اختيار منتج آخر','admin:productad')],[btn('❌ إلغاء','admin')]]
-    send(api,cid,'👁 <b>معاينة الإعلان</b>\n\n'+text,kb(rows))
+    send(api,cid,text,kb(rows),entities=entities)
 
 
 def send_product_ad_all(api,cid,pid):
@@ -1790,7 +1814,7 @@ def send_product_ad_all(api,cid,pid):
     except Exception:
         users=[]
     ok=failed=0
-    text=product_ad_text(pid,cid)
+    text, entities=product_ad_payload(pid,cid)
     keyboard=kb([[btn('🛒 Buy Now','item:'+pid,style='success')]])
     interval=1.0/25.0
     last=0.0
@@ -1799,7 +1823,7 @@ def send_product_ad_all(api,cid,pid):
         wait=interval-(time.monotonic()-last)
         if wait>0: time.sleep(wait)
         try:
-            result=send(api,uid,text,keyboard)
+            result=send(api,uid,text,keyboard,entities=entities)
             last=time.monotonic()
             if result: ok+=1
             else: failed+=1
