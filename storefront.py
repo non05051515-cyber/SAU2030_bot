@@ -397,6 +397,7 @@ UI_ICON_LABELS = {
     'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
     'ui_community': '📢 مجتمع VEXA STORE',
+    'ui_wallet_balance': '💰 أيقونة رصيد المحفظة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
     'ui_broadcast_product': 'زر الذهاب للمنتج في الإعلان',
     'ui_broadcast_buy': 'زر شراء مباشرة في الإعلان',
@@ -2977,8 +2978,10 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
-    text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
+    balance_icon = ui_icon('ui_wallet_balance')
+    balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
+    text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -4089,8 +4092,10 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
-    text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
+    balance_icon = ui_icon('ui_wallet_balance')
+    balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
+    text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -6730,8 +6735,10 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
-    text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
+    balance_icon = ui_icon('ui_wallet_balance')
+    balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
+    text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -7842,8 +7849,10 @@ def summary(cid, pid):
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
     usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    text = tr(cid, '<b>محفظة VEXA</b>\n\nرصيدك الحالي:', '<b>VEXA Wallet</b>\n\nYour current balance:')
-    text += f'\n<b>{sar:.2f} {tr(cid, "ر.س", "SAR")}</b>\n<b>{usd:.2f} USD</b>'
+    balance_icon = ui_icon('ui_wallet_balance')
+    balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
+    text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
