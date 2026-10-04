@@ -397,6 +397,7 @@ UI_ICON_LABELS = {
     'ui_start': '🚀 ابدأ / START', 'ui_products': '🛒 المنتجات', 'ui_topup': '💰 شحن الرصيد',
     'ui_referrals': '💎 الإحالات', 'ui_account': '📦 طلباتي', 'ui_settings': 'الإعدادات', 'ui_coupon': 'كود الخصم', 'ui_support': '⚡ VEXA VOLT',
     'ui_report': '⚠️ إبلاغ عن مشكلة', 'ui_currency': '💱 العملة', 'ui_language': '🌐 اللغة',
+    'ui_api': '🔗 API', 'ui_warranty': '🛡 الضمان',
     'ui_community': '📢 مجتمع VEXA STORE',
     'ui_wallet_balance': '💰 أيقونة رصيد المحفظة',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
@@ -2459,8 +2460,34 @@ def admin_icons(api, cid):
          kb([[btn('✏️ تعديل الاسم كاملًا', 'admin:buttonlabels', style='success')],
              [btn('📦 أسماء وأيقونات المنتجات', 'iconmenu:products', style='primary')],
              [btn('📁 أسماء وأيقونات الأقسام', 'iconmenu:categories')],
-             [btn('🏠 أسماء وأيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
+             [btn('🎛 أزرار الواجهة الرئيسية', 'iconmenu:mainbuttons', style='success')],
+             [btn('🏠 بقية أزرار المتجر', 'iconmenu:buttons', style='primary')],
              [btn('↩️ لوحة الإدارة', 'admin')]]))
+
+
+MAIN_CUSTOMIZABLE_BUTTONS = (
+    ('ui_start', '🚀 ابدأ'),
+    ('ui_products', '🛍 المنتجات'),
+    ('ui_support', '⚡ VEXA VOLT'),
+    ('pay_wallet', '👛 المحفظة'),
+    ('ui_api', '🔗 API'),
+    ('ui_warranty', '🛡 الضمان'),
+    ('ui_language', '🌐 اللغة / Language'),
+    ('ui_currency', '💱 العملة / Currency'),
+    ('ui_referrals', '💎 الإحالات'),
+    ('ui_chatgpt', 'التحدث مع ChatGPT'),
+)
+
+def admin_main_button_customizer(api, cid):
+    if cid != G['ADMIN_ID']:
+        return home(api, cid)
+    rows = []
+    for key, default in MAIN_CUSTOMIZABLE_BUTTONS:
+        label = ui_label(key, UI_ICON_LABELS.get(key, default))
+        rows.append([btn(label, 'seticon:' + key, ui_icon(key))])
+    send(api, cid,
+         '🎛 <b>أزرار الواجهة الرئيسية</b>\n\nاختر أي زر. من داخله تستطيع تعديل الاسم كاملًا وإضافة/تغيير الأيقونة أو إزالتها:',
+         kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
 
 
 def admin_icon_products(api, cid):
@@ -3977,6 +4004,7 @@ def action(api, cid, value):
         if arg == 'products': admin_icon_products(api, cid)
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
+        elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -5050,6 +5078,7 @@ def action(api, cid, value):
         if arg == 'products': admin_icon_products(api, cid)
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
+        elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -7870,6 +7899,7 @@ def action(api, cid, value):
         if arg == 'products': admin_icon_products(api, cid)
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
+        elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
@@ -8943,6 +8973,7 @@ def action(api, cid, value):
         if arg == 'products': admin_icon_products(api, cid)
         elif arg == 'categories': admin_icon_categories(api, cid)
         elif arg == 'buttons': admin_icon_buttons(api, cid)
+        elif arg == 'mainbuttons': admin_main_button_customizer(api, cid)
         else: admin_icons(api, cid)
     elif prefix == 'seticon':
         begin_icon_setup(api, cid, arg)
