@@ -6431,6 +6431,7 @@ def admin_icons(api, cid):
     send(api, cid, '➕ <b>إضافة أيقونة متحركة</b>\n\nاختر أين تريد إضافة الأيقونة:',
          kb([[btn('📦 أسماء المنتجات', 'iconmenu:products', style='primary')],
              [btn('📁 أسماء الأقسام', 'iconmenu:categories')],
+             [btn('⌨️ أزرار قائمة تيليجرام السفلية', 'iconmenu:telegrambottom', style='success')],
              [btn('🏠 أيقونات أزرار الرئيسية', 'iconmenu:buttons', style='primary')],
              [btn('↩️ لوحة الإدارة', 'admin')]]))
 
