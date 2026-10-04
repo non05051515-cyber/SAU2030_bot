@@ -1,4 +1,4 @@
-"""Automatic Pandora -> VEXA catalogue sync for CapCut.
+"""Automatic Pandora -> VEXA catalogue sync for CapCut.\n\nDeployment marker: bundled with bot startup commit.
 
 Runs outside Telegram callback handling so supplier latency never blocks the bot UI.
 """
