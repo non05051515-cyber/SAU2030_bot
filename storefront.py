@@ -1160,8 +1160,7 @@ def admin_category_detail(api, cid, category_id):
             qty = product_stock(pid)
             is_available = bool(in_stock(pid))
         label = ('✅ ' if is_available else '🔴 ') + compact_name(pid, cid) + ' • ' + price(cid, pid, 'USD') + ' • ' + compact_stock(qty)
-        buttons.append([btn(label, 'myproduct:' + pid, style='success' if is_available else 'danger'),
-                        btn('🔌 API', 'supplierpick:' + pid)])
+        buttons.append([btn(label, 'myproduct:' + pid, style='success' if is_available else 'danger')])
     title = category_label(category_id, cid)
     extra = [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')]]
     send(api, cid, '📁 <b>' + esc(title) + '</b>\n\nكل المنتجات داخل القسم:', kb(buttons + extra + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
@@ -1410,7 +1409,6 @@ def admin_panel(api, cid):
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
-                             [btn('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
@@ -4963,8 +4961,7 @@ def admin_category_detail(api, cid, category_id):
             qty = product_stock(pid)
             is_available = bool(in_stock(pid))
         label = ('✅ ' if is_available else '🔴 ') + compact_name(pid, cid) + ' • ' + price(cid, pid, 'USD') + ' • ' + compact_stock(qty)
-        buttons.append([btn(label, 'myproduct:' + pid, style='success' if is_available else 'danger'),
-                        btn('🔌 API', 'supplierpick:' + pid)])
+        buttons.append([btn(label, 'myproduct:' + pid, style='success' if is_available else 'danger')])
     title = category_label(category_id, cid)
     extra = [[btn('➕ إضافة منتج لهذا القسم', 'addtocategory:' + category_id, style='success')]]
     send(api, cid, '📁 <b>' + esc(title) + '</b>\n\nكل المنتجات داخل القسم:', kb(buttons + extra + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
@@ -5213,7 +5210,6 @@ def admin_panel(api, cid):
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
                              [btn('📦 تعديل توفر المنتج', 'admin:stock')],
-                             [btn('🔌 ربط API بالمنتج', 'admin:supplierapi', style='primary')],
                              [btn('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
                              [btn('📊 الإحصائيات', 'admin:stats')],
                              [btn('➕ إضافة أيقونة', 'admin:icons', style='success')],
