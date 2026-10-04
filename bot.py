@@ -223,6 +223,8 @@ def main():
    time.sleep(0.5)
  import threading
  threading.Thread(target=maintenance_loop,name='bot-maintenance',daemon=True).start()
+ import pandora_catalog_sync
+ threading.Thread(target=pandora_catalog_sync.run,daemon=True).start()
  offset=0;print('Bot running...',flush=True)
  last_poll_log=0
  while True:
