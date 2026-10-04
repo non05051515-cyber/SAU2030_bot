@@ -1490,7 +1490,7 @@ def show_extended_category(api, cid, category_id):
         return False
     variants = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
     originals = variants or ([category_id] if amount(category_id, 'SAR') is not None else [])
-    rows = [[btn(compact_name(pid, cid) + ' | 💰 ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
+    rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
     send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
@@ -3276,7 +3276,7 @@ def category(api, cid, pid):
             if pid == 'chatgpt':
                 # Keep the price at the beginning so Telegram cannot hide it
                 # when a long product name is truncated on mobile.
-                label = status + '💰 ' + price(cid, v['id']) + ' • ' + name(v['id'], cid)
+                label = status + price(cid, v['id']) + ' • ' + name(v['id'], cid)
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
@@ -4463,7 +4463,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '🟢 ')
             qty = product_stock(v['id'])
-            rows.append([btn(status + compact_name(v['id'], cid) + ' | 💵 ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
+            rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
@@ -5498,7 +5498,7 @@ def show_extended_category(api, cid, category_id):
         return False
     variants = [pid for pid, v in VARIANTS.items() if v['category'] == category_id]
     originals = variants or ([category_id] if amount(category_id, 'SAR') is not None else [])
-    rows = [[btn(compact_name(pid, cid) + ' | 💰 ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
+    rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
     send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
@@ -7194,7 +7194,7 @@ def category(api, cid, pid):
             if pid == 'chatgpt':
                 # Keep the price at the beginning so Telegram cannot hide it
                 # when a long product name is truncated on mobile.
-                label = status + '💰 ' + price(cid, v['id']) + ' • ' + name(v['id'], cid)
+                label = status + price(cid, v['id']) + ' • ' + name(v['id'], cid)
             else:
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
@@ -8366,7 +8366,7 @@ def category(api, cid, pid):
             sold_out = not in_stock(v['id'])
             status = '⏸ ' if v.get('review_required') else ('🔴 ' if sold_out else '🟢 ')
             qty = product_stock(v['id'])
-            rows.append([btn(status + compact_name(v['id'], cid) + ' | 💵 ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
+            rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
