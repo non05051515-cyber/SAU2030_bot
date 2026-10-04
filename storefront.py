@@ -768,15 +768,23 @@ def admin_text_menu(api, cid, field, category_id=None):
     with db() as conn:
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         custom_cats = conn.execute('SELECT cid,name FROM admin_categories').fetchall()
+        direct_products = conn.execute(
+            'SELECT pid,name FROM admin_products WHERE category_id IS NULL OR trim(COALESCE(category_id, ""))="" ORDER BY rowid'
+        ).fetchall()
     if category_id is None:
         cats = [(pid, ('YouTube' if pid == 'youtube' else name(pid, cid))) for pid in G['PRODUCTS']]
         cats += [(pid, label) for pid, label in custom_cats
                  if not ('youtube' in label.lower() or 'يوتيوب' in label)]
         rows = [[btn(label, f'txtcat:{field}:{pid}')] for pid, label in cats]
+        rows += [[btn(name(pid, cid) or label, f'txtpick:{field}:{pid}')]
+                 for pid, label in direct_products]
     else:
         ids = admin_category_product_ids(category_id)
         rows = [[btn(name(pid, cid), f'txtpick:{field}:{pid}')] for pid in dict.fromkeys(ids)]
-    send(api, cid, '✏️ اختر القسم ثم المنتج لتعديل ' + ('الاسم' if field == 'name' else 'الوصف'), kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
+    prompt = ('✏️ اختر القسم أو المنتج المباشر لتعديل ' if category_id is None
+              else '✏️ اختر المنتج لتعديل ')
+    send(api, cid, prompt + ('الاسم' if field == 'name' else 'الوصف'),
+         kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
 def category_description_html(pid, cid):
