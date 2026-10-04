@@ -59,6 +59,8 @@ def tick(api):
         stock=cur.get('stock'); available=1 if cur.get('available') else 0
         added=(int(stock)-int(old[0])) if old and old[1] and stock is not None and old[0] is not None and int(stock)>int(old[0]) else 0
         with s.db() as c:c.execute("INSERT OR REPLACE INTO pandora_stock_notifications VALUES (?,?,?,1,?)",(pid,stock,available,s.now_saudi()))
+        # Keep supplier stock synchronized, but announcements are manual only.
+        continue
         if not added:continue
         try:price=s.amount(pid,'USD')
         except Exception:price=None
