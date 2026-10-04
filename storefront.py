@@ -4098,7 +4098,10 @@ def products(api, cid):
             continue
         qty = int(stock or 0)
         is_available = bool(available and qty > 0)
-        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        cp = custom_product(pid)
+        stored_name = cp[1] if cp else pid
+        direct_name = text_override(pid, 'name', prefs(cid)[0], stored_name).strip()
+        label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -6647,7 +6650,10 @@ def products(api, cid):
             continue
         qty = int(stock or 0)
         is_available = bool(available and qty > 0)
-        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        cp = custom_product(pid)
+        stored_name = cp[1] if cp else pid
+        direct_name = text_override(pid, 'name', prefs(cid)[0], stored_name).strip()
+        label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
@@ -7872,7 +7878,10 @@ def products(api, cid):
             continue
         qty = int(stock or 0)
         is_available = bool(available and qty > 0)
-        label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
+        cp = custom_product(pid)
+        stored_name = cp[1] if cp else pid
+        direct_name = text_override(pid, 'name', prefs(cid)[0], stored_name).strip()
+        label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
     send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
