@@ -2534,6 +2534,30 @@ def category(api, cid, pid):
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
+    if pid == 'youtube':
+        with db() as conn:
+            yt_rows = conn.execute('''SELECT DISTINCT p.pid,p.name,p.price_usd,p.available,p.stock
+                FROM admin_products p
+                LEFT JOIN admin_categories c ON c.cid=p.category_id
+                WHERE p.category_id='youtube'
+                   OR lower(p.name) LIKE '%youtube%'
+                   OR p.name LIKE '%يوتيوب%'
+                   OR lower(COALESCE(c.name,'')) LIKE '%youtube%'
+                   OR COALESCE(c.name,'') LIKE '%يوتيوب%'
+                ORDER BY p.rowid''').fetchall()
+        if yt_rows:
+            rows = []
+            for product_id, product_name, price_usd, available, stock in yt_rows:
+                if not product_visible(product_id):
+                    continue
+                qty = int(stock or 0)
+                sold_out = (not bool(available)) or qty <= 0
+                label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
+                                 style='danger' if sold_out else 'success')])
+            if rows:
+                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
         return chatgpt_cards(api, cid, choices)
@@ -3621,6 +3645,30 @@ def category(api, cid, pid):
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
         send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
         return
+    if pid == 'youtube':
+        with db() as conn:
+            yt_rows = conn.execute('''SELECT DISTINCT p.pid,p.name,p.price_usd,p.available,p.stock
+                FROM admin_products p
+                LEFT JOIN admin_categories c ON c.cid=p.category_id
+                WHERE p.category_id='youtube'
+                   OR lower(p.name) LIKE '%youtube%'
+                   OR p.name LIKE '%يوتيوب%'
+                   OR lower(COALESCE(c.name,'')) LIKE '%youtube%'
+                   OR COALESCE(c.name,'') LIKE '%يوتيوب%'
+                ORDER BY p.rowid''').fetchall()
+        if yt_rows:
+            rows = []
+            for product_id, product_name, price_usd, available, stock in yt_rows:
+                if not product_visible(product_id):
+                    continue
+                qty = int(stock or 0)
+                sold_out = (not bool(available)) or qty <= 0
+                label = compact_name(product_id, cid) + ' | 💵 ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
+                rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
+                                 style='danger' if sold_out else 'success')])
+            if rows:
+                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
         rows = []
