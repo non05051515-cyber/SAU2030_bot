@@ -34,6 +34,7 @@ G = {}
 
 
 _DB_SCHEMA_READY = False
+import threading
 _DB_SCHEMA_LOCK = threading.Lock()
 
 
