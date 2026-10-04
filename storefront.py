@@ -3219,6 +3219,11 @@ def receipt(api, message):
         return True
     if handle_admin_photo(api, message):
         return True
+    # Product price/stock/warranty icon input must be consumed before the
+    # generic admin text handler, otherwise Telegram sends us back to the
+    # product-info menu without saving the selected emoji.
+    if handle_info_icon(api, message):
+        return True
     if handle_admin_text(api, message):
         return True
     if handle_admin_price(api, message):
@@ -4259,6 +4264,11 @@ def receipt(api, message):
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
+        return True
+    # Product price/stock/warranty icon input must be consumed before the
+    # generic admin text handler, otherwise Telegram sends us back to the
+    # product-info menu without saving the selected emoji.
+    if handle_info_icon(api, message):
         return True
     if handle_admin_text(api, message):
         return True
@@ -6937,6 +6947,11 @@ def receipt(api, message):
         return True
     if handle_admin_photo(api, message):
         return True
+    # Product price/stock/warranty icon input must be consumed before the
+    # generic admin text handler, otherwise Telegram sends us back to the
+    # product-info menu without saving the selected emoji.
+    if handle_info_icon(api, message):
+        return True
     if handle_admin_text(api, message):
         return True
     if handle_admin_price(api, message):
@@ -7977,6 +7992,11 @@ def receipt(api, message):
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
+        return True
+    # Product price/stock/warranty icon input must be consumed before the
+    # generic admin text handler, otherwise Telegram sends us back to the
+    # product-info menu without saving the selected emoji.
+    if handle_info_icon(api, message):
         return True
     if handle_admin_text(api, message):
         return True
