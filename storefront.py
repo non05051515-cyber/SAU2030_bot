@@ -1355,6 +1355,10 @@ def admin_category_detail(api, cid, category_id):
     send(api, cid, '📁 <b>' + esc(title) + '</b>\n\nكل المنتجات داخل القسم:', kb(buttons + extra + [[btn('↩️ منتجاتي', 'admin:myproducts')]]))
 
 
+def _contains_arabic(text):
+    return any(('\u0600' <= ch <= '\u06ff') or ('\u0750' <= ch <= '\u077f') or ('\u08a0' <= ch <= '\u08ff') for ch in str(text or ''))
+
+
 def begin_add_direct_product(api, cid):
     """Add one standalone product directly to the Products page."""
     if cid != G['ADMIN_ID']:
@@ -1365,7 +1369,7 @@ def begin_add_direct_product(api, cid):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
                      (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
-    send(api, cid, '➕ <b>إضافة منتج مباشر</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي</b>:', 
+    send(api, cid, '➕ <b>إضافة منتج مباشر</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي أو الإنجليزي</b>:', 
          kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
@@ -1397,7 +1401,7 @@ def add_to_category(api, cid, category_id=None):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
                      (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
-    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي</b>:',
+    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي أو الإنجليزي</b>:',
          kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
@@ -1457,16 +1461,32 @@ def handle_admin_product(api, message):
         next_action = 'add_product_name'
         prompt = '3️⃣ أرسل <b>اسم المنتج 1 من ' + str(count) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
     elif action_name == 'add_product_name':
-        payload['current'] = {'name': raw[:100]}
+        entered_name = raw[:100]
+        if _contains_arabic(entered_name):
+            name_ar = entered_name
+            name_en = auto_translate(entered_name, 'en')[:100]
+            source_lang = 'ar'
+        else:
+            name_en = entered_name
+            name_ar = auto_translate(entered_name, 'ar')[:100]
+            source_lang = 'en'
+        payload['current'] = {'name': name_ar, 'name_en': name_en, 'source_lang': source_lang}
         next_action = 'add_product_desc'
-        prompt = '📝 أرسل <b>وصف المنتج</b> لـ <b>' + esc(payload['current']['name']) + '</b>. سيتم إنشاء الإنجليزية تلقائيًا.'
+        prompt = ('✅ تم التعرف على لغة الاسم تلقائيًا.\n'
+                  '🇸🇦 <b>' + esc(name_ar) + '</b>\n'
+                  '🇬🇧 <b>' + esc(name_en) + '</b>\n\n'
+                  '📝 أرسل <b>وصف المنتج</b> بالعربي أو الإنجليزي لـ <b>' + esc(entered_name) + '</b>.')
     elif action_name == 'add_product_desc':
-        payload['current']['description'] = raw[:1500]
-        payload['current']['description_html'] = description_message_html(message, raw[:1500])
-        payload['current']['name_en'] = auto_translate(payload['current']['name'], 'en')[:100]
-        payload['current']['description_en'] = auto_translate(payload['current']['description'], 'en')[:1500]
+        entered_desc = raw[:1500]
+        if _contains_arabic(entered_desc):
+            payload['current']['description'] = entered_desc
+            payload['current']['description_en'] = auto_translate(entered_desc, 'en')[:1500]
+        else:
+            payload['current']['description_en'] = entered_desc
+            payload['current']['description'] = auto_translate(entered_desc, 'ar')[:1500]
+        payload['current']['description_html'] = description_message_html(message, payload['current']['description'])
         next_action = 'add_product_price'
-        prompt = '✅ تم إنشاء النسخة الإنجليزية تلقائيًا.\n\n💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
+        prompt = '✅ تم التعرف على اللغة وإنشاء النسخة الأخرى تلقائيًا.\n\n💵 أرسل <b>السعر بالدولار USD</b>.\nمثال: <code>5.36</code>'
     elif action_name == 'add_product_price':
         normalized = raw.replace('$','').strip().translate(str.maketrans('٠١٢٣٤٥٦٧٨٩٫', '0123456789.')).replace(',', '.')
         try:
@@ -5203,7 +5223,7 @@ def add_to_category(api, cid, category_id=None):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',
                      (cid, 'add_product_name', json.dumps(payload, ensure_ascii=False)))
-    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي</b>:',
+    send(api, cid, '➕ إضافة منتج داخل <b>' + esc(payload['category_name']) + '</b>\n\nأرسل اسم المنتج الجديد <b>بالعربي أو الإنجليزي</b>:',
          kb([[btn('❌ إلغاء', 'admin:cancelproduct')]]))
 
 
