@@ -3669,12 +3669,20 @@ def receipt(api, message):
         except Exception:
             users = []
         ok = failed = 0
+        # Telegram's free bulk-broadcast limit is about 30 messages/second.
+        # Stay below it to avoid 429 rate-limit errors without paid broadcasts.
+        broadcast_interval = 1.0 / 25.0
+        last_broadcast_send = 0.0
         for user_id in users:
             if user_id == cid:
                 continue
+            elapsed = time.monotonic() - last_broadcast_send
+            if elapsed < broadcast_interval:
+                time.sleep(broadcast_interval - elapsed)
             try:
                 result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
                                   message_id=message['message_id'])
+                last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
                     with db() as conn:
@@ -4788,12 +4796,20 @@ def receipt(api, message):
         except Exception:
             users = []
         ok = failed = 0
+        # Telegram's free bulk-broadcast limit is about 30 messages/second.
+        # Stay below it to avoid 429 rate-limit errors without paid broadcasts.
+        broadcast_interval = 1.0 / 25.0
+        last_broadcast_send = 0.0
         for user_id in users:
             if user_id == cid:
                 continue
+            elapsed = time.monotonic() - last_broadcast_send
+            if elapsed < broadcast_interval:
+                time.sleep(broadcast_interval - elapsed)
             try:
                 result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
                                   message_id=message['message_id'])
+                last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
                 else:
@@ -7587,12 +7603,20 @@ def receipt(api, message):
         except Exception:
             users = []
         ok = failed = 0
+        # Telegram's free bulk-broadcast limit is about 30 messages/second.
+        # Stay below it to avoid 429 rate-limit errors without paid broadcasts.
+        broadcast_interval = 1.0 / 25.0
+        last_broadcast_send = 0.0
         for user_id in users:
             if user_id == cid:
                 continue
+            elapsed = time.monotonic() - last_broadcast_send
+            if elapsed < broadcast_interval:
+                time.sleep(broadcast_interval - elapsed)
             try:
                 result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
                                   message_id=message['message_id'])
+                last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
                     with db() as conn:
@@ -8691,12 +8715,20 @@ def receipt(api, message):
         except Exception:
             users = []
         ok = failed = 0
+        # Telegram's free bulk-broadcast limit is about 30 messages/second.
+        # Stay below it to avoid 429 rate-limit errors without paid broadcasts.
+        broadcast_interval = 1.0 / 25.0
+        last_broadcast_send = 0.0
         for user_id in users:
             if user_id == cid:
                 continue
+            elapsed = time.monotonic() - last_broadcast_send
+            if elapsed < broadcast_interval:
+                time.sleep(broadcast_interval - elapsed)
             try:
                 result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
                                   message_id=message['message_id'])
+                last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
                 else:
