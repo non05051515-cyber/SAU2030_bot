@@ -100,7 +100,7 @@ def page(s, api, cid, pid):
     text += '\n' + balance_icon + f' رصيدك: {balance_usd:.2f} USD\n\n' + s.product_description_html(pid,cid)
     if s.can_order(pid):
         unit = s.amount(pid,'SAR')
-        text += f'\n\n🛍 الكمية المختارة: {qty}\n💰 الإجمالي قبل الخصم: {unit*qty:.2f} ر.س\nاختر الكمية للانتقال إلى الدفع.'
+        text += f'\n\n🛍 الكمية المختارة: {qty}\nاختر الكمية للانتقال إلى الدفع.'
     else:
         text += '\n\n🔴 الطلب غير متاح حاليًا.'
     s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.kb(rows),pid=pid)
