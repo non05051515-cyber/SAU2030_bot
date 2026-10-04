@@ -9,6 +9,7 @@ import json
 import unicodedata
 
 BROADCAST_PENDING = set()
+BROADCAST_BUTTON = {}  # admin cid -> optional inline button config for next broadcast
 import os
 import sqlite3
 import time
@@ -3636,10 +3637,61 @@ def receipt_request(api, cid, pid, method):
     send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع هنا. ستصل للإدارة للمراجعة.', '📸 Send your payment receipt photo here. It will be sent to the administrator for review.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
 
 
+def broadcast_button_action(api, cid, prefix, arg):
+    if cid != G.get('ADMIN_ID'):
+        return False
+    if prefix != 'broadcastbtn':
+        return False
+    if arg == 'skip':
+        BROADCAST_BUTTON.pop(cid, None)
+        BROADCAST_PENDING.add(cid)
+        send(api, cid, '📨 أرسل الآن الرسالة الجماعية. سيتم إرسالها <b>بدون زر</b>.', kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        return True
+    if arg == 'add':
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'broadcast_button_label', ''))
+        send(api, cid, '🟢 أرسل <b>اسم الزر</b> مع الأيقونة التي تريدها.\nمثال: <code>🛒 الذهاب للمتجر</code>', kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        return True
+    return False
+
+
+def handle_broadcast_button_setup(api, message):
+    cid = message.get('chat', {}).get('id')
+    if cid != G.get('ADMIN_ID'):
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT action,value FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,)).fetchone()
+    if not row:
+        return False
+    raw = (message.get('text') or '').strip()
+    if not raw or raw.startswith('/'):
+        return False
+    action, value = row
+    if action == 'broadcast_button_label':
+        BROADCAST_BUTTON[cid] = {'text': raw[:64]}
+        with db() as conn:
+            conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'broadcast_button_url', ''))
+        send(api, cid, '🔗 الآن أرسل رابط الزر، مثل رابط البوت أو المتجر.\nمثال: <code>https://t.me/YourBot</code>', kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        return True
+    if action == 'broadcast_button_url':
+        if not re.match(r'^https?://', raw, re.I):
+            send(api, cid, '⚠️ أرسل رابطًا صحيحًا يبدأ بـ <code>https://</code>')
+            return True
+        BROADCAST_BUTTON.setdefault(cid, {})['url'] = raw
+        with db() as conn:
+            conn.execute("DELETE FROM admin_state WHERE cid=?", (cid,))
+        BROADCAST_PENDING.add(cid)
+        send(api, cid, '✅ تم تجهيز الزر: <b>' + esc(BROADCAST_BUTTON[cid]['text']) + '</b>\n\n📨 أرسل الآن الرسالة الجماعية، وسيظهر الزر الأخضر أسفلها.', kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+        return True
+    return False
+
+
 def receipt(api, message):
     if payment_methods.message(sys.modules[__name__], api, message):
         return True
     cid = message['chat']['id']
+    if handle_broadcast_button_setup(api, message):
+        return True
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
@@ -3680,8 +3732,14 @@ def receipt(api, message):
             if elapsed < broadcast_interval:
                 time.sleep(broadcast_interval - elapsed)
             try:
-                result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                  message_id=message['message_id'])
+                button_cfg = BROADCAST_BUTTON.get(cid)
+                reply_markup = None
+                if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
+                    reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
+                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
+                if reply_markup:
+                    kwargs['reply_markup'] = reply_markup
+                result = api.call('copyMessage', **kwargs)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -3698,6 +3756,7 @@ def receipt(api, message):
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, now_saudi()))
         BROADCAST_PENDING.discard(cid)
+        BROADCAST_BUTTON.pop(cid, None)
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
@@ -3846,6 +3905,8 @@ def action(api, cid, value):
         return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
+    if broadcast_button_action(api, cid, prefix, arg):
+        return
     if prefix in ('home', 'enter_store'):
         reset_navigation_state(cid)
         home(api, cid)
@@ -3890,11 +3951,16 @@ def action(api, cid, value):
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
-            BROADCAST_PENDING.add(cid)
-            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
-                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+            BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            send(api, cid, '📢 <b>إرسال رسالة جماعية</b>\n\nهل تريد إضافة زر أخضر أسفل الرسالة؟',
+                 kb([[btn('🟢 إضافة زر', 'broadcastbtn:add', style='success')],
+                     [btn('➡️ بدون زر', 'broadcastbtn:skip')],
+                     [btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
         elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
@@ -4769,6 +4835,8 @@ def receipt(api, message):
     if payment_methods.message(sys.modules[__name__], api, message):
         return True
     cid = message['chat']['id']
+    if handle_broadcast_button_setup(api, message):
+        return True
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
@@ -4807,8 +4875,14 @@ def receipt(api, message):
             if elapsed < broadcast_interval:
                 time.sleep(broadcast_interval - elapsed)
             try:
-                result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                  message_id=message['message_id'])
+                button_cfg = BROADCAST_BUTTON.get(cid)
+                reply_markup = None
+                if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
+                    reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
+                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
+                if reply_markup:
+                    kwargs['reply_markup'] = reply_markup
+                result = api.call('copyMessage', **kwargs)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -4817,6 +4891,7 @@ def receipt(api, message):
             except Exception:
                 failed += 1
         BROADCAST_PENDING.discard(cid)
+        BROADCAST_BUTTON.pop(cid, None)
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
@@ -4965,6 +5040,8 @@ def action(api, cid, value):
         return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
+    if broadcast_button_action(api, cid, prefix, arg):
+        return
     if prefix in ('home', 'enter_store'):
         reset_navigation_state(cid)
         home(api, cid)
@@ -5006,11 +5083,16 @@ def action(api, cid, value):
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
-            BROADCAST_PENDING.add(cid)
-            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
-                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+            BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            send(api, cid, '📢 <b>إرسال رسالة جماعية</b>\n\nهل تريد إضافة زر أخضر أسفل الرسالة؟',
+                 kb([[btn('🟢 إضافة زر', 'broadcastbtn:add', style='success')],
+                     [btn('➡️ بدون زر', 'broadcastbtn:skip')],
+                     [btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
         elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'orderdeliver' and cid == G['ADMIN_ID']:
@@ -7574,6 +7656,8 @@ def receipt(api, message):
     if payment_methods.message(sys.modules[__name__], api, message):
         return True
     cid = message['chat']['id']
+    if handle_broadcast_button_setup(api, message):
+        return True
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
@@ -7614,8 +7698,14 @@ def receipt(api, message):
             if elapsed < broadcast_interval:
                 time.sleep(broadcast_interval - elapsed)
             try:
-                result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                  message_id=message['message_id'])
+                button_cfg = BROADCAST_BUTTON.get(cid)
+                reply_markup = None
+                if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
+                    reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
+                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
+                if reply_markup:
+                    kwargs['reply_markup'] = reply_markup
+                result = api.call('copyMessage', **kwargs)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -7632,6 +7722,7 @@ def receipt(api, message):
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO broadcast_stats(id,sent,failed,created_at) VALUES (1,?,?,?)', (ok, failed, now_saudi()))
         BROADCAST_PENDING.discard(cid)
+        BROADCAST_BUTTON.pop(cid, None)
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
@@ -7780,6 +7871,8 @@ def action(api, cid, value):
         return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
+    if broadcast_button_action(api, cid, prefix, arg):
+        return
     if prefix in ('home', 'enter_store'):
         reset_navigation_state(cid)
         home(api, cid)
@@ -7823,11 +7916,16 @@ def action(api, cid, value):
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
-            BROADCAST_PENDING.add(cid)
-            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
-                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+            BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            send(api, cid, '📢 <b>إرسال رسالة جماعية</b>\n\nهل تريد إضافة زر أخضر أسفل الرسالة؟',
+                 kb([[btn('🟢 إضافة زر', 'broadcastbtn:add', style='success')],
+                     [btn('➡️ بدون زر', 'broadcastbtn:skip')],
+                     [btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
         elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'payreview' and cid == G['ADMIN_ID']:
@@ -8688,6 +8786,8 @@ def receipt(api, message):
     if payment_methods.message(sys.modules[__name__], api, message):
         return True
     cid = message['chat']['id']
+    if handle_broadcast_button_setup(api, message):
+        return True
     if discounts.message(sys.modules[__name__], api, message):
         return True
     if handle_admin_photo(api, message):
@@ -8726,8 +8826,14 @@ def receipt(api, message):
             if elapsed < broadcast_interval:
                 time.sleep(broadcast_interval - elapsed)
             try:
-                result = api.call('copyMessage', chat_id=user_id, from_chat_id=cid,
-                                  message_id=message['message_id'])
+                button_cfg = BROADCAST_BUTTON.get(cid)
+                reply_markup = None
+                if button_cfg and button_cfg.get('text') and button_cfg.get('url'):
+                    reply_markup = {'inline_keyboard': [[{'text': button_cfg['text'], 'url': button_cfg['url'], 'style': 'success'}]]}
+                kwargs = {'chat_id': user_id, 'from_chat_id': cid, 'message_id': message['message_id']}
+                if reply_markup:
+                    kwargs['reply_markup'] = reply_markup
+                result = api.call('copyMessage', **kwargs)
                 last_broadcast_send = time.monotonic()
                 if result:
                     ok += 1
@@ -8736,6 +8842,7 @@ def receipt(api, message):
             except Exception:
                 failed += 1
         BROADCAST_PENDING.discard(cid)
+        BROADCAST_BUTTON.pop(cid, None)
         send(api, cid, f'✅ <b>تم الإرسال</b>\n\nوصلت الرسالة إلى: <b>{ok}</b>\nتعذر الإرسال إلى: <b>{failed}</b>',
              kb([[btn('↩️ لوحة الإدارة', 'admin')]]))
         return True
@@ -8884,6 +8991,8 @@ def action(api, cid, value):
         return
     prefix, _, arg = value.partition(':')
     arg = LEGACY.get(arg, arg)
+    if broadcast_button_action(api, cid, prefix, arg):
+        return
     if prefix in ('home', 'enter_store'):
         reset_navigation_state(cid)
         home(api, cid)
@@ -8925,11 +9034,16 @@ def action(api, cid, value):
             with db() as conn: conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_panel(api, cid)
         elif arg == 'broadcast' and cid == G['ADMIN_ID']:
-            BROADCAST_PENDING.add(cid)
-            send(api, cid, '📢 <b>إرسال رسالة للجميع</b>\n\nأرسل الآن الرسالة التي تريد إرسالها لجميع مستخدمي البوت.\nيمكنك إرسال نص أو صورة مع تعليق.',
-                 kb([[btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
+            BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            send(api, cid, '📢 <b>إرسال رسالة جماعية</b>\n\nهل تريد إضافة زر أخضر أسفل الرسالة؟',
+                 kb([[btn('🟢 إضافة زر', 'broadcastbtn:add', style='success')],
+                     [btn('➡️ بدون زر', 'broadcastbtn:skip')],
+                     [btn('❌ إلغاء', 'admin:broadcast_cancel')]]))
         elif arg == 'broadcast_cancel' and cid == G['ADMIN_ID']:
             BROADCAST_PENDING.discard(cid)
+            BROADCAST_BUTTON.pop(cid, None)
+            with db() as conn: conn.execute("DELETE FROM admin_state WHERE cid=? AND action LIKE 'broadcast_button_%'", (cid,))
             admin_panel(api, cid)
         else: admin_panel(api, cid)
     elif prefix == 'orderdeliver' and cid == G['ADMIN_ID']:
