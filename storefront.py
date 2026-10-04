@@ -2245,8 +2245,21 @@ def admin_icon_categories(api, cid):
                            'seticon:' + pid, ui_icon(pid) or product.get('custom_emoji_id')))
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        product_categories = conn.execute("SELECT DISTINCT category_id FROM admin_products WHERE COALESCE(category_id,'')<>'' ORDER BY category_id").fetchall()
+    seen_categories = {str(pid) for pid in G['PRODUCTS']}
     for category_id, category_name in custom_categories:
+        category_id = str(category_id)
+        if category_id in seen_categories:
+            continue
+        seen_categories.add(category_id)
         buttons.append(btn(category_name, 'seticon:' + category_id, ui_icon(category_id)))
+    for (category_id,) in product_categories:
+        category_id = str(category_id)
+        if category_id in seen_categories:
+            continue
+        seen_categories.add(category_id)
+        label = category_id.replace('_', ' ').strip() or category_id
+        buttons.append(btn(label, 'seticon:' + category_id, ui_icon(category_id)))
     rows = [[button] for button in buttons]
     send(api, cid, '📁 <b>أسماء الأقسام</b>\n\nاختر القسم الذي تريد إضافة أيقونة متحركة له:',
          kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
@@ -5992,8 +6005,21 @@ def admin_icon_categories(api, cid):
                            'seticon:' + pid, ui_icon(pid) or product.get('custom_emoji_id')))
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        product_categories = conn.execute("SELECT DISTINCT category_id FROM admin_products WHERE COALESCE(category_id,'')<>'' ORDER BY category_id").fetchall()
+    seen_categories = {str(pid) for pid in G['PRODUCTS']}
     for category_id, category_name in custom_categories:
+        category_id = str(category_id)
+        if category_id in seen_categories:
+            continue
+        seen_categories.add(category_id)
         buttons.append(btn(category_name, 'seticon:' + category_id, ui_icon(category_id)))
+    for (category_id,) in product_categories:
+        category_id = str(category_id)
+        if category_id in seen_categories:
+            continue
+        seen_categories.add(category_id)
+        label = category_id.replace('_', ' ').strip() or category_id
+        buttons.append(btn(label, 'seticon:' + category_id, ui_icon(category_id)))
     rows = [[button] for button in buttons]
     send(api, cid, '📁 <b>أسماء الأقسام</b>\n\nاختر القسم الذي تريد إضافة أيقونة متحركة له:',
          kb(rows + [[btn('↩️ رجوع', 'admin:icons')]]))
