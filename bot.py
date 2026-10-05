@@ -327,5 +327,8 @@ payment_execution.install(storefront, globals())
 
 import pandora_stock_notifications
 
+import product_announcements
+product_announcements.install(globals())
+
 if __name__=='__main__':main()
 
