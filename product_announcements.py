@@ -42,7 +42,8 @@ def card(data):
     lines = [('product', s.name(pid, s.G['ADMIN_ID']))]
     if data.get('added') is not None:
         lines.append(('added', 'Added: ' + str(data['added'])))
-    lines += [('stock', 'Current stock: ' + (str(st['quantity']) if st['quantity'] is not None else 'Available')),
+    quantity = data.get('stock', st['quantity'])
+    lines += [('stock', 'Current stock: ' + (str(quantity) if quantity is not None else 'Available')),
               ('price', 'Price: ' + str(s.price(0, pid, 'USD')))]
     text, entities = '', []
     units = lambda value: len(value.encode('utf-16-le')) // 2
@@ -70,7 +71,8 @@ def preview(api, cid, data):
     return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر:', s.kb([
         [s.btn('✅ نشر في القناة', 'ad:send:channel:' + token, style='success')],
         [s.btn('✅ نشر في المجموعة', 'ad:send:group:' + token, style='success')],
-        [s.btn('✏️ الكمية المضافة', 'ad:added')],
+        [s.btn('✏️ الكمية المضافة (Added)', 'ad:added')],
+        [s.btn('📦 تعديل Current stock', 'ad:stock')],
         [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
         [s.btn('❌ إلغاء', 'ad:home')]]))
 
@@ -114,6 +116,14 @@ def install(namespace):
             save(cid, data, 'added')
             return s.send(api, cid, 'أرسل الكمية المضافة (Added)، مثل 20. هذا الرقم للإعلان فقط ولا يغير مخزون المنتج.', s.kb([
                 [s.btn('بدون سطر الكمية المضافة', 'ad:skip')], [s.btn('❌ إلغاء', 'ad:home')]]))
+        if verb == 'stock' and data.get('pid'):
+            save(cid, data, 'stock')
+            return s.send(api, cid, '📦 أرسل عدد المخزون الذي تريد عرضه في Current stock. التعديل للإعلان فقط ولا يغير مخزون المتجر.', s.kb([
+                [s.btn('🔄 استخدام مخزون المنتج تلقائيًا', 'ad:stock_auto')],
+                [s.btn('↩️ رجوع للمعاينة', 'ad:preview')]]))
+        if verb == 'stock_auto' and data.get('pid'):
+            data.pop('stock', None)
+            return preview(api, cid, data)
         if verb in ('skip', 'preview') and data.get('pid'):
             if verb == 'skip': data['added'] = None
             return preview(api, cid, data)
@@ -148,14 +158,14 @@ def install(namespace):
             clear(cid)
             return old_input(api, message)
         _, data, status = current
-        if status == 'added':
+        if status in ('added', 'stock'):
             try:
                 added = int(text)
                 if not 0 <= added <= 1000000000: raise ValueError()
             except ValueError:
-                s.send(api, cid, 'أرسل عددًا صحيحًا موجبًا أو صفرًا، أو اضغط «بدون سطر الكمية المضافة».')
+                s.send(api, cid, 'أرسل عددًا صحيحًا موجبًا أو صفرًا.' if status == 'stock' else 'أرسل عددًا صحيحًا موجبًا أو صفرًا، أو اضغط «بدون سطر الكمية المضافة».')
                 return True
-            data['added'] = added
+            data[status] = added
             preview(api, cid, data)
             return True
         if status.startswith('icon:'):

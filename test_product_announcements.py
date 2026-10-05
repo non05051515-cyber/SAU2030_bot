@@ -71,6 +71,27 @@ class AnnouncementTests(unittest.TestCase):
         self.bot.action(self.api, self.cid, 'ad:send:group:' + token)
         self.assertFalse(any(d.get('chat_id') == '@SAU2030_k' for _,d in self.api.calls))
 
+    def test_stock_edit_publish_and_restore_automatic(self):
+        self.select()
+        self.bot.action(self.api, self.cid, 'ad:stock')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': '-2'})
+        self.assertEqual(self.ad.draft(self.cid)[2], 'stock')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': '18'})
+        data = self.ad.draft(self.cid)[1]
+        self.assertIn('Current stock: 18', self.ad.card(data)['text'])
+        self.assertEqual(data['added'], 20)
+        self.assertEqual(self.ad.catalog.state(self.pid)['quantity'], 29)
+        token = self.ad.draft(self.cid)[0]
+        self.bot.action(self.api, self.cid, 'ad:send:channel:' + token)
+        posted = [d for _,d in self.api.calls if d.get('chat_id') == self.ad.catalog.CHANNEL]
+        self.assertIn('Current stock: 18', posted[-1]['text'])
+        self.select()
+        self.bot.action(self.api, self.cid, 'ad:stock')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': '0'})
+        self.assertIn('Current stock: 0', self.ad.card(self.ad.draft(self.cid)[1])['text'])
+        self.bot.action(self.api, self.cid, 'ad:stock_auto')
+        self.assertIn('Current stock: 29', self.ad.card(self.ad.draft(self.cid)[1])['text'])
+
     def test_icon_persistence_skip_invalid_and_cancel(self):
         self.select()
         self.bot.action(self.api, self.cid, 'ad:icon:stock')
