@@ -133,9 +133,9 @@ def handle_chat_message(api, message):
     cid = message.get("chat", {}).get("id")
     if cid == s.G.get('ADMIN_ID'):
         with s.db() as conn:
-            editing_price = conn.execute("SELECT 1 FROM admin_state WHERE cid=? AND action='price'", (cid,)).fetchone()
+            editing_price = conn.execute("SELECT 1 FROM admin_state WHERE cid=? AND action IN ('price','stock_quantity')", (cid,)).fetchone()
         if editing_price:
-            return False  # Let the store save the administrator's new price.
+            return False  # Let the store save the administrator's price or stock quantity.
     if not cid or not is_active(cid):
         return False
     text = (message.get("text") or "").strip()

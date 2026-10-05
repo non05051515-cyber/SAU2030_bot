@@ -470,6 +470,17 @@ def install(namespace):
         if cid == admin_id and (value in ('admin:prices', 'admin:stock', 'admin:info', 'admin:editname', 'admin:editdesc', 'admin:photos', 'admin:supplierapi') or value.startswith(('pricecat:', 'pricepick:', 'priceedit:', 'stockcat:', 'stockpick:', 'stockset:', 'stockqty:', 'suppliercat:', 'supplierpick:', 'supplierset:', 'suppliertoggle:', 'suppliertest:', 'supplierdelete:', 'supplierpandora:', 'txtcat:', 'txtpick:', 'txtedit:', 'photocat:', 'photopick:', 'photodel:'))):
             PENDING.discard(cid)
             AUTO_AD_STATE.pop(cid, None)
+        if cid == admin_id and value.startswith('stockqty:'):
+            pid = sg['LEGACY'].get(value.split(':', 1)[1], value.split(':', 1)[1])
+            if pid not in sg['VARIANTS'] and pid not in sg['G']['PRODUCTS'] and not sg['custom_product'](pid):
+                return sg['send'](api, cid, 'المنتج غير موجود. اختر منتجًا آخر.')
+            with sg['db']() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'stock_quantity', pid))
+            return sg['send'](api, cid, '<b>' + sg['esc'](sg['name'](pid, cid)) + '</b>\n\n📦 الكمية الحالية: <b>' + sg['esc'](sg['product_stock'](pid)) + '</b>\n\nأرسل الكمية الجديدة كرقم، مثال: <code>4</code>.',
+                              sg['kb']([[sg['btn']('❌ إلغاء', 'stockpick:' + pid)]]))
+        if cid == admin_id and (value == 'admin' or value.startswith(('stockpick:', 'stockset:'))):
+            with sg['db']() as conn:
+                conn.execute("DELETE FROM admin_state WHERE cid=? AND action='stock_quantity'", (cid,))
         if cid == admin_id and value == 'admin:activity_reset':
             return sg['send'](api, cid, '⚠️ هل تريد حذف سجل نشاط العملاء وتصفير عداده؟ لن تتأثر الطلبات أو حسابات العملاء.', sg['kb']([[sg['btn']('✅ تأكيد التصفير', 'admin:activity_reset_confirm', style='danger')], [sg['btn']('❌ إلغاء', 'admin:activity')]]))
         if cid == admin_id and value == 'admin:activity_reset_confirm':
