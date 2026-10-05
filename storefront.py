@@ -8859,12 +8859,24 @@ def payments(api, cid, pid):
     if not can_order(pid):
         send(api, cid, tr(cid, 'الطلب غير متاح لهذا الخيار حاليًا. تواصل مع الدعم: ', 'Ordering is unavailable for this option. Contact support: ') + SUPPORT, kb([nav(cid, back(pid))]))
         return
+    methods = [
+        btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'), style='success'),
+        btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'), style='success'),
+        btn('Bybit / USDT', 'paybybit:' + pid, ui_icon('pay_bybit'), style='success'),
+    ]
+    for method in payment_methods.methods(sys.modules[__name__], True):
+        label = method[1].strip(' 🏦💵💴💶💷💰💳🏧️') or method[1]
+        methods.append(btn(label, f'custompay:{method[0]}:{pid}',
+                           ui_icon('pay_custom_' + str(method[0])), style='success'))
+    rows = [methods[i:i + 2] for i in range(0, len(methods), 2)]
+    coupon_row = [btn(tr(cid, 'كود خصم', 'Discount code'), 'coupon:' + pid, ui_icon('ui_coupon'))]
+    if checkout_totals(cid, pid)[3]:
+        coupon_row.append(btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid))
+    rows.extend([coupon_row, nav(cid, back(pid))])
     warning = tr(cid, 'يتم تنفيذ الطلب بعد مراجعة الدفع وتأكيد التوفر، ثم إرسال بيانات المنتج إليك.', 'Your order is fulfilled after payment review and availability confirmation, then the product details are sent to you.')
-    send(api, cid, tr(cid, '💳 <b>اختر طريقة الدفع</b>\n\n', '💳 <b>Choose payment method</b>\n\n') + summary(cid, pid) + '\n\n' + warning,
-         kb([[btn(tr(cid, '🎟 كود خصم', '🎟 Discount code'), 'coupon:' + pid, style='primary'), btn(tr(cid, 'إزالة الخصم', 'Remove discount'), 'couponremove:' + pid)],
-             [btn(tr(cid, 'المحفظة', 'Wallet'), 'paywallet:' + pid, ui_icon('pay_wallet'))],
-             [btn('Crypto Pay', 'paycrypto:' + pid, ui_icon('pay_cryptopay'))],
-             [btn('USDT — Bybit', 'paybybit:' + pid, ui_icon('pay_bybit'))]] + payment_methods.rows(sys.modules[__name__], pid) + [nav(cid, back(pid))]))
+    text = tr(cid, '💳 <b>إتمام الطلب</b>\n\n', '💳 <b>Checkout</b>\n\n') + summary(cid, pid)
+    text += '\n\n' + warning + '\n\n' + tr(cid, '<b>اختر طريقة الدفع:</b>', '<b>Choose a payment method:</b>')
+    send(api, cid, text, kb(rows))
 
 
 def payment(api, cid, pid, method):
