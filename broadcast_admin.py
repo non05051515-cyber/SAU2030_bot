@@ -44,6 +44,24 @@ def _users():
         return []
 
 
+def advertising_db():
+    import storefront as store
+    conn = store.db()
+    conn.execute('CREATE TABLE IF NOT EXISTS advertising_preferences (cid INTEGER PRIMARY KEY, enabled INTEGER NOT NULL)')
+    return conn
+
+
+def ads_enabled(cid):
+    with advertising_db() as conn:
+        row = conn.execute('SELECT enabled FROM advertising_preferences WHERE cid=?', (cid,)).fetchone()
+    return not row or bool(row[0])
+
+
+def set_ads_enabled(cid, enabled):
+    with advertising_db() as conn:
+        conn.execute('INSERT OR REPLACE INTO advertising_preferences VALUES (?,?)', (cid, int(enabled)))
+
+
 def install(namespace):
     admin_id = namespace['ADMIN_ID']
     old_action = namespace['action']
@@ -75,6 +93,7 @@ def install(namespace):
             prepare_broadcast_tables(conn)
             departed = {r[0] for r in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
             recipients -= departed
+            recipients = {uid for uid in recipients if ads_enabled(uid)}
             created = conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs(token,pid,photo,status,template) VALUES (?,?,NULL,"queued",?)',
                                    (token, pid, json.dumps({'native_announcement': payload}, ensure_ascii=False))).rowcount
             if created:
@@ -187,6 +206,8 @@ def install(namespace):
         """Send the admin-authored ad text, with a direct button to the selected product."""
         if isinstance(template, dict) and isinstance(template.get('native_announcement'), dict):
             payload = template['native_announcement']
+            if 'localized' in payload:
+                payload = payload['localized'].get(sg['prefs'](cid)[0], payload['localized']['ar'])
             return api.call('sendMessage', chat_id=cid, text=payload['text'],
                             entities=payload.get('entities', []), reply_markup=payload['reply_markup'])
         tpl = merged_template(template)
@@ -273,6 +294,10 @@ def install(namespace):
             # One request at a time, at most ten per second, in batches of 100.
             # A flood response pauses the whole queue and leaves this user pending.
             for user_id in recipients:
+                if not ads_enabled(user_id):
+                    with sg['db']() as conn:
+                        conn.execute('UPDATE product_broadcast_recipients SET status="skipped" WHERE token=? AND cid=?', (token, user_id))
+                    continue
                 with sg['db']() as conn:
                     departed = conn.execute('SELECT departed FROM user_delivery_status WHERE cid=?', (user_id,)).fetchone()
                     if user_id <= 0 or (departed and departed[0]):
@@ -369,7 +394,7 @@ def install(namespace):
                 conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs(token,pid,photo,status,template) VALUES (?,?,?,"queued",?)',
                              (token, pid, pending.get('photo'), json.dumps(merged_template(pending.get('template')), ensure_ascii=False)))
                 conn.executemany('INSERT OR IGNORE INTO product_broadcast_recipients(token,cid) VALUES (?,?)',
-                                 [(token, user_id) for user_id in set(_users()) - {admin_id}])
+                                 [(token, user_id) for user_id in set(_users()) - {admin_id} if user_id > 0 and ads_enabled(user_id)])
                 conn.execute('DELETE FROM product_broadcast_drafts WHERE cid=? AND token=?', (cid, token))
             result = sg['send'](api, cid, '⏳ بدأ إرسال المنتج للمستخدمين. سأرسل لك عدد من وصلتهم الرسالة عند الانتهاء.')
             tick_product_broadcast(api)
@@ -670,10 +695,12 @@ def install(namespace):
                                     (cutoff,)
                                 ).fetchall()
                         target_users = {row[0] for row in rows}
-                    users = [u for u in all_users if u in target_users and u not in excluded]
+                    users = [u for u in all_users if u > 0 and u in target_users and u not in excluded and ads_enabled(u)]
                     skipped = len([u for u in all_users if u in target_users]) - len(users)
 
                     def deliver_message(user_id):
+                        if not ads_enabled(user_id):
+                            return False
                         try:
                             selected = namespace['LANGS'].get(str(user_id), 'ar')
                             source_id = english_id if selected == 'en' else arabic_id

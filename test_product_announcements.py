@@ -41,8 +41,8 @@ class AnnouncementTests(unittest.TestCase):
             c.execute('INSERT INTO pandora_notification_icons VALUES (?,?)', ('buy', '654321'))
         self.select()
         card = next(d for _, d in self.api.calls if 'entities' in d)
-        self.assertIn('Added: 20', card['text'])
-        self.assertIn('Current stock: 29', card['text'])
+        self.assertIn('الكمية المضافة: 20', card['text'])
+        self.assertIn('المخزون الحالي: 29', card['text'])
         self.assertNotIn('parse_mode', card)
         for e in card['entities']:
             raw = card['text'].encode('utf-16-le')[e['offset']*2:(e['offset']+e['length'])*2]
@@ -70,6 +70,45 @@ class AnnouncementTests(unittest.TestCase):
         with self.s.db() as c: c.execute('UPDATE admin_products SET stock=0 WHERE pid=?', (self.pid,))
         self.bot.action(self.api, self.cid, 'ad:send:group:' + token)
         self.assertFalse(any(d.get('chat_id') == '@SAU2030_k' for _,d in self.api.calls))
+
+    def test_localized_stop_ads_persists_and_filters_queued_messages(self):
+        import broadcast_admin as broadcast
+        with self.s.db() as c:
+            c.executemany('INSERT OR REPLACE INTO preferences(cid,lang,currency) VALUES (?,?,?)', [(42,'ar','USD'),(43,'en','USD')])
+        payload = {'localized': {lang: self.ad.card({'pid':self.pid,'added':20,'stock':18}, lang, unsubscribe=True) for lang in ('ar','en')}}
+        for lang, text, buy, stop in [('ar','المخزون الحالي: 18','شراء الآن','إيقاف الإعلانات'),('en','Current stock: 18','Buy now','Stop ads')]:
+            card = payload['localized'][lang]
+            self.assertIn(text, card['text'])
+            row = card['reply_markup']['inline_keyboard'][0]
+            self.assertEqual(len(row), 2)
+            self.assertIn(buy,row[0]['text'])
+            self.assertEqual(row[1]['text'], stop)
+            for e in card['entities']:
+                self.assertTrue(card['text'].encode('utf-16-le')[e['offset']*2:(e['offset']+e['length'])*2].decode('utf-16-le'))
+        with patch.object(broadcast, '_users', return_value=[42,43]):
+            self.bot.queue_product_announcement('localized', self.pid, payload)
+        broadcast.DELIVERY_WORKER(self.api)
+        for cid, lang in [(42,'ar'),(43,'en')]:
+            sent = [d for _,d in self.api.calls if d.get('chat_id') == cid][-1]
+            self.assertEqual(sent['text'],payload['localized'][lang]['text'])
+        with patch.object(broadcast, '_users', return_value=[42,43]):
+            self.bot.queue_product_announcement('pending_stop', self.pid, payload)
+        self.bot.action(self.api,42,'ads:stop')
+        self.bot.action(self.api,43,'ads:stop')
+        self.assertIn('Ads stopped',self.api.calls[-1][1]['text'])
+        self.assertFalse(broadcast.ads_enabled(42))
+        self.assertFalse(broadcast.ads_enabled(43))
+        self.api.calls.clear()
+        broadcast.DELIVERY_WORKER(self.api)
+        self.assertFalse(any(d.get('chat_id') in (42,43) for _,d in self.api.calls))
+        with patch.object(broadcast, '_users', return_value=[42,43]):
+            self.assertEqual(self.bot.queue_product_announcement('future_stop',self.pid,payload),0)
+        self.bot.action(self.api,42,'ads:resume')
+        self.assertTrue(broadcast.ads_enabled(42))
+        self.assertFalse(broadcast.ads_enabled(43))
+        # Orders and normal navigation remain accessible after opting out.
+        self.bot.action(self.api,43,'home')
+        self.assertTrue(any(d.get('chat_id')==43 for _,d in self.api.calls))
 
     def test_broadcast_flood_wait_and_batch_resume(self):
         import broadcast_admin as broadcast
@@ -123,6 +162,7 @@ class AnnouncementTests(unittest.TestCase):
         deliveries = [d for _,d in self.api.calls if d.get('chat_id') in (42, 43)]
         self.assertEqual(len(deliveries), 2)
         for delivery in deliveries:
+            expected = self.ad.card({'pid': self.pid, 'added': 20, 'stock': 18}, self.s.prefs(delivery['chat_id'])[0], unsubscribe=True)
             self.assertEqual({k:v for k,v in delivery.items() if k != 'chat_id'}, expected)
         self.assertEqual(self.ad.catalog.state(self.pid)['quantity'], 29)
 

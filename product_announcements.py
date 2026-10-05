@@ -3,6 +3,7 @@ import json
 import uuid
 import channel_catalog as catalog
 import storefront as s
+import broadcast_admin as broadcast
 
 ICONS = {'product': ('🛍', 'المنتج'), 'added': ('➕', 'الكمية المضافة'),
          'stock': ('📦', 'المخزون'), 'price': ('💵', 'السعر'), 'buy': ('🛒', 'زر الشراء')}
@@ -34,17 +35,22 @@ def clear(cid):
         c.execute('DELETE FROM product_ad_drafts WHERE cid=?', (cid,))
 
 
-def card(data):
+def card(data, language='en', unsubscribe=False):
     pid = data['pid']
     st = catalog.state(pid)
     with db() as c:
         icons = dict(c.execute('SELECT key,custom_emoji_id FROM pandora_notification_icons'))
-    lines = [('product', s.name(pid, s.G['ADMIN_ID']))]
+    en = language == 'en'
+    canonical = s.LEGACY.get(pid, pid)
+    variant = s.VARIANTS.get(canonical)
+    fallback = variant['name'][language] if variant else s.name(pid, s.G['ADMIN_ID'])
+    title = s.text_override(canonical, 'name', language, fallback)
+    lines = [('product', title)]
     if data.get('added') is not None:
-        lines.append(('added', 'Added: ' + str(data['added'])))
+        lines.append(('added', ('Added: ' if en else 'الكمية المضافة: ') + str(data['added'])))
     quantity = data.get('stock', st['quantity'])
-    lines += [('stock', 'Current stock: ' + (str(quantity) if quantity is not None else 'Available')),
-              ('price', 'Price: ' + str(s.price(0, pid, 'USD')))]
+    lines += [('stock', ('Current stock: ' if en else 'المخزون الحالي: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
+              ('price', ('Price: ' if en else 'السعر: ') + str(s.price(0, pid, 'USD')))]
     text, entities = '', []
     units = lambda value: len(value.encode('utf-16-le')) // 2
     for key, value in lines:
@@ -57,15 +63,19 @@ def card(data):
         if eid.isdecimal():
             entities.append({'type': 'custom_emoji', 'offset': offset, 'length': units(emoji), 'custom_emoji_id': eid})
         entities.append({'type': 'bold', 'offset': offset + units(emoji) + 1, 'length': units(str(value))})
-    button = {'text': '🛒 Buy now', 'url': catalog.link(pid), 'style': 'success'}
+    buy_text = 'Buy now' if en else 'شراء الآن'
+    button = {'text': '🛒 ' + buy_text, 'url': catalog.link(pid), 'style': 'success'}
     if str(icons.get('buy', '')).isdecimal():
-        button.update(text='Buy now', icon_custom_emoji_id=str(icons['buy']))
-    return {'text': text, 'entities': entities, 'reply_markup': {'inline_keyboard': [[button]]}}
+        button.update(text=buy_text, icon_custom_emoji_id=str(icons['buy']))
+    row = [button]
+    if unsubscribe:
+        row.append(s.btn('Stop ads' if en else 'إيقاف الإعلانات', 'ads:stop', style='primary'))
+    return {'text': text, 'entities': entities, 'reply_markup': {'inline_keyboard': [row]}}
 
 
 def preview(api, cid, data):
     token = save(cid, data)
-    if not api.call('sendMessage', chat_id=cid, **card(data)):
+    if not api.call('sendMessage', chat_id=cid, **card(data, s.prefs(cid)[0], unsubscribe=True)):
         return s.send(api, cid, 'تعذرت المعاينة. راجع إعداد الأيقونات وصلاحية البوت لاستخدامها.',
                       s.kb([[s.btn('🎨 الأيقونات المتحركة', 'ad:icons')], [s.btn('↩️ رجوع', 'ad:home')]]))
     return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر:', s.kb([
@@ -82,6 +92,16 @@ def install(namespace):
     old_action, old_input = namespace['action'], namespace['handle_admin_delivery']
 
     def action(api, cid, value):
+        if value in ('ads:stop', 'ads:resume'):
+            if cid <= 0:
+                return
+            enabled = value == 'ads:resume'
+            broadcast.set_ads_enabled(cid, enabled)
+            text = s.tr(cid, '✅ تم تفعيل الإعلانات من جديد.', '✅ Ads are enabled again.') if enabled else s.tr(cid,
+                '✅ تم إيقاف الإعلانات. ستستمر رسائل طلباتك ومشترياتك.',
+                '✅ Ads stopped. You will still receive order and purchase messages.')
+            rows = [] if enabled else [[s.btn(s.tr(cid, 'إعادة تفعيل الإعلانات', 'Enable ads again'), 'ads:resume')]]
+            return s.send(api, cid, text, s.kb(rows) if rows else None)
         if not value.startswith('ad:'):
             if cid == namespace['ADMIN_ID']:
                 clear(cid)
@@ -146,7 +166,8 @@ def install(namespace):
                 clear(cid)
                 return s.send(api, cid, 'المنتج لم يعد متوفرًا للنشر.')
             if parts[2] == 'bot':
-                count = namespace['queue_product_announcement'](parts[3], data['pid'], card(data))
+                payload = {'localized': {lang: card(data, lang, unsubscribe=True) for lang in ('ar', 'en')}}
+                count = namespace['queue_product_announcement'](parts[3], data['pid'], payload)
                 clear(cid)
                 return s.send(api, cid, f'⏳ تمت جدولة الإعلان للإرسال إلى {count} من مستخدمي البوت. سيصلك تقرير بالنتيجة بعد الانتهاء.',
                               s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))

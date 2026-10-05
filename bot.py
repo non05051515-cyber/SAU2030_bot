@@ -259,6 +259,8 @@ def main():
       if customer_inbox.action(a,c,data):continue
       if telegram_payments.action(a,c,data):continue
       storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
+      if data in ('ads:stop','ads:resume'):
+       action(a,c,data);continue
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
       elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
