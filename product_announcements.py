@@ -6,7 +6,8 @@ import storefront as s
 import broadcast_admin as broadcast
 
 ICONS = {'product': ('🛍', 'المنتج'), 'added': ('➕', 'الكمية المضافة'),
-         'stock': ('📦', 'المخزون'), 'price': ('💵', 'السعر'), 'buy': ('🛒', 'زر الشراء')}
+         'stock': ('📦', 'المخزون'), 'price': ('💵', 'السعر'), 'buy': ('🛒', 'زر الشراء'),
+         'stop_ads': ('🔕', 'زر إيقاف الإعلانات')}
 TARGETS = {'channel': catalog.CHANNEL, 'group': '@SAU2030_k'}
 
 
@@ -36,6 +37,8 @@ def clear(cid):
 
 
 def card(data, language='en', unsubscribe=False):
+    if data.get('language') in ('ar', 'en'):
+        language = data['language']
     pid = data['pid']
     st = catalog.state(pid)
     with db() as c:
@@ -69,7 +72,10 @@ def card(data, language='en', unsubscribe=False):
         button.update(text=buy_text, icon_custom_emoji_id=str(icons['buy']))
     row = [button]
     if unsubscribe:
-        row.append(s.btn('Stop ads' if en else 'إيقاف الإعلانات', 'ads:stop', style='primary'))
+        stop_button = s.btn('Stop ads' if en else 'إيقاف الإعلانات', 'ads:stop', style='primary')
+        if str(icons.get('stop_ads', '')).isdecimal():
+            stop_button['icon_custom_emoji_id'] = str(icons['stop_ads'])
+        row.append(stop_button)
     return {'text': text, 'entities': entities, 'reply_markup': {'inline_keyboard': [row]}}
 
 
@@ -84,6 +90,7 @@ def preview(api, cid, data):
         [s.btn('📨 إرسال لمستخدمي البوت', 'ad:send:bot:' + token, style='success')],
         [s.btn('✏️ الكمية المضافة (Added)', 'ad:added')],
         [s.btn('📦 تعديل Current stock', 'ad:stock')],
+        [s.btn('🌐 لغة الإعلان', 'ad:language')],
         [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
         [s.btn('❌ إلغاء', 'ad:home')]]))
 
@@ -148,6 +155,16 @@ def install(namespace):
         if verb in ('skip', 'preview') and data.get('pid'):
             if verb == 'skip': data['added'] = None
             return preview(api, cid, data)
+        if verb == 'language' and data.get('pid'):
+            if len(parts) == 3 and parts[2] in ('auto', 'ar', 'en'):
+                data['language'] = parts[2]
+                return preview(api, cid, data)
+            current_language = {'auto': 'تلقائي حسب لغة العميل', 'ar': 'العربية', 'en': 'English'}.get(data.get('language', 'auto'), 'تلقائي')
+            return s.send(api, cid, '🌐 <b>لغة الإعلان</b>\nالحالية: ' + current_language + '\n\nالتلقائي يرسل لكل مستخدم بلغته. في القناة والمجموعة، اختر العربية أو الإنجليزية لتحديد لغة المنشور.', s.kb([
+                [s.btn('🇸🇦 العربية', 'ad:language:ar')],
+                [s.btn('🇬🇧 English', 'ad:language:en')],
+                [s.btn('🌐 تلقائي حسب لغة العميل', 'ad:language:auto')],
+                [s.btn('↩️ معاينة الإعلان', 'ad:preview')]]))
         if verb == 'icons':
             save(cid, data)
             rows = [[s.btn(icon + ' ' + label, 'ad:icon:' + key)] for key, (icon, label) in ICONS.items()]
