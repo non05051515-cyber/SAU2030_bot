@@ -54,6 +54,7 @@ def install(namespace):
     sg = store.__dict__
 
     def prepare_broadcast_tables(conn):
+        conn.execute('CREATE TABLE IF NOT EXISTS broadcast_cooldown (id INTEGER PRIMARY KEY, until REAL NOT NULL)')
         conn.execute('CREATE TABLE IF NOT EXISTS product_broadcast_drafts (cid INTEGER PRIMARY KEY, token TEXT NOT NULL, pid TEXT NOT NULL, photo TEXT, awaiting_photo INTEGER NOT NULL DEFAULT 0)')
         draft_cols = {row[1] for row in conn.execute('PRAGMA table_info(product_broadcast_drafts)').fetchall()}
         if 'template' not in draft_cols:
@@ -225,6 +226,9 @@ def install(namespace):
     def deliver_queued(api):
         with sg['db']() as conn:
             prepare_broadcast_tables(conn)
+            cooldown = conn.execute('SELECT until FROM broadcast_cooldown WHERE id=1').fetchone()
+            if cooldown and cooldown[0] > time.time():
+                return
             # Emergency stop for the stuck product broadcast requested by the admin.
             # Mark this specific persisted job cancelled so a Railway restart will
             # not resume it and keep sending progress/completion notifications.
@@ -237,7 +241,7 @@ def install(namespace):
                 job_template = {}
             with sg['db']() as conn:
                 conn.execute('UPDATE product_broadcast_jobs SET status="running" WHERE token=?', (token,))
-                recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid', (token,))]
+                recipients = [row[0] for row in conn.execute('SELECT cid FROM product_broadcast_recipients WHERE token=? AND status="pending" ORDER BY cid LIMIT 100', (token,))]
                 total = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=?', (token,)).fetchone()[0]
             print('Product broadcast started:', token, 'remaining:', len(recipients), flush=True)
 
@@ -248,6 +252,14 @@ def install(namespace):
                     print('Product delivery error:', type(exc).__name__, str(exc)[:200], flush=True)
                     result = None
                 error = getattr(api, 'last_error', None)
+                if not result and error and error.get('code') == 429:
+                    try:
+                        retry_after = max(1, int(error.get('retry_after') or 60))
+                    except (TypeError, ValueError):
+                        retry_after = 60
+                    with sg['db']() as conn:
+                        conn.execute('INSERT OR REPLACE INTO broadcast_cooldown VALUES (1,?)', (time.time() + retry_after + 1,))
+                    return 'paused'
                 departed = int(not result and error and error.get('code') == 403 and
                                ('blocked by the user' in error.get('description', '') or
                                 'user is deactivated' in error.get('description', '')))
@@ -258,23 +270,21 @@ def install(namespace):
                                  (user_id, departed, sg['now_saudi']()))
                 return bool(result)
 
-            # Telegram has a global bot send limit. Start requests at about 25/sec,
-            # but keep several requests in flight so network latency does not make
-            # broadcasts crawl one user at a time.
-            with ThreadPoolExecutor(max_workers=16, thread_name_prefix='product-broadcast') as pool:
-                futures = []
-                next_slot = time.monotonic()
-                for user_id in recipients:
-                    now = time.monotonic()
-                    if now < next_slot:
-                        time.sleep(next_slot - now)
-                    futures.append(pool.submit(deliver_product, user_id))
-                    next_slot = max(next_slot + 0.04, time.monotonic())
-                for future in as_completed(futures):
-                    try:
-                        future.result()
-                    except Exception as exc:
-                        print('Product broadcast future:', type(exc).__name__, str(exc)[:150], flush=True)
+            # One request at a time, at most ten per second, in batches of 100.
+            # A flood response pauses the whole queue and leaves this user pending.
+            for user_id in recipients:
+                with sg['db']() as conn:
+                    departed = conn.execute('SELECT departed FROM user_delivery_status WHERE cid=?', (user_id,)).fetchone()
+                    if user_id <= 0 or (departed and departed[0]):
+                        conn.execute('UPDATE product_broadcast_recipients SET status="failed" WHERE token=? AND cid=?', (token, user_id))
+                        continue
+                time.sleep(0.1)
+                if deliver_product(user_id) == 'paused':
+                    return
+            with sg['db']() as conn:
+                pending = conn.execute('SELECT 1 FROM product_broadcast_recipients WHERE token=? AND status="pending" LIMIT 1', (token,)).fetchone()
+            if pending:
+                return
             with sg['db']() as conn:
                 ok = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="sent"', (token,)).fetchone()[0]
                 failed = conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=? AND status="failed"', (token,)).fetchone()[0]

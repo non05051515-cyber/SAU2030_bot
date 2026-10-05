@@ -60,7 +60,7 @@ class API:
    if 200 <= r.status < 300 and payload.get('ok'):
     return payload.get('result')
    detail=raw.decode('utf-8','replace')
-   self._errors.value={'code':r.status,'description':payload.get('description','')}
+   self._errors.value={'code':r.status,'description':payload.get('description',''),'retry_after':payload.get('parameters',{}).get('retry_after')}
    print('Telegram API error:',m,r.status,detail[:300],flush=True)
   except Exception as e:
    self._reset_conn()
@@ -73,7 +73,7 @@ class API:
     if 200 <= r.status < 300 and payload.get('ok'):
      return payload.get('result')
     detail=raw.decode('utf-8','replace')
-    self._errors.value={'code':r.status,'description':payload.get('description','')}
+    self._errors.value={'code':r.status,'description':payload.get('description',''),'retry_after':payload.get('parameters',{}).get('retry_after')}
    except Exception as retry_error:
     self._reset_conn()
     self._errors.value={'code':None,'description':str(retry_error)}

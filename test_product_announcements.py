@@ -71,6 +71,34 @@ class AnnouncementTests(unittest.TestCase):
         self.bot.action(self.api, self.cid, 'ad:send:group:' + token)
         self.assertFalse(any(d.get('chat_id') == '@SAU2030_k' for _,d in self.api.calls))
 
+    def test_broadcast_flood_wait_and_batch_resume(self):
+        import broadcast_admin as broadcast
+        self.select()
+        payload = self.ad.card(self.ad.draft(self.cid)[1])
+        with patch.object(broadcast, '_users', return_value=list(range(1000, 1101))):
+            self.bot.queue_product_announcement('batch_test', self.pid, payload)
+        api = API()
+        original = api.call
+        def limited(method, **data):
+            api.last_error = {'code': 429, 'retry_after': 90}
+            return None
+        api.call = limited
+        with patch.object(broadcast.time, 'sleep'):
+            broadcast.DELIVERY_WORKER(api)
+        with self.s.db() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE status="pending"').fetchone()[0], 101)
+            self.assertGreater(c.execute('SELECT until FROM broadcast_cooldown').fetchone()[0], broadcast.time.time() + 85)
+        api.call = original
+        api.last_error = None
+        broadcast.DELIVERY_WORKER(api)
+        self.assertEqual(api.calls, [])
+        with self.s.db() as c: c.execute('DELETE FROM broadcast_cooldown')
+        with patch.object(broadcast.time, 'sleep'):
+            broadcast.DELIVERY_WORKER(api)
+            self.assertEqual(len(api.calls), 100)
+            broadcast.DELIVERY_WORKER(api)
+        self.assertEqual(sum(d.get('chat_id') in range(1000,1101) for _,d in api.calls), 101)
+
     def test_bot_broadcast_preserves_card_and_sends_once(self):
         import broadcast_admin as broadcast
         self.select()
