@@ -68,6 +68,21 @@ def install(namespace):
         conn.execute('CREATE TABLE IF NOT EXISTS user_delivery_status (cid INTEGER PRIMARY KEY, departed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT "")')
         conn.execute('CREATE TABLE IF NOT EXISTS broadcast_stats (id INTEGER PRIMARY KEY CHECK(id=1), sent INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT "")')
 
+    def queue_announcement(token, pid, payload):
+        recipients = {uid for uid in _users() if uid > 0 and uid != admin_id}
+        with sg['db']() as conn:
+            prepare_broadcast_tables(conn)
+            departed = {r[0] for r in conn.execute('SELECT cid FROM user_delivery_status WHERE departed=1')}
+            recipients -= departed
+            created = conn.execute('INSERT OR IGNORE INTO product_broadcast_jobs(token,pid,photo,status,template) VALUES (?,?,NULL,"queued",?)',
+                                   (token, pid, json.dumps({'native_announcement': payload}, ensure_ascii=False))).rowcount
+            if created:
+                conn.executemany('INSERT OR IGNORE INTO product_broadcast_recipients(token,cid) VALUES (?,?)',
+                                 [(token, uid) for uid in recipients])
+            return conn.execute('SELECT COUNT(*) FROM product_broadcast_recipients WHERE token=?', (token,)).fetchone()[0]
+
+    namespace['queue_product_announcement'] = queue_announcement
+
     def draft(cid):
         with sg['db']() as conn:
             prepare_broadcast_tables(conn)
@@ -169,6 +184,10 @@ def install(namespace):
 
     def product_card(api, cid, pid, photo=None, template=None):
         """Send the admin-authored ad text, with a direct button to the selected product."""
+        if isinstance(template, dict) and isinstance(template.get('native_announcement'), dict):
+            payload = template['native_announcement']
+            return api.call('sendMessage', chat_id=cid, text=payload['text'],
+                            entities=payload.get('entities', []), reply_markup=payload['reply_markup'])
         tpl = merged_template(template)
         body = (tpl.get('custom_text') or '').strip()
         if not body:

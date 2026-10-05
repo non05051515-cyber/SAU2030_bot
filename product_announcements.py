@@ -71,6 +71,7 @@ def preview(api, cid, data):
     return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر:', s.kb([
         [s.btn('✅ نشر في القناة', 'ad:send:channel:' + token, style='success')],
         [s.btn('✅ نشر في المجموعة', 'ad:send:group:' + token, style='success')],
+        [s.btn('📨 إرسال لمستخدمي البوت', 'ad:send:bot:' + token, style='success')],
         [s.btn('✏️ الكمية المضافة (Added)', 'ad:added')],
         [s.btn('📦 تعديل Current stock', 'ad:stock')],
         [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
@@ -135,7 +136,7 @@ def install(namespace):
         if verb == 'icon' and len(parts) == 3 and parts[2] in ICONS:
             save(cid, data, 'icon:' + parts[2])
             return s.send(api, cid, 'أرسل أيقونة متحركة واحدة أو معرفها الرقمي. اكتب 0 لاستخدام الأيقونة العادية. لقطة الشاشة لا تحتوي على معرف الأيقونة.', s.kb([[s.btn('↩️ رجوع', 'ad:icons')]]))
-        if verb == 'send' and len(parts) == 4 and parts[2] in TARGETS:
+        if verb == 'send' and len(parts) == 4 and parts[2] in (*TARGETS, 'bot'):
             with db() as c:
                 claimed = c.execute("UPDATE product_ad_drafts SET status='sending' WHERE cid=? AND token=? AND status='ready'", (cid, parts[3])).rowcount
                 row = c.execute('SELECT payload FROM product_ad_drafts WHERE cid=? AND token=?', (cid, parts[3])).fetchone() if claimed else None
@@ -144,6 +145,11 @@ def install(namespace):
             if data.get('pid') not in catalog.product_ids() or not catalog.state(data['pid'])['available']:
                 clear(cid)
                 return s.send(api, cid, 'المنتج لم يعد متوفرًا للنشر.')
+            if parts[2] == 'bot':
+                count = namespace['queue_product_announcement'](parts[3], data['pid'], card(data))
+                clear(cid)
+                return s.send(api, cid, f'⏳ تمت جدولة الإعلان للإرسال إلى {count} من مستخدمي البوت. سيصلك تقرير بالنتيجة بعد الانتهاء.',
+                              s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))
             result = api.call('sendMessage', chat_id=TARGETS[parts[2]], **card(data))
             clear(cid)
             return s.send(api, cid, '✅ تم نشر الإعلان مع زر الشراء.' if result else '❌ تعذر تأكيد النشر. راجع القناة أو المجموعة قبل المحاولة مجددًا، وتحقق من صلاحيات النشر والأيقونات.', s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))

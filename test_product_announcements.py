@@ -71,6 +71,33 @@ class AnnouncementTests(unittest.TestCase):
         self.bot.action(self.api, self.cid, 'ad:send:group:' + token)
         self.assertFalse(any(d.get('chat_id') == '@SAU2030_k' for _,d in self.api.calls))
 
+    def test_bot_broadcast_preserves_card_and_sends_once(self):
+        import broadcast_admin as broadcast
+        self.select()
+        self.bot.action(self.api, self.cid, 'ad:stock')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': '18'})
+        with self.ad.db() as c:
+            c.execute('INSERT INTO pandora_notification_icons VALUES (?,?)', ('stock', '777'))
+        expected = self.ad.card(self.ad.draft(self.cid)[1])
+        token = self.ad.draft(self.cid)[0]
+        with patch.object(broadcast, '_users', return_value=[42, 42, 43, self.cid, -100]):
+            self.bot.action(self.api, 42, 'ad:send:bot:' + token)
+            self.assertIsNotNone(self.ad.draft(self.cid))
+            self.bot.action(self.api, self.cid, 'ad:send:bot:' + token)
+            self.bot.action(self.api, self.cid, 'ad:send:bot:' + token)
+        # Queueing never blocks the callback or sends before the worker runs.
+        self.assertFalse(any(d.get('chat_id') in (42, 43) for _,d in self.api.calls))
+        with self.s.db() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM product_broadcast_jobs').fetchone()[0], 1)
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM product_broadcast_recipients').fetchone()[0], 2)
+        broadcast.DELIVERY_WORKER(self.api)
+        broadcast.DELIVERY_WORKER(self.api)
+        deliveries = [d for _,d in self.api.calls if d.get('chat_id') in (42, 43)]
+        self.assertEqual(len(deliveries), 2)
+        for delivery in deliveries:
+            self.assertEqual({k:v for k,v in delivery.items() if k != 'chat_id'}, expected)
+        self.assertEqual(self.ad.catalog.state(self.pid)['quantity'], 29)
+
     def test_stock_edit_publish_and_restore_automatic(self):
         self.select()
         self.bot.action(self.api, self.cid, 'ad:stock')
