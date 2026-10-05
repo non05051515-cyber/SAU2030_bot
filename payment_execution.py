@@ -276,7 +276,7 @@ def capcut_category(s, api, cid, category_id):
             continue
         seen.add(identity)
         qty = s.product_stock(pid)
-        buttons.append([s.btn(('🟢 ' if s.in_stock(pid) else '🔴 ')+s.compact_name(pid,cid)+' | 💵 '+s.price(cid,pid,'USD')+' | '+s.compact_stock(qty),'options:'+pid,style='success' if s.in_stock(pid) else 'danger')])
+        buttons.append([s.btn(s.compact_name(pid,cid)+' | 💵 '+s.price(cid,pid,'USD')+' | '+s.compact_stock(qty),'options:'+pid,style='success' if s.in_stock(pid) else 'danger')])
     s.send(api,cid,s.category_heading('capcut',cid),s.kb(buttons+[s.nav(cid)]))
     return True
 
