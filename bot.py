@@ -328,6 +328,8 @@ welcome_editor.install(globals())
 import payment_execution
 payment_execution.install(storefront, globals())
 
+import local_delivery
+
 import pandora_stock_notifications
 
 import product_announcements
