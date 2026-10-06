@@ -284,7 +284,7 @@ def main():
     if handle_admin_delivery(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
-    if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
+    if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue\n    if local_delivery.handle_text(storefront,a,m):continue
     if handle_receipt(a,m):continue
     if txt.startswith('/start'):
      parts=txt.split(maxsplit=1)
