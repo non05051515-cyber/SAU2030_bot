@@ -94,7 +94,9 @@ def db():
                     conn.execute('ALTER TABLE admin_products ADD COLUMN stock INTEGER NOT NULL DEFAULT 1')
                 conn.execute('CREATE TABLE IF NOT EXISTS product_text (pid TEXT NOT NULL, field TEXT NOT NULL, lang TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pid,field,lang))')
                 conn.execute('CREATE TABLE IF NOT EXISTS description_emoji (pid TEXT, lang TEXT, plain TEXT NOT NULL, html TEXT NOT NULL, PRIMARY KEY(pid,lang))')
-                conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')\n                import local_delivery\n                local_delivery.prepare(conn)
+                conn.execute('CREATE TABLE IF NOT EXISTS product_photos (pid TEXT PRIMARY KEY, file_id TEXT NOT NULL)')
+                import local_delivery
+                local_delivery.prepare(conn)
                 conn.execute('CREATE TABLE IF NOT EXISTS content_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
                 if not conn.execute("SELECT 1 FROM content_migrations WHERE key='concise_product_descriptions_v1'").fetchone():
                     rows = conn.execute('SELECT pid,name FROM admin_products').fetchall()
