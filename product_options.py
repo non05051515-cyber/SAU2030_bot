@@ -102,11 +102,68 @@ def page(s, api, cid, pid):
         unit = s.amount(pid,'SAR')
         text += f'\n\n🛍 الكمية المختارة: {qty}\nاختر الكمية للانتقال إلى الدفع.'
     else:
-        text += '\n\n🔴 الطلب غير متاح حاليًا.'
+        text += '\n\n' + s.tr(cid, '🔴 نفدت الكمية — أبلغني عند التوفر.', '🔴 Out of stock — notify me when available.')
     s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.kb(rows),pid=pid)
 
 
+def admin_availability(s, api, cid, category_id=None):
+    """Include direct admin products and new custom categories in stock controls."""
+    if cid != s.G['ADMIN_ID']:
+        return
+    with s.db() as c:
+        c.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
+        categories = c.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
+        direct = c.execute('SELECT pid FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
+    if category_id is None:
+        rows = [[s.btn(s.category_label(pid,cid), 'stockcat:'+pid)] for pid in s.G['PRODUCTS']]
+        seen = set(s.G['PRODUCTS'])
+        rows += [[s.btn(s.name(pid,cid), 'stockcat:'+pid)] for pid,_ in categories if pid not in seen]
+        rows += [[s.btn(s.name(pid,cid), 'stockpick:'+pid, style='success' if s.in_stock(pid) else 'danger')] for pid, in direct]
+    else:
+        ids = list(s.admin_category_product_ids(category_id))
+        with s.db() as c:
+            extra = c.execute('SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,)).fetchall()
+        ids = list(dict.fromkeys(ids+[pid for pid, in extra]))
+        rows = [[s.btn(s.name(pid,cid), 'stockpick:'+pid, style='success' if s.in_stock(pid) else 'danger')] for pid in ids]
+    s.send(api,cid,'📦 <b>تعديل توفر المنتج</b>\nاختر القسم أو أحد المنتجات المضافة:',
+           s.kb(rows+[[s.btn('↩️ لوحة الإدارة','admin')]]))
+
+
+def mark_shahid_profile_sold_out(s):
+    """One-time, unambiguous stock change; retain account and order records."""
+    key = 'shahid_private_profile_sold_out_20261006'
+    with s.db() as c:
+        if c.execute('SELECT 1 FROM content_migrations WHERE key=?', (key,)).fetchone():
+            return
+        products = c.execute('SELECT pid,name FROM admin_products').fetchall()
+        matches, shahid = [], []
+        for pid, stored_name in products:
+            translated = c.execute("SELECT value FROM product_text WHERE pid=? AND field='name'", (pid,)).fetchall()
+            names = ' '.join([stored_name]+[row[0] for row in translated]).lower()
+            if 'shahid' not in names and 'شاهد' not in names:
+                continue
+            shahid.append((pid,stored_name))
+            if any(word in names for word in ('profile','ملف','private','خاص')):
+                matches.append((pid,stored_name))
+        # A sole Shahid product is also unambiguous when its short label is VIP.
+        if not matches and len(shahid)==1:
+            matches=shahid
+        if len(matches)!=1:
+            print('Shahid availability change pending: matching products =',matches or shahid,flush=True)
+            return
+        pid,product_name=matches[0]
+        c.execute('UPDATE admin_products SET stock=0,available=0 WHERE pid=?', (pid,))
+        # Custom inventory is authoritative; remove older overrides so adding
+        # new local stock can make this product available again normally.
+        c.execute('DELETE FROM product_availability WHERE pid=?', (pid,))
+        c.execute('DELETE FROM product_stock_overrides WHERE pid=?', (pid,))
+        c.execute('INSERT INTO content_migrations VALUES (?,?)', (key,s.now_saudi()))
+        print('Shahid private profile marked sold out:',pid,product_name,'stock=0 available=0',flush=True)
+
+
 def install(s, namespace):
+    mark_shahid_profile_sold_out(s)
+    s.admin_stock = lambda api,cid,category_id=None: admin_availability(s,api,cid,category_id)
     old_action = namespace['action']
     old_receipt = namespace['handle_receipt']
     s.UI_ICON_LABELS.update({'ui_buy_now':'أيقونة شراء الآن'})
