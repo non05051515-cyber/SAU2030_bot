@@ -636,13 +636,28 @@ def text_override(pid, field, lang, default):
     pid = LEGACY.get(pid, pid)
     with db() as conn:
         row = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (pid, field, lang)).fetchone()
-        if row:
+        if row and not (field == 'description' and lang == 'ar'
+                        and row[0] and not re.search(r'[\u0621-\u064a]', row[0])):
             return row[0]
         other_lang = 'en' if lang == 'ar' else 'ar'
         other = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (pid, field, other_lang)).fetchone()
     # Older/imported products may only have one language. Translate it lazily
     # when the customer switches language, then cache the result.
-    source = other[0] if other and other[0] else default
+    source = row[0] if row and row[0] else (other[0] if other and other[0] else default)
+    if field == 'description' and lang == 'ar' and source:
+        if re.search(r'[\u0621-\u064a]', source):
+            return source
+        translated = auto_translate(source, 'ar')
+        if translated and re.search(r'[\u0621-\u064a]', translated):
+            with db() as conn:
+                # Retain the original English text even if it was filed under Arabic.
+                conn.execute('INSERT OR IGNORE INTO product_text VALUES (?,?,?,?)',
+                             (pid, field, 'en', source))
+                conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',
+                             (pid, field, 'ar', translated))
+            return translated
+        print('Arabic description translation unavailable:', pid, flush=True)
+        return source
     if source and field in ('description','name'):
         translated = auto_translate(source, lang)
         if translated and translated.strip() and translated.strip() != source.strip():
@@ -657,7 +672,9 @@ def product_description(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     lang = prefs(cid)[0]
     if pid in VARIANTS:
-        default = VARIANTS[pid].get('description', {}).get(lang, '')
+        descriptions = VARIANTS[pid].get('description', {})
+        default = (descriptions.get(lang) or descriptions.get('en') or descriptions.get('ar') or ''
+                   if isinstance(descriptions, dict) else str(descriptions or ''))
     else:
         cp = custom_product(pid)
         default = cp[2] if cp else G['PRODUCTS'].get(pid, {}).get('description', '')
