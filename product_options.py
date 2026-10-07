@@ -103,7 +103,7 @@ def page(s, api, cid, pid):
         text += f'\n\n🛍 الكمية المختارة: {qty}\nاختر الكمية للانتقال إلى الدفع.'
     else:
         text += '\n\n' + s.tr(cid, '🔴 نفدت الكمية — أبلغني عند التوفر.', '🔴 Out of stock — notify me when available.')
-    s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.kb(rows),pid=pid)
+    s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.product_keyboard(cid, rows, 'o:' + pid),pid=pid)
 
 
 def admin_availability(s, api, cid, category_id=None):
