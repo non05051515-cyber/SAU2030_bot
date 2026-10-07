@@ -281,11 +281,11 @@ def main():
     if txt.startswith('/start') and channel_catalog.resume(a,c):continue
     if pandora_stock_notifications.import_message(a,m):continue
     if customer_inbox.handle(a,m):continue
+    if local_delivery.handle_text(storefront,a,m):continue
     if handle_admin_delivery(a,m):continue
     if 'handle_info_icon' in globals() and handle_info_icon(a,m):continue
     if 'handle_info_warranty' in globals() and handle_info_warranty(a,m):continue
     if 'handle_admin_product' in globals() and handle_admin_product(a,m):continue
-    if local_delivery.handle_text(storefront,a,m):continue
     if handle_receipt(a,m):continue
     if txt.startswith('/start'):
      parts=txt.split(maxsplit=1)
@@ -336,4 +336,5 @@ import product_announcements
 product_announcements.install(globals())
 
 if __name__=='__main__':main()
+
 

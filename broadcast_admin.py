@@ -156,6 +156,7 @@ def install(namespace):
             [sg['btn']('➕ إضافة منتج', 'admin:addproduct', style='success'), sg['btn']('📦 منتجاتي', 'admin:myproducts', style='primary')],
             [sg['btn']('➕ إضافة منتج داخل قسم', 'admin:addtocategory', style='success')],
             [sg['btn']('📦 تعديل توفر المنتج', 'admin:stock', style='primary')],
+            [sg['btn']('إضافة بيانات تسليم المنتجات', 'localstockmenu', style='success')],
             [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
             [sg['btn']('🔗 ربط منتج بـPandora', 'admin:pandoralink', style='success')],
@@ -776,4 +777,5 @@ def tick_auto_ads(api):
         with sg.db() as conn: conn.execute('UPDATE auto_ads SET next_at=? WHERE id=1',(now+interval_sec,))
     except Exception as exc:
         print('Auto ad error:',type(exc).__name__)
+
 

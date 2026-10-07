@@ -154,6 +154,9 @@ def _send_delivery_file(api, cid, oid, product_name, items):
         print('Delivery file send failed:',type(exc).__name__,flush=True);return False
 
 def fulfill(s, api, oid):
+    import local_delivery
+    if local_delivery.fulfill(s, api, oid):
+        return True
     with s.db() as c:
         order = c.execute('SELECT cid,pid,status,usd FROM orders WHERE id=?', (oid,)).fetchone()
     if not order:
@@ -356,6 +359,9 @@ def install(s, namespace):
     pandora_admin.install(s)
     old_action = namespace['action']
     def action(api,cid,value):
+        import local_delivery
+        if local_delivery.action(s,api,cid,value):
+            return
         if pandora_admin.action(s,api,cid,value):
             return
         if cid == s.G['ADMIN_ID']:
@@ -422,3 +428,4 @@ def crypto_check(s, api, cid, invoice_ref):
     if s.fulfill_paid_order(api,oid):
         return
     return s.send(api,cid,'✅ تم تأكيد الدفع. رقم الطلب: '+oid)
+
