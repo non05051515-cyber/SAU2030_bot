@@ -125,7 +125,7 @@ def translate_text(text, target='en'):
         result = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         return result or text
     except Exception as exc:
-        print("Translation error:", type(exc).__name__)
+        print("Translation error:", type(exc).__name__, "status:", getattr(exc, "code", None), flush=True)
         return text
 
 
