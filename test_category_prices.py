@@ -61,7 +61,7 @@ class CategoryPricesTests(unittest.TestCase):
         self.assertNotIn('tg-emoji', self.display()['text'])
         message = {'chat': {'id': self.admin}, 'text': '✨', 'entities': [{'type': 'custom_emoji', 'offset': 0, 'length': 1, 'custom_emoji_id': '12345'}]}
         self.assertTrue(self.bot.handle_receipt(self.api, message))
-        self.assertIn('<tg-emoji emoji-id="12345">✨</tg-emoji> visible', self.display()['text'])
+        self.assertIn('4.00 USD (<tg-emoji emoji-id="12345">✨</tg-emoji> 15.00 ريال سعودي)', self.display()['text'])
         self.bot.action(self.api, self.admin, 'infoicon:category_prices:test_cat')
         self.bot.action(self.api, self.admin, 'catdesc:test_cat')
         self.assertFalse(self.s.handle_info_icon(self.api, message))

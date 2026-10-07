@@ -868,8 +868,8 @@ def category_heading(pid, cid, product_rows=None):
         usd, sar = amount(product_id, 'USD'), amount(product_id, 'SAR')
         if usd is None or sar is None:
             continue
-        lines.append((icon + ' ' if icon else '') + esc(compact_name(product_id, cid))
-                     + f' — {usd:.2f} USD ({sar:.2f} '
+        lines.append(esc(compact_name(product_id, cid))
+                     + f' — {usd:.2f} USD (' + (icon + ' ' if icon else '') + f'{sar:.2f} '
                      + tr(cid, 'ريال سعودي', 'SAR') + ')')
     if lines:
         text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n' + '\n'.join(lines)
@@ -888,7 +888,7 @@ def admin_category_description(api, cid, pid=None, lang=None):
     if pid not in cats:
         return admin_category_description(api, cid)
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('✨ أيقونة متحركة بجانب أسعار القسم', 'infoicon:category_prices:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('✨ أيقونة متحركة بجانب السعر بالريال', 'infoicon:category_prices:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
@@ -1070,7 +1070,7 @@ def handle_info_icon(api,message):
         conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,str(emoji),fallback))
         conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
     if field == 'category_prices':
-        send(api,cid,'✅ تم حفظ الأيقونة المتحركة. ستظهر بجانب أسعار المنتجات في رسالة القسم.',
+        send(api,cid,'✅ تم حفظ الأيقونة المتحركة. ستظهر بجانب السعر بالريال السعودي داخل القوسين.',
              kb([[btn('↩️ إعدادات القسم','catdesc:'+pid)],[btn('🛍 معاينة القسم','product:'+pid)]]))
     elif pid == '__global__':
         field_label = 'السعر' if field == 'price' else 'الكمية'
