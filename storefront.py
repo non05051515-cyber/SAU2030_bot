@@ -98,6 +98,9 @@ def db():
                 import local_delivery
                 local_delivery.prepare(conn)
                 conn.execute('CREATE TABLE IF NOT EXISTS content_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
+                if not conn.execute("SELECT 1 FROM content_migrations WHERE key='language_currency_defaults_v1'").fetchone():
+                    conn.execute("UPDATE preferences SET currency=CASE WHEN lang='ar' THEN 'SAR' ELSE 'USD' END")
+                    conn.execute("INSERT INTO content_migrations VALUES ('language_currency_defaults_v1', datetime('now'))")
                 if not conn.execute("SELECT 1 FROM content_migrations WHERE key='concise_product_descriptions_v1'").fetchone():
                     rows = conn.execute('SELECT pid,name FROM admin_products').fetchall()
                     for product_pid, product_name in rows:
@@ -154,8 +157,9 @@ def prefs(cid):
                 pass
             if language not in ('ar', 'en'):
                 language = 'ar'
-            conn.execute('INSERT INTO preferences(cid,lang,currency) VALUES (?,?,?)', (cid, language, 'USD'))
-            row = (language, 'SAR')
+            currency = 'SAR' if language == 'ar' else 'USD'
+            conn.execute('INSERT INTO preferences(cid,lang,currency) VALUES (?,?,?)', (cid, language, currency))
+            row = (language, currency)
     return row
 
 
@@ -185,13 +189,12 @@ def product_list_button_text(pid, cid=0, label=None):
     except (ValueError, TypeError):
         quantity = 0
     return ('\u2066' + display_product_name(pid, cid, label)
-            + ' | $' + format(amount(pid, 'USD'), '.2f') + ' | 📦 ' + str(quantity) + '\u2069')
+            + ' | ' + price(cid, pid) + ' | 📦 ' + str(quantity) + '\u2069')
 
 
 def btn(text, action, icon=None, style=None):
     if str(action).startswith(('item:', 'options:')) and '|' in text:
         pid = str(action).split(':', 1)[1]
-        text = product_list_button_text(pid, label=text.split('|', 1)[0])
         style = 'success' if in_stock(pid) and Decimal(str(product_stock(pid))) > 0 else 'danger'
     result = {'text': text, 'callback_data': action}
     if icon and G['CONFIG'].get('custom_icons_enabled'):
@@ -205,7 +208,24 @@ def kb(rows):
     return {'inline_keyboard': rows}
 
 
+def product_keyboard(cid, rows, route='p'):
+    target = 'USD' if prefs(cid)[1] == 'SAR' else 'SAR'
+    label = (tr(cid, 'تحويل العملة إلى الدولار', 'Switch currency to USD')
+             if target == 'USD' else tr(cid, 'تحويل العملة إلى الريال السعودي', 'Switch currency to SAR'))
+    return kb(rows + [[btn(label, 'currencyview:' + target + ':' + route,
+                           ui_icon('ui_currency'), style='primary')]])
+
+
+
 def send(api, cid, text, keyboard=None, entities=None):
+    if keyboard and 'inline_keyboard' in keyboard:
+        keyboard = dict(keyboard, inline_keyboard=[
+            [dict(button, text=product_list_button_text(
+                button['callback_data'].split(':', 1)[1], cid,
+                label=button['text'].split('|', 1)[0]))
+             if button.get('callback_data', '').startswith(('item:', 'options:'))
+             and '|' in button.get('text', '') else button
+             for button in row] for row in keyboard['inline_keyboard']])
     data = {'chat_id': cid, 'text': text}
     if entities is None:
         data['parse_mode'] = 'HTML'
@@ -296,11 +316,11 @@ def amount(pid, currency='SAR', source_price=None):
 
 
 def price(cid, pid, currency=None, source_price=None):
-    currency = currency or 'USD'
+    currency = currency or prefs(cid)[1]
     value = amount(pid, currency, source_price)
     if value is None:
         return tr(cid, 'يُحدد عبر الدعم', 'Contact support for price')
-    return f'{value:.2f} ' + ('USD' if currency == 'USD' else tr(cid, 'ر.س', 'SAR'))
+    return f'${value:.2f}' if currency == 'USD' else f'{value:.2f} ' + tr(cid, 'ريال', 'SAR')
 
 
 def wallet_balance(cid):
@@ -1635,7 +1655,7 @@ def show_extended_category(api, cid, category_id):
     rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
-    send(api, cid, category_heading(category_id, cid, rows), kb(rows + [nav(cid)]))
+    send(api, cid, category_heading(category_id, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + category_id))
     return True
 
 
@@ -3263,7 +3283,7 @@ def products(api, cid):
         label = compact_name(pid, cid) + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(int(stock or 0))
         rows.append([btn(label, 'options:' + pid, style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
-    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
+    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), product_keyboard(cid, rows))
 
 
 def settings(api, cid, kind):
@@ -3271,8 +3291,8 @@ def settings(api, cid, kind):
         rows = [[btn('العربية', 'setlang:ar'), btn('English', 'setlang:en')]]
         text = '🌐 اختر اللغة / Choose language'
     else:
-        rows = [[btn('🇺🇸 USD — US Dollar', 'setcurrency:USD')]]
-        text = '💱 أسعار المنتجات ثابتة بالدولار USD\nيظهر التحويل للريال السعودي عند الدفع فقط.'
+        rows = [[btn('الريال السعودي SAR', 'setcurrency:SAR'), btn('US Dollar USD', 'setcurrency:USD')]]
+        text = tr(cid, 'اختر عملة عرض الأسعار:', 'Choose the display currency:')
     send(api, cid, text, kb(rows + [nav(cid)]))
 
 
@@ -3476,7 +3496,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -3500,7 +3520,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
@@ -3518,7 +3538,7 @@ def category(api, cid, pid):
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -3526,7 +3546,7 @@ def category(api, cid, pid):
     text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, product_keyboard(cid, rows, 'c:' + pid), pid=pid)
 
 
 def item(api, cid, pid):
@@ -4459,6 +4479,17 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_icons(api, cid)
+    elif prefix == 'currencyview':
+        target, _, route = arg.partition(':')
+        if target not in ('SAR', 'USD'):
+            return
+        with db() as conn:
+            conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
+            conn.execute('UPDATE preferences SET currency=? WHERE cid=?', (target, cid))
+        kind, _, page_id = route.partition(':')
+        next_action = {'p': 'products', 'c': 'product:' + page_id, 'o': 'options:' + page_id}.get(kind)
+        if next_action:
+            return G['action'](api, cid, next_action)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -4467,8 +4498,10 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            stored_value = arg if prefix == 'setlang' else 'USD'
+            stored_value = arg
             conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
+            if prefix == 'setlang':
+                conn.execute('UPDATE preferences SET currency=? WHERE cid=?', ('SAR' if arg == 'ar' else 'USD', cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
@@ -4681,7 +4714,7 @@ def products(api, cid):
         label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
-    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
+    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), product_keyboard(cid, rows))
 
 def settings(api, cid, kind):
     if kind == 'lang':
@@ -4800,7 +4833,7 @@ def category(api, cid, pid):
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -4824,7 +4857,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
@@ -4835,7 +4868,7 @@ def category(api, cid, pid):
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -4843,7 +4876,7 @@ def category(api, cid, pid):
     text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, product_keyboard(cid, rows, 'c:' + pid), pid=pid)
 
 
 def item(api, cid, pid):
@@ -5569,6 +5602,17 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_icons(api, cid)
+    elif prefix == 'currencyview':
+        target, _, route = arg.partition(':')
+        if target not in ('SAR', 'USD'):
+            return
+        with db() as conn:
+            conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
+            conn.execute('UPDATE preferences SET currency=? WHERE cid=?', (target, cid))
+        kind, _, page_id = route.partition(':')
+        next_action = {'p': 'products', 'c': 'product:' + page_id, 'o': 'options:' + page_id}.get(kind)
+        if next_action:
+            return G['action'](api, cid, next_action)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -5577,8 +5621,10 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            stored_value = arg if prefix == 'setlang' else 'USD'
+            stored_value = arg
             conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
+            if prefix == 'setlang':
+                conn.execute('UPDATE preferences SET currency=? WHERE cid=?', ('SAR' if arg == 'ar' else 'USD', cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
@@ -5903,7 +5949,7 @@ def show_extended_category(api, cid, category_id):
     rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
-    send(api, cid, category_heading(category_id, cid, rows), kb(rows + [nav(cid)]))
+    send(api, cid, category_heading(category_id, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + category_id))
     return True
 
 
@@ -7347,7 +7393,7 @@ def products(api, cid):
         label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
-    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
+    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), product_keyboard(cid, rows))
 
 def settings(api, cid, kind):
     if kind == 'lang':
@@ -7559,7 +7605,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -7583,7 +7629,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
@@ -7601,7 +7647,7 @@ def category(api, cid, pid):
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -7609,7 +7655,7 @@ def category(api, cid, pid):
     text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, product_keyboard(cid, rows, 'c:' + pid), pid=pid)
 
 
 def item(api, cid, pid):
@@ -8427,6 +8473,17 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_icons(api, cid)
+    elif prefix == 'currencyview':
+        target, _, route = arg.partition(':')
+        if target not in ('SAR', 'USD'):
+            return
+        with db() as conn:
+            conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
+            conn.execute('UPDATE preferences SET currency=? WHERE cid=?', (target, cid))
+        kind, _, page_id = route.partition(':')
+        next_action = {'p': 'products', 'c': 'product:' + page_id, 'o': 'options:' + page_id}.get(kind)
+        if next_action:
+            return G['action'](api, cid, next_action)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -8435,8 +8492,10 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            stored_value = arg if prefix == 'setlang' else 'USD'
+            stored_value = arg
             conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
+            if prefix == 'setlang':
+                conn.execute('UPDATE preferences SET currency=? WHERE cid=?', ('SAR' if arg == 'ar' else 'USD', cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
@@ -8689,7 +8748,7 @@ def products(api, cid):
         label = direct_name + ' | ' + price(cid, pid, 'USD') + ' | ' + compact_stock(qty)
         rows.append([btn(label, 'options:' + pid, ui_icon(pid), style='success' if is_available else 'danger')])
     rows += [[btn(tr(cid, 'الرئيسية', 'Home'), 'home', ui_icon('ui_home'))]]
-    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), kb(rows))
+    send(api, cid, tr(cid, '🛍 <b>المنتجات</b>\nاختر الخدمة:', '🛍 <b>Products</b>\nChoose a service:'), product_keyboard(cid, rows))
 
 def settings(api, cid, kind):
     if kind == 'lang':
@@ -8808,7 +8867,7 @@ def category(api, cid, pid):
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -8832,7 +8891,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
@@ -8843,7 +8902,7 @@ def category(api, cid, pid):
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), product_keyboard(cid, rows + [nav(cid)], 'c:' + pid))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -8851,7 +8910,7 @@ def category(api, cid, pid):
     text = esc(name(pid, cid)) + '\n\n' + info_block(pid, cid) + '\n\n' + esc(tr(cid, '✅ متوفر' if in_stock(pid) else '🔴 نفدت الكمية', '✅ Available' if in_stock(pid) else '🔴 Out of stock')) + '\n\n' + esc(description)
     rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
     rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid)]
-    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, kb(rows), pid=pid)
+    card(api, cid, f'assets/{pid}.png', name(pid, cid), text, product_keyboard(cid, rows, 'c:' + pid), pid=pid)
 
 
 def item(api, cid, pid):
@@ -9589,6 +9648,17 @@ def action(api, cid, value):
             with db() as conn:
                 conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
             admin_icons(api, cid)
+    elif prefix == 'currencyview':
+        target, _, route = arg.partition(':')
+        if target not in ('SAR', 'USD'):
+            return
+        with db() as conn:
+            conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
+            conn.execute('UPDATE preferences SET currency=? WHERE cid=?', (target, cid))
+        kind, _, page_id = route.partition(':')
+        next_action = {'p': 'products', 'c': 'product:' + page_id, 'o': 'options:' + page_id}.get(kind)
+        if next_action:
+            return G['action'](api, cid, next_action)
     elif prefix == 'settings':
         settings(api, cid, arg)
     elif prefix in ('setlang', 'setcurrency'):
@@ -9597,8 +9667,10 @@ def action(api, cid, value):
         with db() as conn:
             conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)', (cid,))
             column = 'lang' if prefix == 'setlang' else 'currency'
-            stored_value = arg if prefix == 'setlang' else 'USD'
+            stored_value = arg
             conn.execute(f'UPDATE preferences SET {column}=? WHERE cid=?', (stored_value, cid))
+            if prefix == 'setlang':
+                conn.execute('UPDATE preferences SET currency=? WHERE cid=?', ('SAR' if arg == 'ar' else 'USD', cid))
         home(api, cid)
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
