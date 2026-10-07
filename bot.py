@@ -161,16 +161,15 @@ def handle_admin_delivery(a,m):
   send(a,ADMIN_ID,'⚠️ يجب اعتماد الطلب من لوحة الطلبات قبل التسليم.')
   return True
  try:
-  a.call('copyMessage',chat_id=customer,from_chat_id=ADMIN_ID,message_id=m['message_id'])
+  delivered=a.call('copyMessage',chat_id=customer,from_chat_id=ADMIN_ID,message_id=m['message_id'])
+  if not delivered:raise RuntimeError('Delivery was not confirmed')
   if x.get('order_id'):
-   try:
-    with storefront.db() as conn:
-     conn.execute('UPDATE orders SET status="delivered" WHERE id=?', (x['order_id'],))
-   except Exception:
-    pass
+   with storefront.db() as conn:
+    conn.execute('UPDATE orders SET status="delivered" WHERE id=?', (x['order_id'],))
   send(a,ADMIN_ID,'✅ تم إرسال الطلب للعميل وتسجيله كمُسلّم.')
  except Exception:
-  send(a,ADMIN_ID,'❌ تعذر إرسال الطلب للعميل. بقي الطلب بانتظار التسليم.')
+  send(a,ADMIN_ID,'❌ تعذر تأكيد التسليم. بقي الطلب بانتظار التسليم؛ أعد المحاولة.')
+  return True
  PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
  return True
 def action(a,c,x):
@@ -214,7 +213,7 @@ def main():
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
   # Keep all background services, but avoid hammering SQLite every 2 seconds.
-  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5)]
+  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5),('subscriptions',globals().get('tick_subscriptions'),60)]
   last={}
   while True:
    now=time.monotonic()
@@ -337,6 +336,9 @@ product_announcements.install(globals())
 
 import product_details
 product_details.install(storefront, globals())
+
+import subscriptions
+subscriptions.install(storefront, globals())
 
 def warm_arabic_descriptions():
  try:
