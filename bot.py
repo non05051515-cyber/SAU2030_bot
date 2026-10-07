@@ -335,6 +335,31 @@ import pandora_stock_notifications
 import product_announcements
 product_announcements.install(globals())
 
-if __name__=='__main__':main()
+def warm_arabic_descriptions():
+ try:
+  sources={}
+  for pid,variant in storefront.VARIANTS.items():
+   descriptions=variant.get('description',{})
+   if isinstance(descriptions,dict):sources[pid]=descriptions.get('ar') or descriptions.get('en') or ''
+  with storefront.db() as conn:
+   for pid,description in conn.execute('SELECT pid,description FROM admin_products'):
+    sources[pid]=description or sources.get(pid,'')
+   for pid,value in conn.execute("SELECT pid,value FROM product_text WHERE field='description' ORDER BY CASE lang WHEN 'ar' THEN 1 ELSE 0 END"):
+    if value:sources[pid]=value
+  translated=failed=0
+  for pid,source in sources.items():
+   if source and not storefront.re.search(r'[\u0621-\u064a]',source):
+    result=storefront.text_override(pid,'description','ar',source)
+    if storefront.re.search(r'[\u0621-\u064a]',result):translated+=1
+    else:
+     failed+=1
+     # Avoid repeatedly hitting an unavailable provider.
+     if failed>=3:break
+  print('Arabic descriptions warmup:',translated,'translated;',failed,'unavailable',flush=True)
+ except Exception as exc:print('Arabic descriptions warmup error:',type(exc).__name__,flush=True)
+
+if __name__=='__main__':
+ threading.Thread(target=warm_arabic_descriptions,daemon=True).start()
+ main()
 
 
