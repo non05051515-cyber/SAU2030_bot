@@ -346,6 +346,10 @@ def warm_arabic_descriptions():
     sources[pid]=description or sources.get(pid,'')
    for pid,value in conn.execute("SELECT pid,value FROM product_text WHERE field='description' ORDER BY CASE lang WHEN 'ar' THEN 1 ELSE 0 END"):
     if value:sources[pid]=value
+  # Product catalogue descriptions only; no credentials, orders or delivery data.
+  pending=[{'pid':pid,'description':source} for pid,source in sources.items()
+           if source and not storefront.re.search(r'[\u0621-\u064a]',source)]
+  for entry in pending:print('Description translation source:',json.dumps(entry,ensure_ascii=False),flush=True)
   translated=failed=0
   for pid,source in sources.items():
    if source and not storefront.re.search(r'[\u0621-\u064a]',source):
