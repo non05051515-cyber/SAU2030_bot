@@ -335,6 +335,9 @@ import pandora_stock_notifications
 import product_announcements
 product_announcements.install(globals())
 
+import product_details
+product_details.install(storefront, globals())
+
 def warm_arabic_descriptions():
  try:
   sources={}

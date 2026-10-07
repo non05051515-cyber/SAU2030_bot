@@ -97,7 +97,7 @@ def page(s, api, cid, pid):
     balance_usd = (s.wallet_balance(cid) / s.RATE).quantize(s.Decimal('0.01'), rounding=s.ROUND_HALF_UP)
     balance_icon_id = s.ui_icon('ui_wallet_balance')
     balance_icon = ('<tg-emoji emoji-id="' + s.esc(balance_icon_id) + '">👛</tg-emoji>') if balance_icon_id else '👛'
-    text += '\n' + balance_icon + f' رصيدك: {balance_usd:.2f} USD\n\n' + s.product_description_html(pid,cid)
+    text += '\n' + balance_icon + f' رصيدك: {balance_usd:.2f} USD\n\n' + s.info_icon(pid,'description','') + ' <b>' + s.tr(cid,'الوصف:','Description:') + '</b>\n' + s.product_description_html(pid,cid)
     if s.can_order(pid):
         unit = s.amount(pid,'SAR')
         text += f'\n\n🛍 الكمية المختارة: {qty}\nاختر الكمية للانتقال إلى الدفع.'
