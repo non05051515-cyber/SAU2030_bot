@@ -868,9 +868,11 @@ def category_heading(pid, cid, product_rows=None):
         usd, sar = amount(product_id, 'USD'), amount(product_id, 'SAR')
         if usd is None or sar is None:
             continue
-        lines.append(esc(compact_name(product_id, cid))
-                     + f' — {usd:.2f} USD (' + (icon + ' ' if icon else '') + f'{sar:.2f} '
-                     + tr(cid, 'ريال سعودي', 'SAR') + ')')
+        # Isolate mixed Arabic/Latin text and keep the short price group together.
+        currency = '\u2067ر.س\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
+        prices = f'\u2066${usd:.2f}\u00a0({sar:.2f}\u00a0' + currency + ')\u2069'
+        lines.append('\u2068' + esc(compact_name(product_id, cid)) + '\u2069'
+                     + ' — ' + prices + ('\u00a0' + icon if icon else ''))
     if lines:
         text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
     return text
