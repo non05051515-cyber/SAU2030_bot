@@ -167,7 +167,27 @@ def esc(value):
     return html.escape(str(value))
 
 
+
+def display_product_name(pid, cid=0):
+    label = compact_name(pid, cid)
+    label = re.sub(r'(\d+)\s*أشهر', r'\1M', label)
+    label = re.sub(r'(\d+)\s*(?:أيام|ايام)', r'\1D', label)
+    for old, new in [('شهر واحد','1M'), ('شهر','1M'), ('يومان','2D'), ('سنة','1Y'), ('يوم','1D')]:
+        label = label.replace(old, new)
+    label = re.sub(r'\s*•\s*', ' ', label)
+    return ' '.join(label.split())
+
+
+def product_list_button_text(pid, cid=0):
+    return '\u2066' + display_product_name(pid, cid) + ' | $' + format(amount(pid, 'USD'), '.2f') + '\u2069'
+
+
 def btn(text, action, icon=None, style=None):
+    # All catalogue routes use the same compact product row, including extensions.
+    if str(action).startswith(('item:', 'options:')) and '|' in text:
+        pid = str(action).split(':', 1)[1]
+        text = product_list_button_text(pid)
+        style = 'success' if in_stock(pid) and Decimal(str(product_stock(pid))) > 0 else 'danger'
     result = {'text': text, 'callback_data': action}
     if icon and G['CONFIG'].get('custom_icons_enabled'):
         result['icon_custom_emoji_id'] = str(icon)
@@ -871,7 +891,7 @@ def category_heading(pid, cid, product_rows=None):
         # Isolate mixed Arabic/Latin text and keep the short price group together.
         currency = '\u2067ر.س\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
         prices = f'\u2066${usd:.2f}\u00a0({sar:.2f}\u00a0' + currency + ')\u2069'
-        lines.append('\u2068' + esc(compact_name(product_id, cid)) + '\u2069'
+        lines.append('\u2068' + esc(display_product_name(product_id, cid)) + '\u2069'
                      + ' — ' + prices + ('\u00a0' + icon if icon else ''))
     if lines:
         text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
