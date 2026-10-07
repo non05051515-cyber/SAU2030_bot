@@ -4,6 +4,7 @@ import json
 
 def prepare(conn):
     conn.execute('CREATE TABLE IF NOT EXISTS payment_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, holder TEXT NOT NULL, account TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)')
+    conn.execute('CREATE TABLE IF NOT EXISTS payment_ui_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT "")')
 
 
 def methods(s, active=False):
@@ -29,9 +30,18 @@ def clear(s, cid):
         conn.execute("DELETE FROM admin_state WHERE cid=? AND action='payment_method'", (cid,))
 
 
+def transfer_icon(s):
+    with s.db() as conn:
+        prepare(conn)
+        row = conn.execute("SELECT value FROM payment_ui_settings WHERE key='transfer_icon'").fetchone()
+    return row[0] if row and row[0] else None
+
+
 def panel(s, api, cid):
     clear(s, cid)
-    buttons = [[s.btn('➕ إضافة طريقة دفع', 'pm:new', style='success')]]
+    icon_state = 'مضافة ✅' if transfer_icon(s) else 'غير مضافة'
+    buttons = [[s.btn('➕ إضافة طريقة دفع', 'pm:new', style='success')],
+               [s.btn('🎞 أيقونة زر تم التحويل — ' + icon_state, 'pm:transfer_icon')]]
     for r in methods(s):
         buttons.append([s.btn(('🟢 ' if r[4] else '🔴 ') + r[1] + (' — إخفاء' if r[4] else ' — إظهار'), f'pm:toggle:{r[0]}')])
     buttons.append([s.btn('↩️ لوحة التحكم', 'admin')])
@@ -46,7 +56,11 @@ def action(s, api, cid, value):
     if value.startswith('pm:'):
         if cid != s.G.get('ADMIN_ID'):
             return True
-        if value == 'pm:new':
+        if value == 'pm:transfer_icon':
+            with s.db() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'payment_transfer_icon', '{}'))
+            s.send(api, cid, 'أرسل الآن الأيقونة المتحركة (Custom Emoji) التي تريدها بجانب زر «تم التحويل».\n\nأرسل /remove لحذف الأيقونة الحالية.', s.kb([[s.btn('❌ إلغاء', 'pm:list')]]))
+        elif value == 'pm:new':
             with s.db() as conn:
                 conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'payment_method', '{}'))
             s.send(api, cid, 'أرسل اسم طريقة الدفع، مثل: بنك الراجحي.', s.kb([[s.btn('❌ إلغاء', 'pm:list')]]))
@@ -86,8 +100,8 @@ def action(s, api, cid, value):
         with s.db() as conn:
             conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
         text = details(s, dict(zip(('name','holder','account'), row[1:4])))
-        text += '\n\n' + s.summary(cid, pid) + '\n\n' + s.tr(cid, 'بعد الدفع أرسل صورة إثبات التحويل. سيتم إرسال البيانات لك بعد التحقق من الدفع.', 'After paying, send a receipt photo. Your details will be sent after payment verification.')
-        s.send(api, cid, text, s.kb([[s.btn(s.tr(cid, '✅ تم التحويل', '✅ Payment sent'), f'receipt:{method}:{pid}')], s.nav(cid, 'buy:' + pid)]))
+        text += '\n\n' + s.summary(cid, pid) + '\n\n' + s.tr(cid, '📎 بعد إتمام التحويل، أرسل صورة الإيصال هنا أولًا، ثم اضغط على «تم التحويل». سيتم إرسال البيانات لك بعد التحقق من الدفع.', '📎 After completing the transfer, send the receipt image here first, then tap “Payment sent”. Your details will be sent after payment verification.')
+        s.send(api, cid, text, s.kb([[s.btn(s.tr(cid, 'تم التحويل', 'Payment sent'), f'receipt:{method}:{pid}', icon=transfer_icon(s), style='success')], s.nav(cid, 'buy:' + pid)]))
         return True
     return False
 
@@ -100,6 +114,27 @@ def message(s, api, msg):
         row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='payment_method'", (cid,)).fetchone()
     if not row:
         return False
+    action = row[0]
+    if action == 'payment_transfer_icon':
+        text = (msg.get('text') or '').strip()
+        if text == '/remove':
+            with s.db() as conn:
+                conn.execute("DELETE FROM payment_ui_settings WHERE key='transfer_icon'")
+                conn.execute("DELETE FROM admin_state WHERE cid=? AND action='payment_transfer_icon'", (cid,))
+            s.send(api, cid, '✅ تم حذف أيقونة زر «تم التحويل».')
+            panel(s, api, cid)
+            return True
+        entities = msg.get('entities') or []
+        icon = next((str(e.get('custom_emoji_id')) for e in entities if e.get('type') == 'custom_emoji' and e.get('custom_emoji_id')), None)
+        if not icon:
+            s.send(api, cid, 'أرسل أيقونة متحركة (Custom Emoji) فقط، أو /remove للحذف.')
+            return True
+        with s.db() as conn:
+            conn.execute("INSERT OR REPLACE INTO payment_ui_settings(key,value) VALUES('transfer_icon',?)", (icon,))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='payment_transfer_icon'", (cid,))
+        s.send(api, cid, '✅ تم حفظ الأيقونة المتحركة لزر «تم التحويل».')
+        panel(s, api, cid)
+        return True
     text = (msg.get('text') or '').strip()
     if text.startswith('/'):
         clear(s, cid)
