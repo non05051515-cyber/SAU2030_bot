@@ -910,9 +910,9 @@ def admin_text_menu(api, cid, field, category_id=None):
          kb(rows + [[btn('↩️ لوحة الإدارة', 'admin')]]))
 
 
-def category_description_html(pid, cid):
+def category_description_html(pid, cid, lang=None):
     # Category copy is independent of product descriptions, even when IDs match.
-    lang = prefs(cid)[0]
+    lang = lang if lang in ('ar', 'en') else prefs(cid)[0]
     with db() as conn:
         row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
         if row:
@@ -942,9 +942,10 @@ def category_label(pid, cid=0):
     return name(pid, cid)
 
 
-def category_heading(pid, cid, product_rows=None):
-    description = category_description_html(pid, cid)
-    text = '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
+def category_heading(pid, cid, product_rows=None, lang=None):
+    lang = lang if lang in ('ar', 'en') else prefs(cid)[0]
+    description = category_description_html(pid, cid, lang)
+    text = '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else ('اختر المنتج:' if lang == 'ar' else 'Choose a product:'))
     # Use the displayed buttons so hidden items and alternate category routes
     # cannot produce a different price list from the products below it.
     ids = (list(dict.fromkeys(button['callback_data'].split(':', 1)[1]
@@ -960,11 +961,11 @@ def category_heading(pid, cid, product_rows=None):
         if usd is None or sar is None:
             continue
         # Isolate mixed Arabic/Latin text and keep the short price group together.
-        currency = '\u2067ر.س\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
+        currency = '\u2067ر.س\u2069' if lang == 'ar' else 'SAR'
         prices = f'\u2066${usd:.2f}\u00a0=\u00a0{sar:.2f}\u00a0' + currency + '\u2069'
         lines.append(prices + ('\u00a0' + icon if icon else ''))
     if lines:
-        text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
+        text += '\n\n<b>' + ('الأسعار بالريال السعودي:' if lang == 'ar' else 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
     return text
 
 
@@ -980,12 +981,13 @@ def admin_category_description(api, cid, pid=None, lang=None, mode=None):
     if pid not in cats:
         return admin_category_description(api, cid)
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('✨ أيقونة متحركة بجانب السعر بالريال', 'infoicon:category_prices:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+        lang = prefs(cid)[0]
     if mode not in ('append', 'replace'):
-        return send(api, cid, category_heading(pid, cid)
+        return send(api, cid, category_heading(pid, cid, lang=lang)
                     + '\n\nهل تريد إضافة كلام على الوصف الحالي، أو كتابة وصف جديد؟\nتحويل الأسعار يتحدث تلقائيًا ويظل ظاهرًا.',
                     kb([[btn('➕ إضافة على الوصف الحالي', 'catdescwrite:append:' + lang + ':' + pid)],
                         [btn('✏️ كتابة وصف جديد', 'catdescwrite:replace:' + lang + ':' + pid)],
+                        [btn('🌐 تعديل الوصف الإنجليزي' if lang == 'ar' else '🌐 تعديل الوصف العربي', 'catdesclang:' + ('en' if lang == 'ar' else 'ar') + ':' + pid)],
                         [btn('✨ أيقونة بجانب سعر الريال', 'infoicon:category_prices:' + pid)],
                         [btn('إلغاء', 'admin:categorydesc')]]))
     BROADCAST_PENDING.discard(cid)
