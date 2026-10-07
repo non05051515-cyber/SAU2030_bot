@@ -180,7 +180,7 @@ def display_product_name(pid, cid=0, label=None):
 
 
 def product_list_button_text(pid, cid=0, label=None):
-    return '\u2066' + display_product_name(pid, cid, label) + ' |  + format(amount(pid, 'USD'), '.2f') + '\u2069'
+    return '\u2066' + display_product_name(pid, cid, label) + ' | $' + format(amount(pid, 'USD'), '.2f') + '\u2069'
 
 
 def btn(text, action, icon=None, style=None):
