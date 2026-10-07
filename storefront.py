@@ -3121,11 +3121,11 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style=category_button_style(pid)) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style=category_button_style(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep 3 columns and explicitly pair computer + Telegram when both exist.
     # They may come from different catalogue sources, so do not rely on list position.
     pair = []
@@ -4534,11 +4534,11 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style=category_button_style(pid)) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style=category_button_style(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep 3 columns and explicitly pair computer + Telegram when both exist.
     # They may come from different catalogue sources, so do not rely on list position.
     pair = []
@@ -7199,11 +7199,11 @@ def home(api, cid):
     send(api, cid, text, kb(rows))
 
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style=category_button_style(pid)) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style=category_button_style(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep 3 columns and explicitly pair computer + Telegram when both exist.
     # They may come from different catalogue sources, so do not rely on list position.
     pair = []
@@ -8497,12 +8497,52 @@ def home(api, cid):
         rows.append([btn('لوحة الطلبات', 'admin', ui_icon('ui_admin'), style='primary')])
     send(api, cid, text, kb(rows))
 
+
+def category_button_style(category_id):
+    """Colour a category only when every displayed product is out of stock."""
+    ids = category_product_ids(category_id)
+    with db() as conn:
+        custom_ids = [r[0] for r in conn.execute(
+            'SELECT pid FROM admin_products WHERE category_id=? ORDER BY rowid', (category_id,))]
+        cat = custom_category(category_id)
+        is_capcut = category_id in ('capcut', 'pandora_capcut') or (
+            cat and 'capcut' in cat[1].lower().replace(' ', ''))
+        if is_capcut:
+            supplier_rows = conn.execute("""SELECT p.pid,a.service_id,a.variant_id
+                FROM admin_products p JOIN supplier_api a ON a.pid=p.pid
+                LEFT JOIN admin_categories cat ON cat.cid=p.category_id
+                WHERE a.provider='pandora' AND a.service_id<>'' AND
+                (lower(p.name) LIKE '%capcut%' OR lower(COALESCE(cat.name,'')) LIKE '%capcut%')
+                ORDER BY p.rowid""").fetchall()
+            if supplier_rows:
+                ids, seen = [], set()
+                for pid, service_id, variant_id in supplier_rows:
+                    identity = (service_id, variant_id)
+                    if identity not in seen and product_visible(pid):
+                        seen.add(identity)
+                        ids.append(pid)
+        elif category_id == 'youtube' and not custom_ids:
+            youtube_ids = [r[0] for r in conn.execute("""SELECT DISTINCT p.pid
+                FROM admin_products p LEFT JOIN admin_categories c ON c.cid=p.category_id
+                WHERE p.category_id='youtube' OR lower(p.name) LIKE '%youtube%'
+                   OR p.name LIKE '%يوتيوب%' OR lower(COALESCE(c.name,'')) LIKE '%youtube%'
+                   OR COALESCE(c.name,'') LIKE '%يوتيوب%' ORDER BY p.rowid""")]
+            visible_youtube = [pid for pid in youtube_ids if product_visible(pid)]
+            if visible_youtube:
+                ids = visible_youtube
+    visible_ids = [pid for pid in ids if product_visible(pid)]
+    if visible_ids and all(not in_stock(pid) or Decimal(str(product_stock(pid))) <= 0
+                           for pid in visible_ids):
+        return 'danger'
+    return None
+
+
 def products(api, cid):
-    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id')) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
+    buttons = [btn(category_label(pid, cid), 'product:' + pid, ui_icon(pid) or p.get('custom_emoji_id'), style=category_button_style(pid)) for pid, p in G['PRODUCTS'].items() if category_visible(pid)]
     with db() as conn:
         custom_categories = conn.execute('SELECT cid,name FROM admin_categories ORDER BY rowid').fetchall()
         direct_products = conn.execute('SELECT pid,available,stock FROM admin_products WHERE category_id IS NULL ORDER BY rowid').fetchall()
-    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
+    buttons += [btn(name(category_id, cid), 'product:' + category_id, ui_icon(category_id), style=category_button_style(category_id)) for category_id, category_name in custom_categories if category_visible(category_id)]
     # Keep 3 columns and explicitly pair computer + Telegram when both exist.
     # They may come from different catalogue sources, so do not rely on list position.
     pair = []
