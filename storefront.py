@@ -872,7 +872,7 @@ def category_heading(pid, cid, product_rows=None):
                      + f' — {usd:.2f} USD (' + (icon + ' ' if icon else '') + f'{sar:.2f} '
                      + tr(cid, 'ريال سعودي', 'SAR') + ')')
     if lines:
-        text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n' + '\n'.join(lines)
+        text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
     return text
 
 
