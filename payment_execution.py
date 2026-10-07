@@ -110,6 +110,8 @@ def approve(s, api, actor, decision, oid):
     if decision == 'reject':
         s.send(api, customer, '❌ تم رفض إثبات الدفع.')
         return s.send(api, actor, '❌ تم رفض الطلب #' + s.esc(oid))
+    if getattr(s,'waiting_customer_input',lambda *args:False)(api,oid):
+        return s.send(api,actor,'تم قبول الدفع للطلب #'+s.esc(oid)+'؛ بانتظار بيانات العميل قبل التنفيذ.')
     print('VEXA approval route: '+json.dumps({'order_id':oid,'saved_pid':pid,'route':'pandora' if needs_supplier(s,pid) else 'manual'}),flush=True)
     if s.fulfill_paid_order(api, oid):
         return s.send(api, actor, '✅ تم قبول الطلب #' + s.esc(oid) + ' ومتابعته عبر التنفيذ التلقائي.')
@@ -154,6 +156,8 @@ def _send_delivery_file(api, cid, oid, product_name, items):
         print('Delivery file send failed:',type(exc).__name__,flush=True);return False
 
 def fulfill(s, api, oid):
+    if getattr(s,'waiting_customer_input',lambda *args:False)(api,oid):
+        return True
     import local_delivery
     if local_delivery.fulfill(s, api, oid):
         return True

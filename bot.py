@@ -152,6 +152,9 @@ def handle_admin_delivery(a,m):
  x=PENDING_ADMIN_DELIVERY.get(ADMIN_ID)
  if not x:return False
  customer=x['customer']
+ if x.get('order_id') and getattr(storefront,'waiting_customer_input',lambda *args:False)(a,x['order_id']):
+  send(a,ADMIN_ID,'الطلب بانتظار بيانات العميل قبل التنفيذ.')
+  return True
  if x.get('order_id') and payment_execution.guard_delivery(storefront,x['order_id']):
   PENDING_ADMIN_DELIVERY.pop(ADMIN_ID,None)
   send(a,ADMIN_ID,'⚠️ التسليم اليدوي محظور لطلبات Pandora.')
@@ -213,7 +216,7 @@ def main():
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
   # Keep all background services, but avoid hammering SQLite every 2 seconds.
-  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5),('subscriptions',globals().get('tick_subscriptions'),60)]
+  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5),('subscriptions',globals().get('tick_subscriptions'),60),('order_inputs',globals().get('tick_order_inputs'),10)]
   last={}
   while True:
    now=time.monotonic()
@@ -269,6 +272,7 @@ def main():
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
     if telegram_payments.paid(a,m):continue
+    if 'handle_order_input' in globals() and handle_order_input(a,m):continue
     customer_inbox.capture(m)
     storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
@@ -339,6 +343,9 @@ product_details.install(storefront, globals())
 
 import subscriptions
 subscriptions.install(storefront, globals())
+
+import order_inputs
+order_inputs.install(storefront, globals())
 
 def warm_arabic_descriptions():
  try:
