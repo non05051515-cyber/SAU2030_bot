@@ -180,7 +180,12 @@ def display_product_name(pid, cid=0, label=None):
 
 
 def product_list_button_text(pid, cid=0, label=None):
-    return '\u2066' + display_product_name(pid, cid, label) + ' | $' + format(amount(pid, 'USD'), '.2f') + '\u2069'
+    try:
+        quantity = max(0, int(product_stock(pid))) if in_stock(pid) else 0
+    except (ValueError, TypeError):
+        quantity = 0
+    return ('\u2066' + display_product_name(pid, cid, label) + ' · ' + str(quantity)
+            + ' | $' + format(amount(pid, 'USD'), '.2f') + '\u2069')
 
 
 def btn(text, action, icon=None, style=None):
@@ -3188,8 +3193,6 @@ def compact_name(pid, cid=0):
     label = label or full
     # Telegram renders inline-button text on one line. Limit only the product
     # name segment so the USD price and stock segment remain fully visible.
-    if len(label) > 22:
-        label = label[:21].rstrip(' -—|•:') + '…'
     return label
 
 
@@ -7272,8 +7275,6 @@ def compact_name(pid, cid=0):
     label = label or full
     # Telegram renders inline-button text on one line. Limit only the product
     # name segment so the USD price and stock segment remain fully visible.
-    if len(label) > 22:
-        label = label[:21].rstrip(' -—|•:') + '…'
     return label
 
 
