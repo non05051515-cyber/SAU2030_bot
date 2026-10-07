@@ -50,6 +50,13 @@ def prepare(s):
         """)
 
 
+def ensure(s):
+    with s.db() as c:
+        ready=c.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='subscription_delivery'").fetchone()
+    if not ready:
+        prepare(s)
+
+
 def config(s, pid):
     with s.db() as c:
         return c.execute('SELECT enabled,days,remind_days FROM subscription_settings WHERE pid=?',
@@ -151,6 +158,7 @@ def renew(s, namespace, api, cid, oid):
 
 
 def tick(s, api):
+    ensure(s)
     now=int(time.time())
     with s.db() as c:
         rows=c.execute("""SELECT x.order_id,x.cid,x.pid,x.expires FROM customer_subscriptions x
@@ -196,6 +204,7 @@ def install(s, namespace):
         s.send(api,cid,s.tr(cid,'اشتراكاتك وتواريخ انتهائها:','Your subscriptions and expiry dates:'),
                s.kb([[s.btn(s.tr(cid,'اشتراكاتي وتجديدها','My subscriptions and renewals'),'subs:0')]]))
     def action(api,cid,value):
+        ensure(s)
         prefix,_,arg=value.partition(':')
         if prefix=='subs':
             if not arg.isdigit():return
@@ -223,6 +232,7 @@ def install(s, namespace):
                 c.execute('DELETE FROM subscription_intents WHERE cid=?',(cid,))
         return old_action(api,cid,value)
     def receipt(api,message):
+        ensure(s)
         cid=message.get('chat',{}).get('id')
         if cid==s.G['ADMIN_ID']:
             with s.db() as c:
