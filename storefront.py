@@ -193,7 +193,7 @@ def product_list_button_text(pid, cid=0, label=None):
     currency = prefs(cid)[1]
     value = amount(pid, currency)
     if currency == 'SAR' and value is not None:
-        unit = '\u2067ريال\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
+        unit = '\u2067﷼\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
         price_text = f'{value:.2f}\u00a0' + unit
     else:
         price_text = price(cid, pid)
