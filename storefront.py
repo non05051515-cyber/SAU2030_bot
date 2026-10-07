@@ -851,9 +851,29 @@ def category_label(pid, cid=0):
     return name(pid, cid)
 
 
-def category_heading(pid, cid):
+def category_heading(pid, cid, product_rows=None):
     description = category_description_html(pid, cid)
-    return '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
+    text = '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else tr(cid, 'اختر المنتج:', 'Choose a product:'))
+    # Use the displayed buttons so hidden items and alternate category routes
+    # cannot produce a different price list from the products below it.
+    ids = (list(dict.fromkeys(button['callback_data'].split(':', 1)[1]
+            for row in product_rows for button in row
+            if button.get('callback_data', '').startswith(('item:', 'options:'))))
+           if product_rows is not None else category_product_ids(pid))
+    icon = info_icon(pid, 'category_prices', '')
+    lines = []
+    for product_id in ids:
+        if not product_visible(product_id):
+            continue
+        usd, sar = amount(product_id, 'USD'), amount(product_id, 'SAR')
+        if usd is None or sar is None:
+            continue
+        lines.append((icon + ' ' if icon else '') + esc(compact_name(product_id, cid))
+                     + f' — {usd:.2f} USD ({sar:.2f} '
+                     + tr(cid, 'ريال سعودي', 'SAR') + ')')
+    if lines:
+        text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n' + '\n'.join(lines)
+    return text
 
 
 def admin_category_description(api, cid, pid=None, lang=None):
@@ -868,7 +888,7 @@ def admin_category_description(api, cid, pid=None, lang=None):
     if pid not in cats:
         return admin_category_description(api, cid)
     if lang not in ('ar', 'en'):
-        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+        return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('✨ أيقونة متحركة بجانب أسعار القسم', 'infoicon:category_prices:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
@@ -1022,6 +1042,10 @@ def handle_info_icon(api,message):
     entities=list(message.get('entities',[]))+list(message.get('caption_entities',[]))
     emoji=next((e.get('custom_emoji_id') for e in entities if e.get('type')=='custom_emoji' and e.get('custom_emoji_id')),None)
     field,_,pid=row[0].partition(':')
+    if not emoji and field == 'category_prices':
+        send(api,cid,'أرسل أيقونة متحركة مخصصة من إيموجي تيليجرام، وليس رمزًا عاديًا أو ملصقًا.',
+             kb([[btn('❌ إلغاء','catdesc:'+pid)]]))
+        return True
     if not emoji:
         normal=(message.get('text') or '').strip()
         is_emoji=(0<len(normal)<=12 and not any(ch.isspace() or ch.isalpha() for ch in normal)
@@ -1030,7 +1054,7 @@ def handle_info_icon(api,message):
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,'',normal))
                 conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
-            back_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
+            back_action = 'catdesc:'+pid if field == 'category_prices' else ('admin:info' if pid == '__global__' else 'infopick:'+pid)
             back_label = '↩️ إعدادات البيانات' if pid == '__global__' else '↩️ إعدادات المنتج'
             send(api,cid,'✅ تم حفظ '+esc(normal)+' كأيقونة عادية. إذا أردتها متحركة، اختر إيموجي تيليجرام المخصص وأرسله.',kb([[btn(back_label,back_action)]]))
             return True
@@ -1045,7 +1069,10 @@ def handle_info_icon(api,message):
     with db() as conn:
         conn.execute('INSERT OR REPLACE INTO product_info_icons(pid,field,custom_emoji_id,fallback_emoji) VALUES (?,?,?,?)',(pid,field,str(emoji),fallback))
         conn.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
-    if pid == '__global__':
+    if field == 'category_prices':
+        send(api,cid,'✅ تم حفظ الأيقونة المتحركة. ستظهر بجانب أسعار المنتجات في رسالة القسم.',
+             kb([[btn('↩️ إعدادات القسم','catdesc:'+pid)],[btn('🛍 معاينة القسم','product:'+pid)]]))
+    elif pid == '__global__':
         field_label = 'السعر' if field == 'price' else 'الكمية'
         send(api,cid,'✅ <b>تم حفظ أيقونة '+field_label+' بنجاح</b>\n\nستظهر الأيقونة الجديدة بجانب '+field_label+' في جميع المنتجات.',
              kb([[btn('↩️ بيانات المنتج الظاهرة','admin:info',style='success')],[btn('🛍 معاينة المنتجات','products')]]))
@@ -1496,7 +1523,7 @@ def show_extended_category(api, cid, category_id):
     rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
-    send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
+    send(api, cid, category_heading(category_id, cid, rows), kb(rows + [nav(cid)]))
     return True
 
 
@@ -3339,7 +3366,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -3363,7 +3390,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
@@ -3381,7 +3408,7 @@ def category(api, cid, pid):
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -4660,7 +4687,7 @@ def category(api, cid, pid):
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -4684,7 +4711,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
@@ -4695,7 +4722,7 @@ def category(api, cid, pid):
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -5292,10 +5319,10 @@ def action(api, cid, value):
         send(api, cid, '✏️ أرسل نص الضمان لهذا المنتج، مثال: <b>15 يوم</b>.', kb([[btn('إلغاء', 'admin:info')]]))
     elif prefix == 'infoicon' and cid == G['ADMIN_ID']:
         field, _, pid = arg.partition(':')
-        if field in ('price','stock','warranty'):
+        if field in ('price','stock','warranty','category_prices'):
             with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'info_icon',field+':'+pid))
             target_text = 'لجميع المنتجات' if pid == '__global__' else 'لهذا المنتج'
-            cancel_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
+            cancel_action = 'catdesc:'+pid if field == 'category_prices' else ('admin:info' if pid == '__global__' else 'infopick:'+pid)
             send(api,cid,'أرسل الآن الأيقونة المتحركة '+target_text+'.',kb([[btn('❌ إلغاء',cancel_action)]]))
     elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
         pandora_catalog_open(api, cid, arg, 0)
@@ -5760,7 +5787,7 @@ def show_extended_category(api, cid, category_id):
     rows = [[btn(compact_name(pid, cid) + ' | ' + price(cid, pid) + ' | ' + compact_stock(product_stock(pid)), 'options:' + pid,
                  ui_icon(pid), style='danger' if not in_stock(pid) else None)]
             for pid in originals + custom if product_visible(pid)]
-    send(api, cid, category_heading(category_id, cid), kb(rows + [nav(cid)]))
+    send(api, cid, category_heading(category_id, cid, rows), kb(rows + [nav(cid)]))
     return True
 
 
@@ -7418,7 +7445,7 @@ def category(api, cid, pid):
             label = compact_name(product_id, cid) + ' | ' + price(cid, product_id, 'USD') + ' | ' + compact_stock(qty)
             if sold_out: label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -7442,7 +7469,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if pid == 'chatgpt' and choices:
@@ -7460,7 +7487,7 @@ def category(api, cid, pid):
                 label = status + name(v['id'], cid) + ' | ' + price(cid, v['id'])
             variant_icon = product_button_icon(v['id'], cid)
             rows.append([btn(label, 'item:' + v['id'], p.get('custom_emoji_id') if variant_icon is None else variant_icon, style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -8624,7 +8651,7 @@ def category(api, cid, pid):
             if sold_out:
                 label = '🔴 ' + label
             rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     if pid == 'youtube':
         with db() as conn:
@@ -8648,7 +8675,7 @@ def category(api, cid, pid):
                 rows.append([btn(label, 'item:' + product_id, product_button_icon(product_id, cid),
                                  style='danger' if sold_out else 'success')])
             if rows:
-                send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+                send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
                 return
     choices = [v for v in VARIANTS.values() if v['category'] == pid and product_visible(v['id'])]
     if choices:
@@ -8659,7 +8686,7 @@ def category(api, cid, pid):
             qty = product_stock(v['id'])
             rows.append([btn(status + compact_name(v['id'], cid) + ' | ' + price(cid, v['id'], 'USD') + ' | ' + compact_stock(qty),
                              'item:' + v['id'], p.get('custom_emoji_id') if product_button_icon(v['id'], cid) is None else product_button_icon(v['id'], cid), style='danger' if sold_out else 'success')])
-        send(api, cid, category_heading(pid, cid), kb(rows + [nav(cid)]))
+        send(api, cid, category_heading(pid, cid, rows), kb(rows + [nav(cid)]))
         return
     english = {'youtube': 'YouTube Premium for one month. Ad-free viewing, background playback, offline downloads and YouTube Music Premium benefits.',
                'netflix': 'Netflix subscription for movies, series and entertainment.', 'iptv': 'IPTV subscriptions for compatible devices.'}
@@ -9268,10 +9295,10 @@ def action(api, cid, value):
         send(api, cid, '✏️ أرسل نص الضمان لهذا المنتج، مثال: <b>15 يوم</b>.', kb([[btn('إلغاء', 'admin:info')]]))
     elif prefix == 'infoicon' and cid == G['ADMIN_ID']:
         field, _, pid = arg.partition(':')
-        if field in ('price','stock','warranty'):
+        if field in ('price','stock','warranty','category_prices'):
             with db() as conn: conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)',(cid,'info_icon',field+':'+pid))
             target_text = 'لجميع المنتجات' if pid == '__global__' else 'لهذا المنتج'
-            cancel_action = 'admin:info' if pid == '__global__' else 'infopick:'+pid
+            cancel_action = 'catdesc:'+pid if field == 'category_prices' else ('admin:info' if pid == '__global__' else 'infopick:'+pid)
             send(api,cid,'أرسل الآن الأيقونة المتحركة '+target_text+'.',kb([[btn('❌ إلغاء',cancel_action)]]))
     elif prefix == 'pandorabrowse' and cid == G['ADMIN_ID']:
         pandora_catalog_open(api, cid, arg, 0)
