@@ -101,13 +101,13 @@ def page(s, api, cid, pid):
     balance = s.wallet_balance(cid) if currency == 'SAR' else balance_usd
     unit = s.tr(cid, 'ريال', 'SAR') if currency == 'SAR' else 'USD'
     text += '\n' + balance_icon + ' ' + s.tr(cid, 'رصيدك:', 'Balance:') + f' {balance:.2f} {unit}'
-    description = s.clean_product_description(s.product_description_html(pid,cid))
-    text += '\n\n━━━━━━━━━━━━━━\n\n' + s.info_icon(pid,'description','') + ' <b>' + s.tr(cid,'الوصف:','Description:') + '</b>\n' + description
     if s.can_order(pid):
         unit = s.amount(pid,'SAR')
         text += f'\n\n🛍 الكمية المختارة: {qty}\nاختر الكمية للانتقال إلى الدفع.'
     else:
         text += '\n\n' + s.tr(cid, '🔴 نفدت الكمية — أبلغني عند التوفر.', '🔴 Out of stock — notify me when available.')
+    description = s.clean_product_description(s.product_description_html(pid,cid))
+    text += '\n\n━━━━━━━━━━━━━━\n\n' + s.info_icon(pid,'description','') + ' <b>' + s.tr(cid,'الوصف:','Description:') + '</b>\n' + description
     s.card(api,cid,v.get('image') if v else None,s.name(pid,cid),text,s.product_keyboard(cid, rows, 'o:' + pid),pid=pid)
 
 

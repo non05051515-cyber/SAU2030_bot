@@ -54,13 +54,13 @@ def install(s, namespace):
             lines.append((icon+' ' if icon else '')+'<b>'+s.esc(label)+':</b> '+value)
         if sp:
             line('price', s.tr(cid, 'السعر', 'Price'), s.price(cid, pid), '💵')
+        if ss:
+            line('stock', s.tr(cid, 'الكمية المتوفرة', 'Available quantity'), s.esc(s.product_stock(pid)), '📦')
         for fid, label, value, visible, owner in fields(s, pid):
             if visible:
                 line('extra_'+fid, label, s.esc(value), owner=owner)
         if sw:
             line('warranty', s.tr(cid, 'الضمان', 'Warranty'), s.esc(warranty or s.tr(cid, 'غير محدد', 'Not specified')), '🛡')
-        if ss:
-            line('stock', s.tr(cid, 'الكمية المتوفرة', 'Available quantity'), s.esc(s.product_stock(pid)), '📦')
         return '\n'.join(lines)
 
     def editor(api, cid, pid):
