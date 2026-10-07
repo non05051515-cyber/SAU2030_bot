@@ -326,10 +326,59 @@ def wallet_debit(cid, value):
     return updated
 
 
+SAVED_ARABIC_DESCRIPTIONS = {
+  "SOQID Digital Store product.\nDelivered after order confirmation.": "منتج من متجر SOQID الرقمي.\nيتم التسليم بعد تأكيد الطلب.",
+  "Private ⭐️\nShahid VIP account for one month — a full account including all profiles.": "خاص ⭐️\nحساب شاهد VIP لمدة شهر — حساب كامل يشمل جميع الملفات.",
+  "Crunchyroll private profile for 1 month.\nFor personal use.": "ملف خاص في Crunchyroll لمدة شهر.\nللاستخدام الشخصي.",
+  "Crunchyroll full account for 7 days.\nReady to use.": "حساب Crunchyroll كامل لمدة 7 أيام.\nجاهز للاستخدام.",
+  "✂️ Capcut Pro 1 Month FW\n💵 Price: $1.39\n📦 Stock: 43 items\n\n💦 Description:\n-Full 30 days private Pro Team account .\n-Maximum 2 devices , with full warranty .\n-Stable Account full 30 days (no 7days renew ).\n-Login to mobile App first next to laptop (desktop App no web) via QR code .\n\n🎁 Promotions:\n• Buy 5+ → $1.35/unit\n• Buy 25+ → $1.29/unit": "✂️ CapCut Pro لمدة شهر بضمان كامل\n💵 السعر: $1.39\n📦 المخزون: 43 منتجًا\n\n💦 الوصف:\n• حساب Pro Team خاص لمدة 30 يومًا كاملة.\n• يدعم جهازين كحد أقصى، مع ضمان كامل.\n• حساب مستقر لمدة 30 يومًا، دون تجديد كل 7 أيام.\n• سجّل الدخول أولًا إلى تطبيق الجوال، ثم إلى تطبيق الكمبيوتر عبر رمز QR؛ وليس عبر الموقع.\n\n🎁 العروض:\n• شراء 5 فأكثر: $1.35 للوحدة.\n• شراء 25 فأكثر: $1.29 للوحدة.",
+  "Description:\nMicrosoft Office 365 Plus – 1 Month + 11 Months (GIFT) Subscription\n\nWhat's Included:\n• Microsoft Word\n• Microsoft Excel\n• Microsoft PowerPoint\n• Microsoft OneNote\n• Microsoft Forms\n\nProduct Details:\n• Subscription Duration: 1 Month (Guaranteed) + 11 Months (GIFT)\n• Supported Devices: Up to 5 Windows PCs\n• Delivery: Instant Digital Delivery after payment": "الوصف:\nاشتراك Microsoft Office 365 Plus — شهر + 11 شهرًا هدية.\n\nيتضمن:\n• Microsoft Word\n• Microsoft Excel\n• Microsoft PowerPoint\n• Microsoft OneNote\n• Microsoft Forms\n\nتفاصيل المنتج:\n• مدة الاشتراك: شهر مضمون + 11 شهرًا هدية.\n• الأجهزة المدعومة: حتى 5 أجهزة كمبيوتر بنظام Windows.\n• التسليم: تسليم رقمي فوري بعد الدفع.",
+  "💦 Description: Tap to expand ↓\nAvira Prime – 3 Months Subscription (5 Devices) 🛡✨\n\nGet premium cybersecurity with complete privacy and full device optimization.\n\nKey Features:\n\n⏳ Duration: 3 Months full access\n\n💻 Device Limit: Up to 5 Devices (Windows, Mac, Android, iOS)\n\n🚀 Full Package: Premium Antivirus, Unlimited Phantom VPN, Password Manager & System Speedup": "💦 الوصف:\nاشتراك Avira Prime لمدة 3 أشهر، يدعم 5 أجهزة 🛡✨\n\nحماية متقدمة مع خصوصية شاملة وتحسين أداء الأجهزة.\n\nالمزايا:\n⏳ المدة: وصول كامل لمدة 3 أشهر.\n💻 الأجهزة: حتى 5 أجهزة بنظام Windows أو Mac أو Android أو iOS.\n🚀 الحزمة: مضاد فيروسات مميز، وPhantom VPN غير محدود، ومدير كلمات مرور، وأداة تسريع النظام.",
+  "💦 Description:\n-Activation in email's customers(Full Private Account).\n-All pro features is activated even All AI features .": "💦 الوصف:\n• يتم التفعيل على بريد العميل الإلكتروني، بحساب خاص بالكامل.\n• جميع مزايا Pro مفعّلة، بما فيها جميع مزايا الذكاء الاصطناعي.",
+  "💦 Description: Tap to expand ↓\nAdobe Express Premium 12 Months Subscription - 100% Genuine\n​What You Get: 250 AI Credits, 350K+ Premium Templates, 200M+ Stock Assets, background remover, video editing, and full premium features.\n\n​Redemption Instructions:\n​Recommended Method (Fresh Email):\n​Click on the delivered redemption link/code.": "💦 الوصف:\nاشتراك Adobe Express Premium أصلي 100% لمدة 12 شهرًا.\n\nيتضمن: 250 رصيدًا للذكاء الاصطناعي، وأكثر من 350 ألف قالب مميز، و200 مليون أصل جاهز، وإزالة الخلفيات، وتحرير الفيديو، وجميع المزايا المميزة.\n\nتعليمات التفعيل:\nالطريقة الموصى بها: استخدام بريد إلكتروني جديد.\nافتح رابط أو رمز التفعيل الذي يصلك.",
+  "Saa": "سا",
+  "Telegram account US numbers": "حساب تيليجرام برقم أمريكي.",
+  "🏷️ Product Description\n🚀Telegram official premium subscription 12 month \n😮Just send your teligram username \n🔵No need login \n🎈Quick delivery automatic\n\n🧩 Customer information required after purchase:\n• Send your Teligram Username": "🏷️ وصف المنتج\n🚀 اشتراك تيليجرام بريميوم رسمي لمدة 12 شهرًا.\n😮 أرسل اسم المستخدم الخاص بك في تيليجرام فقط.\n🔵 لا حاجة إلى تسجيل الدخول.\n🎈 تسليم تلقائي سريع.\n\n🧩 المعلومات المطلوبة بعد الشراء:\n• اسم المستخدم الخاص بك في تيليجرام.",
+  "🏷️ Product Description\n🚀Telegram official premium subscription 6 month \n😮Just send your teligram username \n🔵No need login \n🎈Quick delivery automatic\n\n🧩 Customer information required after purchase:\n• Send your Teligram Username": "🏷️ وصف المنتج\n🚀 اشتراك تيليجرام بريميوم رسمي لمدة 6 أشهر.\n😮 أرسل اسم المستخدم الخاص بك في تيليجرام فقط.\n🔵 لا حاجة إلى تسجيل الدخول.\n🎈 تسليم تلقائي سريع.\n\n🧩 المعلومات المطلوبة بعد الشراء:\n• اسم المستخدم الخاص بك في تيليجرام.",
+  "💦 Description:\nOne Year Official Coupon Code\n4000 Monthly Credit\nNo Warranty After Coupon Activation\nOn Your Account\nPlease note that the code must be redeemed within 7 days of purchase. Codes that are not used within this period may expire and may no longer be eligible for support or replacement.": "💦 الوصف:\n• رمز قسيمة رسمي لمدة سنة.\n• 4000 رصيد شهريًا.\n• لا يوجد ضمان بعد تفعيل القسيمة.\n• التفعيل على حسابك.\n\nيجب استخدام الرمز خلال 7 أيام من الشراء. الرموز التي لا تُستخدم خلال هذه المدة قد تنتهي صلاحيتها، وقد لا تكون مؤهلة للدعم أو الاستبدال.",
+  "🔹 Apple TV\n🔹 Full month warranty\n\n❗️ ❗️\n\n1️⃣ Never change the password\n\n2️⃣ Sign in via the code or the password\n\n3️⃣ The app is supported on Android devices and TVs; on PC, iPhone and iPad the app is not supported — browser only\n\n━━━━━━━━━━━━━━": "🔹 Apple TV\n🔹 ضمان لمدة شهر كامل.\n\n❗️ تعليمات الاستخدام:\n1️⃣ لا تغيّر كلمة المرور أبدًا.\n2️⃣ سجّل الدخول باستخدام الرمز أو كلمة المرور.\n3️⃣ التطبيق مدعوم على أجهزة Android والتلفزيونات. على الكمبيوتر وiPhone وiPad، يُستخدم المتصفح فقط.\n\n━━━━━━━━━━━━━━",
+  "✔️The account \nincludes 4 \nprofiles, and each user gets their own private \n🦄profile.": "✔️ يتكون الحساب من 4 ملفات، ولكل مستخدم ملفه الخاص 🦄.",
+  "Telegram Bots🤖 product.\nDelivered after order confirmation.": "منتج بوتات تيليجرام 🤖.\nيتم التسليم بعد تأكيد الطلب.",
+  "Official ChatGPT Pro X5 recharge for 1 month.\nActivated on your personal account.": "تجديد ChatGPT Pro X5 رسمي لمدة شهر.\nيُفعّل على حسابك الشخصي.",
+  "Official ChatGPT Plus recharge for 1 month.\nActivated on your personal account.": "تجديد ChatGPT Plus رسمي لمدة شهر.\nيُفعّل على حسابك الشخصي.",
+  "ChatGPT Go activation code for 1 month.\nFast activation on an eligible account.": "رمز تفعيل ChatGPT Go لمدة شهر.\nتفعيل سريع على الحساب المؤهل.",
+  "ChatGPT Plus for 1 month via Apple Pay.\nPrivate account for personal use.": "ChatGPT Plus لمدة شهر عبر Apple Pay.\nحساب خاص للاستخدام الشخصي.",
+  "GPT API CODEX with 500M tokens.\nDuration: 6 days.": "GPT API CODEX بحجم 500M توكن.\nالمدة: 6 أيام.",
+  "GPT API CODEX with 100M tokens.\nDuration: 3 days.": "GPT API CODEX بحجم 100M توكن.\nالمدة: 3 أيام.",
+  "GPT API CODEX with 50M tokens.\nDuration: 2 days.": "GPT API CODEX بحجم 50M توكن.\nالمدة: يومان.",
+  "GPT API CODEX with 10M tokens.\nDuration: 1 day.": "GPT API CODEX بحجم 10M توكن.\nالمدة: يوم واحد.",
+  "Official Claude Pro recharge for 1 month.\nActivated on an eligible account.": "تجديد Claude Pro رسمي لمدة شهر.\nيُفعّل على الحساب المؤهل.",
+  "Claude API with 500M tokens.\nDuration: 6 days.": "Claude API بحجم 500M توكن.\nالمدة: 6 أيام.",
+  "Claude API with 100M tokens.\nDuration: 3 days.": "Claude API بحجم 100M توكن.\nالمدة: 3 أيام.",
+  "Claude API with 50M tokens.\nDuration: 2 days.": "Claude API بحجم 50M توكن.\nالمدة: يومان.",
+  "Claude API with 10M tokens.\nDuration: 1 day.": "Claude API بحجم 10M توكن.\nالمدة: يوم واحد.",
+  "CapCut Pro individual account for 6 months.\nSuitable for personal use.": "CapCut Pro حساب فردي لمدة 6 أشهر.\nمناسب للاستخدام الشخصي.",
+  "CapCut Pro for 1 month with 1600 credits.\nReady to use.": "CapCut Pro لمدة شهر مع 1600 رصيد.\nالحساب جاهز للاستخدام.",
+  "CapCut Pro for 1 month.\nPrivate account with full warranty.": "CapCut Pro لمدة شهر.\nحساب خاص بضمان كامل.",
+  "CapCut Pro for 7 days.\nAccount with full warranty.": "CapCut Pro لمدة 7 أيام.\nحساب بضمان كامل.",
+  "Official SuperGrok iOS code for 3 months.\nFor activation on an eligible account.": "SuperGrok رمز iOS رسمي لمدة 3 أشهر.\nيُستخدم للتفعيل على الحساب المؤهل.",
+  "Grok + X Premium+ for 1 month.\nActivation code for an eligible account.": "Grok + X Premium+ لمدة شهر.\nرمز تفعيل للحساب المؤهل.",
+  "SuperGrok Heavy for 1 month.\nActivation code for an eligible account.": "SuperGrok Heavy لمدة شهر.\nرمز تفعيل للحساب المؤهل.",
+  "SuperGrok account for 7 days.\nReady to use.": "حساب SuperGrok لمدة 7 أيام.\nجاهز للاستخدام.",
+  "Gemini activation link for 18 months.\nDelivered as a subscription link.": "Gemini عبر رابط تفعيل لمدة 18 شهرًا.\nيتم التسليم كرابط اشتراك.",
+  "Canva Education Pro admin panel with 500 seats.\nSuitable for team management.": "Canva Education Pro بلوحة إدارة 500 مقعد.\nمناسب لإدارة فريق أو مجموعة.",
+  "Netflix Premium 4K full account for 1 month.\nAll profiles on the account are yours.": "Netflix Premium 4K حساب كامل لمدة شهر.\nجميع الملفات داخل الحساب خاصة بك."
+}
+
+
 def auto_translate(text, target='en'):
     text = (text or '').strip()
     if not text:
         return text
+    if target == 'ar':
+        saved = SAVED_ARABIC_DESCRIPTIONS.get(text)
+        if saved:
+            return saved
     try:
         import chatgpt_extension
         language = 'English' if target == 'en' else 'Arabic'
