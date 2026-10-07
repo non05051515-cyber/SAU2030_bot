@@ -188,8 +188,19 @@ def product_list_button_text(pid, cid=0, label=None):
         quantity = max(0, int(product_stock(pid))) if in_stock(pid) else 0
     except (ValueError, TypeError):
         quantity = 0
-    return ('\u2066' + display_product_name(pid, cid, label)
-            + ' | ' + price(cid, pid) + ' | 📦 ' + str(quantity) + '\u2069')
+    # Isolate each field: Arabic currency text must not absorb the separator,
+    # stock icon or stock number into its right-to-left run.
+    currency = prefs(cid)[1]
+    value = amount(pid, currency)
+    if currency == 'SAR' and value is not None:
+        unit = '\u2067ريال\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
+        price_text = f'{value:.2f}\u00a0' + unit
+    else:
+        price_text = price(cid, pid)
+    title = display_product_name(pid, cid, label)
+    return ('\u2066\u2068' + title + '\u2069\u200e | '
+            + '\u2066' + price_text + '\u2069\u200e | '
+            + '\u2066📦\u00a0' + str(quantity) + '\u2069\u2069')
 
 
 def btn(text, action, icon=None, style=None):
