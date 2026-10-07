@@ -963,7 +963,7 @@ def category_heading(pid, cid, product_rows=None):
     return text
 
 
-def admin_category_description(api, cid, pid=None, lang=None):
+def admin_category_description(api, cid, pid=None, lang=None, mode=None):
     if cid != G['ADMIN_ID']:
         return
     with db() as conn:
@@ -976,13 +976,20 @@ def admin_category_description(api, cid, pid=None, lang=None):
         return admin_category_description(api, cid)
     if lang not in ('ar', 'en'):
         return send(api, cid, 'اختر لغة وصف القسم:\n\n🇺🇸 إذا كتبت الوصف بالإنجليزية سيتم إنشاء النسخة العربية تلقائيًا.', kb([[btn('العربية', 'catdesclang:ar:' + pid), btn('English + ترجمة عربية تلقائية', 'catdesclang:en:' + pid)], [btn('✨ أيقونة متحركة بجانب السعر بالريال', 'infoicon:category_prices:' + pid)], [btn('إلغاء', 'admin:categorydesc')]]))
+    if mode not in ('append', 'replace'):
+        return send(api, cid, category_heading(pid, cid)
+                    + '\n\nهل تريد إضافة كلام على الوصف الحالي، أو كتابة وصف جديد؟\nتحويل الأسعار يتحدث تلقائيًا ويظل ظاهرًا.',
+                    kb([[btn('➕ إضافة على الوصف الحالي', 'catdescwrite:append:' + lang + ':' + pid)],
+                        [btn('✏️ كتابة وصف جديد', 'catdescwrite:replace:' + lang + ':' + pid)],
+                        [btn('✨ أيقونة بجانب سعر الريال', 'infoicon:category_prices:' + pid)],
+                        [btn('إلغاء', 'admin:categorydesc')]]))
     BROADCAST_PENDING.discard(cid)
     with db() as conn:
         conn.execute('DELETE FROM custom_topup_state WHERE cid=?', (cid,))
-        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'category_description', json.dumps([pid, lang])))
-        row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
-    current = row[0] if row else esc('اختر المنتج:' if lang == 'ar' else 'Choose a product:')
-    send(api, cid, '<b>' + esc(category_label(pid, cid)) + '</b>\n\nالوصف الحالي:\n' + current + '\n\nأرسل الوصف الجديد (حتى 1500 حرف). يمكنك استخدام أسطر وأيقونات متحركة.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
+        conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'category_description', json.dumps([pid, lang, mode])))
+    prompt = 'أرسل الكلام الذي تريد إضافته على الوصف الحالي.' if mode == 'append' else 'أرسل الوصف الجديد؛ سيحل محل الوصف المكتوب الحالي.'
+    send(api, cid, prompt + '\nحتى 1500 حرف، ويمكن استخدام أسطر وأيقونات متحركة.\nتحويل الأسعار يبقى تلقائيًا أسفل الوصف.',
+         kb([[btn('إلغاء', 'admin:categorydesc')]]))
 
 
 def handle_category_description(api, message):
@@ -1001,8 +1008,19 @@ def handle_category_description(api, message):
     if not text or len(text.encode('utf-16-le')) // 2 > 1500:
         send(api, cid, 'أرسل نصًا غير فارغ لا يتجاوز 1500 حرف.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
         return True
-    pid, lang = json.loads(row[0])
+    state = json.loads(row[0])
+    pid, lang = state[:2]
+    mode = state[2] if len(state) > 2 else 'replace'
     formatted = description_message_html(message, text)
+    if mode == 'append':
+        with db() as conn:
+            previous = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
+        if previous and previous[0]:
+            formatted = previous[0] + '\n\n' + formatted
+        text = html.unescape(re.sub(r'<[^>]+>', '', formatted))
+        if len(text.encode('utf-16-le')) // 2 > 1500:
+            send(api, cid, 'الوصف بعد الإضافة يتجاوز 1500 حرف. أرسل إضافة أقصر.', kb([[btn('إلغاء', 'admin:categorydesc')]]))
+            return True
     translated_en = auto_translate(text, 'en')[:1500] if lang == 'ar' else None
     translated_ar = auto_translate(text, 'ar')[:1500] if lang == 'en' else None
     with db() as conn:
@@ -4185,6 +4203,9 @@ def action(api, cid, value):
         item(api, cid, LEGACY[value])
     elif prefix == 'catdesc':
         admin_category_description(api, cid, arg)
+    elif prefix == 'catdescwrite':
+        mode, lang, pid = arg.split(':', 2)
+        admin_category_description(api, cid, pid, lang, mode)
     elif prefix == 'catdesclang':
         lang, _, pid = arg.partition(':')
         admin_category_description(api, cid, pid, lang)
@@ -5326,6 +5347,9 @@ def action(api, cid, value):
         item(api, cid, LEGACY[value])
     elif prefix == 'catdesc':
         admin_category_description(api, cid, arg)
+    elif prefix == 'catdescwrite':
+        mode, lang, pid = arg.split(':', 2)
+        admin_category_description(api, cid, pid, lang, mode)
     elif prefix == 'catdesclang':
         lang, _, pid = arg.partition(':')
         admin_category_description(api, cid, pid, lang)
@@ -8164,6 +8188,9 @@ def action(api, cid, value):
         item(api, cid, LEGACY[value])
     elif prefix == 'catdesc':
         admin_category_description(api, cid, arg)
+    elif prefix == 'catdescwrite':
+        mode, lang, pid = arg.split(':', 2)
+        admin_category_description(api, cid, pid, lang, mode)
     elif prefix == 'catdesclang':
         lang, _, pid = arg.partition(':')
         admin_category_description(api, cid, pid, lang)
@@ -9342,6 +9369,9 @@ def action(api, cid, value):
         item(api, cid, LEGACY[value])
     elif prefix == 'catdesc':
         admin_category_description(api, cid, arg)
+    elif prefix == 'catdescwrite':
+        mode, lang, pid = arg.split(':', 2)
+        admin_category_description(api, cid, pid, lang, mode)
     elif prefix == 'catdesclang':
         lang, _, pid = arg.partition(':')
         admin_category_description(api, cid, pid, lang)
