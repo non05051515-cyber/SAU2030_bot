@@ -956,9 +956,8 @@ def category_heading(pid, cid, product_rows=None):
             continue
         # Isolate mixed Arabic/Latin text and keep the short price group together.
         currency = '\u2067ر.س\u2069' if prefs(cid)[0] == 'ar' else 'SAR'
-        prices = f'\u2066${usd:.2f}\u00a0({sar:.2f}\u00a0' + currency + ')\u2069'
-        lines.append('\u2068' + esc(display_product_name(product_id, cid)) + '\u2069'
-                     + ' — ' + prices + ('\u00a0' + icon if icon else ''))
+        prices = f'\u2066${usd:.2f}\u00a0=\u00a0{sar:.2f}\u00a0' + currency + '\u2069'
+        lines.append(prices + ('\u00a0' + icon if icon else ''))
     if lines:
         text += '\n\n<b>' + tr(cid, 'الأسعار بالريال السعودي:', 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
     return text
