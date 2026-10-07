@@ -1,5 +1,6 @@
 """Editable product facts, reusing existing warranty and animated icon storage."""
-import json
+import re
+import html
 import uuid
 
 
@@ -8,10 +9,35 @@ def prepare(s):
         c.execute('CREATE TABLE IF NOT EXISTS product_detail_fields (id TEXT PRIMARY KEY, pid TEXT NOT NULL, label TEXT NOT NULL, value TEXT NOT NULL, visible INTEGER NOT NULL DEFAULT 1)')
 
 
+def related_ids(s, pid):
+    pid = s.LEGACY.get(pid, pid)
+    with s.db() as c:
+        row = c.execute("SELECT provider,service_id,variant_id FROM supplier_api WHERE pid=?", (pid,)).fetchone()
+        if not row or not row[0] or not row[1]:
+            return [pid]
+        matches = c.execute("SELECT pid FROM supplier_api WHERE provider=? AND service_id=? AND COALESCE(variant_id,'')=?", (row[0],row[1],row[2] or '')).fetchall()
+    return [pid] + [r[0] for r in matches if r[0] != pid]
+
+
 def fields(s, pid):
     prepare(s)
     with s.db() as c:
-        return c.execute('SELECT id,label,value,visible FROM product_detail_fields WHERE pid=? ORDER BY rowid', (pid,)).fetchall()
+        return c.execute('SELECT id,label,value,visible,pid FROM product_detail_fields WHERE pid IN ('+','.join('?' for _ in related_ids(s,pid))+') ORDER BY rowid', related_ids(s,pid)).fetchall()
+
+
+def clean_description(text):
+    lines = text.splitlines()
+    result = []
+    for line in lines:
+        plain = html.unescape(re.sub(r'<[^>]*>', '', line)).strip()
+        # Remove copied headings and stale supplier metadata, keeping prose and emoji markup.
+        if re.match(r'^[^\w]*?(?:السعر|المخزون|الكمية(?: المتوفرة)?|رصيدك|Price|Stock|Quantity|Balance)\s*:', plain, re.I):
+            continue
+        if re.match(r'^[^\w]*?(?:الوصف|Description)\s*:\s*$', plain, re.I):
+            continue
+        result.append(line)
+    return '\n'.join(result).strip()
+
 
 
 def install(s, namespace):
@@ -23,14 +49,14 @@ def install(s, namespace):
         pid = s.LEGACY.get(pid, pid)
         sp, ss, sw, warranty = s.info_display(pid)
         lines = []
-        def line(key, label, value, fallback=''):
-            icon = s.info_icon(pid, key, fallback)
+        def line(key, label, value, fallback='', owner=None):
+            icon = s.info_icon(owner or pid, key, fallback)
             lines.append((icon+' ' if icon else '')+'<b>'+s.esc(label)+':</b> '+value)
         if sp:
             line('price', s.tr(cid, 'السعر', 'Price'), s.price(cid, pid), '💵')
-        for fid, label, value, visible in fields(s, pid):
+        for fid, label, value, visible, owner in fields(s, pid):
             if visible:
-                line('extra_'+fid, label, s.esc(value))
+                line('extra_'+fid, label, s.esc(value), owner=owner)
         if sw:
             line('warranty', s.tr(cid, 'الضمان', 'Warranty'), s.esc(warranty or s.tr(cid, 'غير محدد', 'Not specified')), '🛡')
         if ss:
@@ -40,6 +66,7 @@ def install(s, namespace):
     def editor(api, cid, pid):
         if cid != s.G['ADMIN_ID']:
             return
+        pid = s.LEGACY.get(pid, pid)
         with s.db() as c:
             c.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
         # Preserve the existing toggles, warranty editor, and navigation.
@@ -47,7 +74,7 @@ def install(s, namespace):
         rows = [[s.btn('➕ إضافة حقل (اسم + قيمة)', 'detailadd:'+pid)],
                 [s.btn('📊 إضافة تم البيع', 'detailsold:'+pid)],
                 [s.btn('أيقونة الوصف', 'detailicon:description:'+pid)]]
-        for fid, label, value, visible in fields(s, pid):
+        for fid, label, value, visible, owner in fields(s, pid):
             rows.append([s.btn(label, 'detailpick:'+fid)])
         rows += [[s.btn('معاينة المنتج', 'options:'+pid)], [s.btn('رجوع', 'admin:info')]]
         s.send(api, cid, '<b>حقول وصف المنتج</b>\nأضف اسم الحقل وقيمته، ثم اختر أيقونته المتحركة. الحقول محفوظة لهذا المنتج.', s.kb(rows))
@@ -138,6 +165,7 @@ def install(s, namespace):
                 return True
         return old_receipt(api,message)
 
+    s.clean_product_description=clean_description
     s.info_block=info
     s.admin_info_editor=editor
     namespace['action']=namespace['handle_action']=action
