@@ -977,26 +977,7 @@ def category_heading(pid, cid, product_rows=None, lang=None):
     lang = lang if lang in ('ar', 'en') else prefs(cid)[0]
     description = category_description_html(pid, cid, lang)
     text = '<b>' + esc(category_label(pid, cid)) + '</b>\n\n' + (description if description is not None else ('اختر المنتج:' if lang == 'ar' else 'Choose a product:'))
-    # Use the displayed buttons so hidden items and alternate category routes
-    # cannot produce a different price list from the products below it.
-    ids = (list(dict.fromkeys(button['callback_data'].split(':', 1)[1]
-            for row in product_rows for button in row
-            if button.get('callback_data', '').startswith(('item:', 'options:'))))
-           if product_rows is not None else category_product_ids(pid))
-    icon = info_icon(pid, 'category_prices', '')
-    lines = []
-    for product_id in ids:
-        if not product_visible(product_id):
-            continue
-        usd, sar = amount(product_id, 'USD'), amount(product_id, 'SAR')
-        if usd is None or sar is None:
-            continue
-        # Isolate mixed Arabic/Latin text and keep the short price group together.
-        currency = '\u2067ر.س\u2069' if lang == 'ar' else 'SAR'
-        prices = f'\u2066${usd:.2f}\u00a0=\u00a0{sar:.2f}\u00a0' + currency + '\u2069'
-        lines.append(prices + ('\u00a0' + icon if icon else ''))
-    if lines:
-        text += '\n\n<b>' + ('الأسعار بالريال السعودي:' if lang == 'ar' else 'Prices in Saudi riyals:') + '</b>\n\n' + '\n\n────────────\n\n'.join(lines)
+
     return text
 
 
