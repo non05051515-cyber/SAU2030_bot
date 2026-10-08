@@ -275,6 +275,11 @@ def main():
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
     if telegram_payments.paid(a,m):continue
+    # A payment receipt photo takes precedence over stale product-input prompts.
+    if m.get('photo'):
+     with storefront.db() as receipt_db:
+      awaiting_receipt=receipt_db.execute('SELECT 1 FROM receipts WHERE cid=?',(c,)).fetchone()
+     if awaiting_receipt and storefront.receipt(a,m):continue
     if 'handle_order_input' in globals() and handle_order_input(a,m):continue
     customer_inbox.capture(m)
     storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
