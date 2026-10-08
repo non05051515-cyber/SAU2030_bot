@@ -1,5 +1,6 @@
 """One automatic Gmail OTP per delivered order, with admin escalation."""
 import email
+import base64
 from email.policy import default
 from email.utils import getaddresses, parsedate_to_datetime
 import html
@@ -9,6 +10,8 @@ import os
 import re
 import threading
 import time
+from urllib.parse import urlencode, quote
+from urllib.request import Request, urlopen
 
 _LOCK=threading.RLock()
 _WORKER_LOCK=threading.Lock()
@@ -78,6 +81,13 @@ def show_button(s,api,cid,oid):
 
 
 def mailbox_configs():
+    # One shared inbox for the store; OAuth credentials take precedence.
+    user=os.getenv('GMAIL_OTP_USER','').strip()
+    oauth={key:os.getenv('GMAIL_OTP_'+key.upper(),'').strip()
+           for key in ('client_id','client_secret','refresh_token')}
+    if any(oauth.values()):
+        if not user or not all(oauth.values()):raise ValueError('incomplete_gmail_oauth')
+        return [dict(oauth,user=user)]
     raw=os.getenv('GMAIL_OTP_ACCOUNTS','')
     if raw:
         rows=json.loads(raw)
@@ -87,6 +97,42 @@ def mailbox_configs():
         secret=os.getenv('GMAIL_OTP_APP_PASSWORD','').replace(' ','')
         rows=[{'user':user,'app_password':secret}] if user and secret else []
     return [r for r in rows if isinstance(r,dict) and r.get('user') and r.get('app_password')]
+
+
+def google_json(url,token=None,form=None):
+    headers={'Authorization':'Bearer '+token} if token else {}
+    data=urlencode(form).encode() if form is not None else None
+    if data is not None:headers['Content-Type']='application/x-www-form-urlencoded'
+    with urlopen(Request(url,data=data,headers=headers),timeout=15) as response:
+        return json.load(response)
+
+
+def fetch_oauth_code(cfg,target,requested,used):
+    """Use Gmail API GET operations only, with gmail.readonly authorization."""
+    token_data=google_json('https://oauth2.googleapis.com/token',form={
+        'client_id':cfg['client_id'],'client_secret':cfg['client_secret'],
+        'refresh_token':cfg['refresh_token'],'grant_type':'refresh_token'})
+    token=token_data['access_token']
+    scopes=token_data.get('scope','').split()
+    if scopes and scopes!=['https://www.googleapis.com/auth/gmail.readonly']:
+        raise ValueError('gmail_readonly_scope_required')
+    root='https://gmail.googleapis.com/gmail/v1/users/me'
+    profile=google_json(root+'/profile',token)
+    if profile.get('emailAddress','').lower()!=cfg['user'].lower():
+        raise ValueError('gmail_mailbox_mismatch')
+    query='after:'+str(int(requested-120))+' {'+' '.join('from:'+x for x in sorted(SENDERS))+'}'
+    messages=google_json(root+'/messages?'+urlencode({'q':query,'maxResults':50}),token)
+    for item in messages.get('messages',[]):
+        mid=item['id'];key=cfg['user'].lower()+':gmail:'+mid
+        if key in used:continue
+        message=google_json(root+'/messages/'+quote(mid,safe='')+'?format=raw',token)
+        # Gmail's receipt time provides an independent freshness bound.
+        received=int(message.get('internalDate',0))/1000
+        if received<max(requested-120,time.time()-300) or received>time.time()+60:continue
+        raw=message.get('raw','')
+        parsed=parse_code(base64.urlsafe_b64decode(raw+'='*(-len(raw)%4)),target,requested)
+        if parsed:return parsed[0],key
+    return None
 
 
 def parse_code(raw,target,requested,now=None):
@@ -119,6 +165,10 @@ def parse_code(raw,target,requested,now=None):
 
 def fetch_code(target,requested,used=()):
     for cfg in mailbox_configs():
+        if cfg.get('refresh_token'):
+            found=fetch_oauth_code(cfg,target,requested,used)
+            if found:return found
+            continue
         with imaplib.IMAP4_SSL('imap.gmail.com',993,timeout=15) as client:
             client.login(cfg['user'],str(cfg['app_password']).replace(' ',''))
             client.select('INBOX',readonly=True)
@@ -259,7 +309,7 @@ def settings(s,api,cid,pid):
     rows=[[s.btn('تعطيل' if enabled(s,pid) else 'تفعيل','emailcodetoggle:'+pid)],
           [s.btn('أيقونة متحركة لزر طلب الكود','seticon:ui_email_code')],
           [s.btn('حالة ربط Gmail','emailcodestatus')],[s.btn('رجوع','infopick:'+pid)]]
-    s.send(api,cid,'<b>'+s.esc(s.name(pid,cid))+'</b>\n\nكود تلقائي واحد لكل طلب مسلّم. الطلبات الإضافية تصل للإدارة. الربط الآلي يحتاج بريد Gmail وكلمة مرور تطبيق في أسرار الاستضافة.',
+    s.send(api,cid,'<b>'+s.esc(s.name(pid,cid))+'</b>\n\nالحالة: '+('مفعّل' if enabled(s,pid) else 'معطّل')+'\nتفعيل هذا المنتج فقط؛ باقي المنتجات لا تتغير. جميع المنتجات المحددة تستخدم بريد Gmail المشترك. كود تلقائي واحد لكل طلب مسلّم؛ الطلبات الإضافية تصل للإدارة. ربط Google بصلاحية قراءة البريد يُجهّز في إعدادات الاستضافة.',
            s.kb(rows))
 
 
@@ -301,7 +351,7 @@ def install(s,namespace):
             if prefix=='emailcodestatus':
                 try:ready=bool(mailbox_configs())
                 except Exception:ready=False
-                return s.send(api,cid,'إعدادات Gmail موجودة؛ يُختبر الاتصال عند طلب الكود.' if ready else 'Gmail غير مربوط. أضف GMAIL_OTP_USER و GMAIL_OTP_APP_PASSWORD في أسرار Railway.')
+                return s.send(api,cid,'إعدادات Gmail موجودة؛ يُختبر الاتصال عند طلب الكود.' if ready else 'Gmail غير مربوط. يلزم تفويض Google بصلاحية قراءة البريد وإضافة إعدادات OAuth في أسرار Railway. لا ترسل كلمة مرور Gmail في المحادثة.')
             if prefix in ('emailcodemail','emailcodeadmin'):
                 with s.db() as c:
                     order=c.execute("SELECT cid FROM orders WHERE id=? AND status='delivered'",(arg,)).fetchone()

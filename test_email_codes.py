@@ -1,4 +1,6 @@
 import email.message
+import base64
+import os
 from email.utils import formatdate
 import time
 import unittest
@@ -107,6 +109,44 @@ class EmailCodes(unittest.TestCase):
         with patch.object(otp.imaplib,'IMAP4_SSL',return_value=Mail()):
             self.assertEqual(otp.fetch_code('user@example.com',now),('123456','inbox@gmail.com:b\'5\':41'))
             self.assertIsNone(otp.fetch_code('user@example.com',now,{"inbox@gmail.com:b'5':40","inbox@gmail.com:b'5':41"}))
+
+
+class GmailOAuth(unittest.TestCase):
+    def test_single_mailbox_oauth_precedence_and_incomplete_config(self):
+        config={'GMAIL_OTP_USER':'inbox@gmail.com','GMAIL_OTP_CLIENT_ID':'client',
+                'GMAIL_OTP_CLIENT_SECRET':'secret','GMAIL_OTP_REFRESH_TOKEN':'refresh',
+                'GMAIL_OTP_ACCOUNTS':'invalid legacy value'}
+        with patch.dict(os.environ,config,clear=True):
+            self.assertEqual(len(otp.mailbox_configs()),1)
+            self.assertEqual(otp.mailbox_configs()[0]['refresh_token'],'refresh')
+            del os.environ['GMAIL_OTP_REFRESH_TOKEN']
+            with self.assertRaises(ValueError):otp.mailbox_configs()
+
+    def test_oauth_readonly_recipient_matching_and_used_message_skip(self):
+        now=time.time();m=email.message.EmailMessage()
+        m['From']='otp@tm1.openai.com';m['To']='user@example.com'
+        m['Delivered-To']='inbox@gmail.com'
+        m['Date']=formatdate(now,usegmt=True);m['Subject']='Your login code'
+        m['Authentication-Results']='mx.google.com; dkim=pass header.d=tm1.openai.com'
+        m.set_content('123456')
+        cfg={'user':'inbox@gmail.com','client_id':'client','client_secret':'secret','refresh_token':'refresh'}
+        def api(url,token=None,form=None):
+            if url.endswith('/token'):
+                self.assertEqual(form['grant_type'],'refresh_token')
+                return {'access_token':'token','scope':'https://www.googleapis.com/auth/gmail.readonly'}
+            self.assertEqual(token,'token')
+            if url.endswith('/profile'):return {'emailAddress':'inbox@gmail.com'}
+            if '/messages?' in url:return {'messages':[{'id':'42'}]}
+            self.assertTrue(url.endswith('/messages/42?format=raw'))
+            return {'raw':base64.urlsafe_b64encode(m.as_bytes()).decode(),'internalDate':str(int(now*1000))}
+        with patch.object(otp,'google_json',side_effect=api):
+            self.assertEqual(otp.fetch_oauth_code(cfg,'user@example.com',now,()),('123456','inbox@gmail.com:gmail:42'))
+            self.assertIsNone(otp.fetch_oauth_code(cfg,'another@example.com',now,()))
+            self.assertIsNone(otp.fetch_oauth_code(cfg,'user@example.com',now,{'inbox@gmail.com:gmail:42'}))
+        with patch.object(otp,'google_json',return_value={'access_token':'t','scope':'https://mail.google.com/'}):
+            with self.assertRaises(ValueError):otp.fetch_oauth_code(cfg,'user@example.com',now,())
+        with patch.object(otp,'google_json',side_effect=[{'access_token':'t'},{'emailAddress':'wrong@gmail.com'}]):
+            with self.assertRaises(ValueError):otp.fetch_oauth_code(cfg,'user@example.com',now,())
 
 
 if __name__=='__main__':unittest.main()
