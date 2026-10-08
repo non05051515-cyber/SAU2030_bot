@@ -17,6 +17,8 @@ def prepare(c):
         delivered_at TEXT NOT NULL DEFAULT ''
     )""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_local_delivery_stock_pid ON local_delivery_stock(pid,id)")
+    if 'content' not in {row[1] for row in c.execute("PRAGMA table_info(local_delivery_stock)")}:
+        c.execute("ALTER TABLE local_delivery_stock ADD COLUMN content TEXT NOT NULL DEFAULT ''")
 
 def count_available(s,pid):
     with s.db() as c:
@@ -26,10 +28,10 @@ def count_available(s,pid):
 def has_stock(s,pid):
     return count_available(s,pid)>0
 
-def _send_file(api,cid,oid,email,password,profile):
+def _send_file(api,cid,oid,email,password,profile,content=''):
     base=getattr(api,'u',None) or getattr(api,'base_url',None)
     if not base:return False
-    content=("Email: "+email+"\nPassword: "+password+"\nProfile: "+profile+"\n").encode("utf-8")
+    content=(content if content else "Email: "+email+"\nPassword: "+password+"\nProfile: "+profile+"\n").encode("utf-8")
     boundary="----VEXALocalDelivery"
     body=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n"+str(cid)+"\r\n").encode()
     body+=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n📄 Your account details\r\n").encode()
@@ -66,7 +68,7 @@ def _fulfill(s,api,oid):
         qty=max(1,int(qty_row[0])) if qty_row else 1
         keys=[str(oid) if i==0 else str(oid)+'/'+str(i+1) for i in range(qty)]
         c.execute("BEGIN IMMEDIATE")
-        existing=[c.execute("SELECT id,email,password,profile,delivered_at FROM local_delivery_stock WHERE order_id=?",(key,)).fetchone() for key in keys]
+        existing=[c.execute("SELECT id,email,password,profile,delivered_at,content FROM local_delivery_stock WHERE order_id=?",(key,)).fetchone() for key in keys]
         missing=sum(row is None for row in existing)
         stock=c.execute("SELECT id,email,password,profile,delivered_at FROM local_delivery_stock WHERE pid=? AND order_id IS NULL ORDER BY id LIMIT ?",(pid,missing)).fetchall()
         if len(stock)<missing:
@@ -79,15 +81,17 @@ def _fulfill(s,api,oid):
                 existing[i]=row
         _update_stock(s,c,pid)
     for key,row in zip(keys,existing):
-        item_id,email,password,profile,stage=row
+        item_id,email,password,profile,stage,content=row
         if stage and stage!='text_sent':continue
         if not stage:
             text=s.tr(cid,'✅ <b>بيانات حسابك</b>','✅ <b>Your Account Details</b>')+'\n\n'+s.tr(cid,'الإيميل: ','Email: ')+'<code>'+html.escape(email)+'</code>\n'+s.tr(cid,'كلمة المرور: ','Password: ')+'<code>'+html.escape(password)+'</code>\n'+s.tr(cid,'رقم الملف: ','Profile: ')+'<code>'+html.escape(profile)+'</code>'
+            if content:
+                text=html.escape(content)
             if not s.send(api,cid,text):
                 s.send(api,s.G['ADMIN_ID'],'⚠️ تعذر إرسال بيانات الطلب #'+s.esc(oid),s.kb([[s.btn('إعادة محاولة التسليم','localretry:'+str(oid))]]))
                 return True
             with s.db() as c:c.execute("UPDATE local_delivery_stock SET delivered_at='text_sent' WHERE id=?",(item_id,))
-        if not _send_file(api,cid,key,email,password,profile):
+        if not _send_file(api,cid,key,email,password,profile,content):
             s.send(api,s.G['ADMIN_ID'],'⚠️ أُرسل نص الطلب #'+s.esc(oid)+' وتعذر إرسال الملف.',s.kb([[s.btn('إعادة محاولة إرسال الملف','localretry:'+str(oid))]]))
             return True
         with s.db() as c:c.execute("UPDATE local_delivery_stock SET delivered_at=? WHERE id=?",(s.now_saudi(),item_id))
@@ -102,14 +106,14 @@ def admin_menu(s,api,cid,pid):
     if cid!=s.G["ADMIN_ID"]:return
     with s.db() as c:c.execute("DELETE FROM admin_state WHERE cid=?",(cid,))
     n=count_available(s,pid)
-    s.send(api,cid,"📦 <b>مخزون التسليم التلقائي</b>\n\n"+html.escape(s.name(pid,cid))+"\nالمتاح: <b>"+str(n)+"</b>\n\nأضف كل حساب في سطر بهذا الشكل:\n<code>email | password | profile</code>",s.kb([[s.btn("➕ إضافة مخزون","localstockadd:"+pid,style="success")],[s.btn("🗑 مسح المخزون غير المباع","localstockclear:"+pid,style="danger")],[s.btn("اختيار منتج آخر","localstockmenu")],[s.btn("لوحة الإدارة","admin")]]))
+    s.send(api,cid,"📦 <b>مخزون التسليم التلقائي</b>\n\n"+html.escape(s.name(pid,cid))+"\nالمتاح: <b>"+str(n)+"</b>\n\nأرسل بيانات الحساب بأي تنسيق متعدد الأسطر، أو استخدم الصيغة القديمة:\n<code>email | password | profile</code>",s.kb([[s.btn("➕ إضافة مخزون","localstockadd:"+pid,style="success")],[s.btn("🗑 مسح المخزون غير المباع","localstockclear:"+pid,style="danger")],[s.btn("اختيار منتج آخر","localstockmenu")],[s.btn("لوحة الإدارة","admin")]]))
 
 def begin_add(s,api,cid,pid):
     if cid!=s.G["ADMIN_ID"]:return
     s.G.get("PENDING_ADMIN_DELIVERY",{}).pop(cid,None)
     with s.db() as c:
         prepare(c);c.execute("INSERT OR REPLACE INTO admin_state VALUES (?,?,?)",(cid,"local_delivery_add",pid))
-    s.send(api,cid,"أرسل الحسابات الآن. كل حساب في سطر:\n<code>email | password | profile</code>\n\nمثال:\n<code>user@example.com | Pass123 | 1</code>",s.kb([[s.btn("❌ إلغاء","localstock:"+pid)]]))
+    s.send(api,cid,"أرسل بيانات حساب واحد بأي تنسيق متعدد الأسطر. سيصل النص كما كتبته ومعه ملف TXT.\n\nلإضافة عدة حسابات دفعة واحدة يمكنك استخدام الصيغة القديمة: email | password | profile",s.kb([[s.btn("❌ إلغاء","localstock:"+pid)]]))
 
 def handle_text(s,api,message):
     cid=message.get("chat",{}).get("id")
@@ -117,23 +121,24 @@ def handle_text(s,api,message):
     with s.db() as c:
         prepare(c);row=c.execute("SELECT value FROM admin_state WHERE cid=? AND action='local_delivery_add'",(cid,)).fetchone()
     if not row:return False
-    raw=(message.get("text") or "").strip()
+    raw=message.get("text") or ""
     if raw.startswith("/"):return False
     parsed=[]
     for line in raw.splitlines():
         parts=[x.strip() for x in line.split("|")]
         if len(parts)==3 and all(parts):parsed.append(tuple(parts))
-    if not parsed or len(parsed)!=len(raw.splitlines()):
-        s.send(api,cid,"⚠️ الصيغة غير صحيحة. استخدم:\n<code>email | password | profile</code>")
+    legacy=bool(parsed) and len(parsed)==len(raw.splitlines())
+    if not raw.strip():
+        s.send(api,cid,"أرسل نص بيانات الحساب أولاً.")
         return True
     pid=row[0]
     with s.db() as c:
-        prepare(c);c.executemany("INSERT INTO local_delivery_stock(pid,email,password,profile) VALUES (?,?,?,?)",[(pid,*x) for x in parsed]);c.execute("DELETE FROM admin_state WHERE cid=?",(cid,))
+        prepare(c);c.executemany("INSERT INTO local_delivery_stock(pid,email,password,profile,content) VALUES (?,?,?,?,?)",[(pid,*x,"") for x in parsed] if legacy else [(pid,"","","",raw)]);c.execute("DELETE FROM admin_state WHERE cid=?",(cid,))
         left=c.execute("SELECT COUNT(*) FROM local_delivery_stock WHERE pid=? AND order_id IS NULL",(pid,)).fetchone()[0]
         if s.custom_product(pid):c.execute("UPDATE admin_products SET stock=?,available=1 WHERE pid=?",(left,pid))
         else:
             c.execute("INSERT OR REPLACE INTO product_stock_overrides VALUES (?,?)",(pid,left));c.execute("INSERT OR REPLACE INTO product_availability VALUES (?,1)",(pid,))
-    s.send(api,cid,"✅ تمت إضافة <b>"+str(len(parsed))+"</b> حساب.\n📦 المخزون الحالي: <b>"+str(left)+"</b>")
+    s.send(api,cid,"✅ تمت إضافة <b>"+str(len(parsed) if legacy else 1)+"</b> حساب.\n📦 المخزون الحالي: <b>"+str(left)+"</b>")
     admin_menu(s,api,cid,pid);return True
 
 def clear(s,api,cid,pid):
