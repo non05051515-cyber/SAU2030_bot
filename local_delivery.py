@@ -92,6 +92,8 @@ def _fulfill(s,api,oid):
             return True
         with s.db() as c:c.execute("UPDATE local_delivery_stock SET delivered_at=? WHERE id=?",(s.now_saudi(),item_id))
     with s.db() as c:c.execute("UPDATE orders SET status='delivered' WHERE id=? AND status='paid'",(oid,))
+    if hasattr(s,'show_code_button'):
+        s.show_code_button(api,cid,oid)
     s.send(api,s.G['ADMIN_ID'],'✅ تم التسليم التلقائي للطلب <code>'+html.escape(str(oid))+'</code>')
     return True
 

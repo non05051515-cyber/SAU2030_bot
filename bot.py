@@ -169,6 +169,9 @@ def handle_admin_delivery(a,m):
   if x.get('order_id'):
    with storefront.db() as conn:
     conn.execute('UPDATE orders SET status="delivered" WHERE id=?', (x['order_id'],))
+  if x.get('order_id') and hasattr(storefront,'bind_code_delivery'):
+   storefront.bind_code_delivery(x['order_id'],m.get('text','') or m.get('caption',''))
+   storefront.show_code_button(a,customer,x['order_id'])
   send(a,ADMIN_ID,'✅ تم إرسال الطلب للعميل وتسجيله كمُسلّم.')
  except Exception:
   send(a,ADMIN_ID,'❌ تعذر تأكيد التسليم. بقي الطلب بانتظار التسليم؛ أعد المحاولة.')
@@ -216,7 +219,7 @@ def main():
  # One worker preserves the original ordering and prevents overlapping ticks.
  def maintenance_loop():
   # Keep all background services, but avoid hammering SQLite every 2 seconds.
-  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5),('subscriptions',globals().get('tick_subscriptions'),60),('order_inputs',globals().get('tick_order_inputs'),10)]
+  jobs=[('pandora_stock_notifications',pandora_stock_notifications.tick,30),('supplier_orders',globals().get('tick_supplier_orders'),15),('customer_activity',storefront.tick_customer_activity,2),('stock_alerts',globals().get('tick_stock_alerts'),5),('channel_catalog',globals().get('tick_channel_catalog'),5),('auto_ads',globals().get('tick_auto_ads'),10),('product_broadcast',globals().get('tick_product_broadcast'),5),('subscriptions',globals().get('tick_subscriptions'),60),('order_inputs',globals().get('tick_order_inputs'),10),('email_codes',globals().get('tick_email_codes'),15)]
   last={}
   while True:
    now=time.monotonic()
@@ -346,6 +349,9 @@ subscriptions.install(storefront, globals())
 
 import order_inputs
 order_inputs.install(storefront, globals())
+
+import email_codes
+email_codes.install(storefront, globals())
 
 def warm_arabic_descriptions():
  try:

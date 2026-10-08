@@ -235,6 +235,9 @@ def fulfill(s, api, oid):
             with s.db() as c:
                 c.execute('UPDATE orders SET status=? WHERE id=?',('delivered',oid))
                 c.execute('UPDATE payment_execution SET notified=1 WHERE order_id=? AND lease_owner=?',(oid,owner))
+            if hasattr(s,'bind_code_delivery'):
+                s.bind_code_delivery(oid,'\n'.join(clean))
+                s.show_code_button(api,cid,oid)
             s.send(api,s.G['ADMIN_ID'],'✅ تسليم تلقائي عبر Pandora للطلب <code>'+s.esc(oid)+'</code>')
         elif not existing:
             s.send(api,cid,'⏳ تم قبول الدفع. طلبك قيد التنفيذ والتسليم التلقائي عبر Pandora، ولا تحتاج لإعادة الدفع.')
