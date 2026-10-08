@@ -99,6 +99,7 @@ def action(s, api, cid, value):
         method = f'custom_{row[0]}'
         with s.db() as conn:
             conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
+        s.prepare_receipt_confirmation(cid, pid, method, usd, sar)
         text = details(s, dict(zip(('name','holder','account'), row[1:4])))
         text += '\n\n' + s.summary(cid, pid) + '\n\n' + s.tr(cid, '📎 بعد إتمام التحويل، أرسل صورة الإيصال هنا أولًا، ثم اضغط على «تم التحويل». سيتم إرسال البيانات لك بعد التحقق من الدفع.', '📎 After completing the transfer, send the receipt image here first, then tap “Payment sent”. Your details will be sent after payment verification.')
         s.send(api, cid, text, s.kb([[s.btn(s.tr(cid, 'تم التحويل', 'Payment sent'), f'receipt:{method}:{pid}', icon=transfer_icon(s), style='success')], s.nav(cid, 'buy:' + pid)]))
