@@ -1,6 +1,7 @@
 """Manual, previewed stock announcements with native emoji entities and deep links."""
 import json
 import uuid
+import html
 import channel_catalog as catalog
 import storefront as s
 import broadcast_admin as broadcast
@@ -9,6 +10,7 @@ ICONS = {'product': ('🛍', 'المنتج'), 'added': ('➕', 'الكمية ا�
          'stock': ('📦', 'المخزون'), 'price': ('💵', 'السعر'), 'buy': ('🛒', 'زر الشراء'),
          'stop_ads': ('🔕', 'زر إيقاف الإعلانات')}
 TARGETS = {'channel': catalog.CHANNEL, 'group': '@SAU2030_k'}
+REQUEST_STATE = {}
 
 
 def db():
@@ -98,7 +100,50 @@ def preview(api, cid, data):
 def install(namespace):
     old_action, old_input = namespace['action'], namespace['handle_admin_delivery']
 
+    def show_products(api, cid):
+        rows = []
+        items = list(namespace['PRODUCTS'].items())
+        for i in range(0, len(items), 3):
+            row = []
+            for pid, product in items[i:i + 3]:
+                button = namespace['btn'](namespace['pname'](cid, pid), f'product:{pid}')
+                emoji_id = product.get('custom_emoji_id')
+                if namespace['CONFIG'].get('custom_icons_enabled') and emoji_id:
+                    button['icon_custom_emoji_id'] = str(emoji_id)
+                row.append(button)
+            rows.append(row)
+        rows.append([namespace['btn'](
+            namespace['tr'](cid, '💡 اقترح منتجًا أو قسمًا', '💡 Suggest a product or category'),
+            'request:start')])
+        rows.append([namespace['btn'](namespace['tr'](cid, '🏠 الرئيسية', '🏠 Home'), 'home')])
+        text = namespace['tr'](cid, '🛍 <b>المنتجات</b>\n\nاختر الخدمة:', '🛍 <b>Products</b>\n\nChoose a service:')
+        return namespace['send'](api, cid, text, {'inline_keyboard': rows})
+
     def action(api, cid, value):
+        if value == 'request:start' and cid != namespace['ADMIN_ID']:
+            REQUEST_STATE.pop(cid, None)
+            return s.send(api, cid, s.tr(cid,
+                '💡 <b>ما الذي تقترحه؟</b>\nاختر نوع الاقتراح:',
+                '💡 <b>What would you like to suggest?</b>\nChoose a request type:'), s.kb([
+                    [s.btn(s.tr(cid, '🛍 منتج أو تطبيق', '🛍 Product or app'), 'request:product')],
+                    [s.btn(s.tr(cid, '🗂 قسم جديد', '🗂 New category'), 'request:section')],
+                    [s.btn(s.tr(cid, '↩️ رجوع للمنتجات', '↩️ Back to products'), 'products')]]))
+        if value in ('request:product', 'request:section') and cid != namespace['ADMIN_ID']:
+            kind = 'product' if value == 'request:product' else 'section'
+            REQUEST_STATE[cid] = kind
+            prompt = s.tr(cid,
+                'أرسل اسم المنتج أو التطبيق الذي تريده، ويمكنك إضافة تفاصيل مختصرة.',
+                'Send the product or app name you want, with any brief details.')
+            if kind == 'section':
+                prompt = s.tr(cid,
+                    'أرسل اسم القسم الجديد أو نوع التطبيقات التي تريد إضافتها.',
+                    'Send the new category name or the type of apps you want included.')
+            return s.send(api, cid, '✍️ ' + prompt, s.kb([
+                [s.btn(s.tr(cid, '❌ إلغاء', '❌ Cancel'), 'request:cancel')]]))
+        if value == 'request:cancel' and cid != namespace['ADMIN_ID']:
+            REQUEST_STATE.pop(cid, None)
+            return s.send(api, cid, s.tr(cid, 'تم إلغاء الاقتراح.', 'Suggestion cancelled.'),
+                          s.kb([[s.btn(s.tr(cid, '↩️ المنتجات', '↩️ Products'), 'products')]]))
         if value in ('ads:stop', 'ads:resume'):
             if cid <= 0:
                 return
@@ -194,6 +239,43 @@ def install(namespace):
 
     def message_input(api, message):
         cid = message.get('chat', {}).get('id')
+        if cid in REQUEST_STATE and cid != namespace['ADMIN_ID']:
+            text = (message.get('text') or '').strip()
+            if text == '/cancel':
+                REQUEST_STATE.pop(cid, None)
+                s.send(api, cid, s.tr(cid, 'تم إلغاء الاقتراح.', 'Suggestion cancelled.'),
+                       s.kb([[s.btn(s.tr(cid, '↩️ المنتجات', '↩️ Products'), 'products')]]))
+                return True
+            if text.startswith('/'):
+                REQUEST_STATE.pop(cid, None)
+                return old_input(api, message)
+            if not text or len(text) > 800:
+                s.send(api, cid, s.tr(cid,
+                    'أرسل الاقتراح كنص لا يتجاوز 800 حرف.',
+                    'Send your suggestion as text, up to 800 characters.'))
+                return True
+            kind = REQUEST_STATE.pop(cid)
+            label = s.tr(cid, 'منتج أو تطبيق', 'Product or app') if kind == 'product' else s.tr(cid, 'قسم جديد', 'New category')
+            user = message.get('from') or {}
+            username = ('@' + user['username']) if user.get('username') else s.tr(cid, 'بدون اسم مستخدم', 'No username')
+            with s.db() as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS customer_suggestions (id INTEGER PRIMARY KEY AUTOINCREMENT, cid INTEGER NOT NULL, username TEXT, kind TEXT NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL)')
+                conn.execute('INSERT INTO customer_suggestions(cid,username,kind,body,created) VALUES(?,?,?,?,?)',
+                             (cid, user.get('username', ''), kind, text, __import__('time').time_ns() // 1_000_000_000))
+            notice = (
+                '💡 <b>اقتراح جديد من عميل</b>\n'
+                + 'النوع: <b>' + html.escape(label) + '</b>\n'
+                + 'الاقتراح: ' + html.escape(text) + '\n'
+                + 'العميل: ' + html.escape(username) + '\n'
+                + 'المعرف: <code>' + str(cid) + '</code>'
+            )
+            s.send(api, namespace['ADMIN_ID'], notice, s.kb([
+                [s.btn('✉️ مراسلة العميل', 'inbox:reply:' + str(cid))]]))
+            s.send(api, cid, s.tr(cid,
+                '✅ وصل اقتراحك للإدارة. شكرًا لمساعدتنا في تطوير المتجر.',
+                '✅ Your suggestion has been sent to the store team. Thanks for helping us improve.'),
+                s.kb([[s.btn(s.tr(cid, '↩️ متابعة المنتجات', '↩️ Continue browsing'), 'products')]]))
+            return True
         if cid != namespace['ADMIN_ID']: return old_input(api, message)
         current = draft(cid)
         if not current: return old_input(api, message)
@@ -230,5 +312,6 @@ def install(namespace):
         s.send(api, cid, 'استخدم الأزرار أسفل المعاينة لإكمال الإعلان أو إلغائه.')
         return True
 
+    namespace['show_products'] = show_products
     namespace['action'] = action
     namespace['handle_admin_delivery'] = message_input
