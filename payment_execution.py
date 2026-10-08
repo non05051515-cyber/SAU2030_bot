@@ -90,6 +90,16 @@ def resolve_pid(s, pid):
     return pid
 
 
+
+def notify_order(s, oid):
+    """Send a best-effort WhatsApp admin alert without blocking order handling."""
+    try:
+        import whatsapp_alerts
+        whatsapp_alerts.notify(s, oid)
+    except Exception as exc:
+        print('WhatsApp order alert unavailable:', type(exc).__name__, flush=True)
+
+
 def approve(s, api, actor, decision, oid):
     if actor != s.G['ADMIN_ID'] or decision not in ('accept', 'reject'):
         return
@@ -348,6 +358,8 @@ def wallet_pay(s, api, cid, pid):
             c.execute('INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)',(oid,cid,pid,'wallet',str(usd),str(cost),'paid',s.now_saudi()))
             c.execute('INSERT INTO quantity_snapshots VALUES (?,?,?)',('order',oid,qty))
             c.execute('INSERT INTO payment_sources VALUES (?,?)',(source,oid))
+    if not old:
+        notify_order(s, oid)
     if s.fulfill_paid_order(api,oid):
         return
     s.send(api,cid,'✅ تم الدفع من المحفظة. رقم الطلب: '+oid)
@@ -362,6 +374,14 @@ def guard_delivery(s, oid):
 
 
 def install(s, namespace):
+    if not getattr(s.add_order, '_whatsapp_order_alert_wrapped', False):
+        original_add_order = s.add_order
+        def add_order_with_whatsapp(*args, **kwargs):
+            oid = original_add_order(*args, **kwargs)
+            notify_order(s, oid)
+            return oid
+        add_order_with_whatsapp._whatsapp_order_alert_wrapped = True
+        s.add_order = add_order_with_whatsapp
     import pandora_admin
     pandora_admin.install(s)
     old_action = namespace['action']
@@ -412,6 +432,7 @@ def receipt_order(s, cid, pid, method, usd, sar, message_id):
         oid = create_order(s,c,'receipt:'+str(cid)+':'+str(message_id),cid,pid,method,'review',usd,sar,qty)
         c.execute('DELETE FROM receipts WHERE cid=?',(cid,))
         c.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?',(cid,pid,method))
+    notify_order(s, oid)
     return oid
 
 
@@ -432,6 +453,7 @@ def crypto_check(s, api, cid, invoice_ref):
         oid = create_order(s,c,'cryptopay:'+invoice_ref,cid,pid,'cryptopay','paid',usd,
                            (Decimal(usd)*s.RATE).quantize(Decimal('0.01')),qty[0] if qty else 1)
         c.execute('UPDATE crypto_orders SET status=? WHERE id=?',('paid',invoice_ref))
+    notify_order(s, oid)
     if s.fulfill_paid_order(api,oid):
         return
     return s.send(api,cid,'✅ تم تأكيد الدفع. رقم الطلب: '+oid)
