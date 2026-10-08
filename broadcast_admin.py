@@ -162,6 +162,7 @@ def install(namespace):
             [sg['btn']('🔗 ربط منتج بـPandora', 'admin:pandoralink', style='success')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],
+            [sg['btn']('✉️ إرسال رسالة خاصة', 'private_send:start', style='primary')],
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
             [sg['btn']('🛍 إرسال منتج للجميع', 'admin:product_broadcast', style='primary')],
             [sg['btn']('📢 إعلان منتج', 'ad:home', style='success')],
