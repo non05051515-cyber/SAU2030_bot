@@ -29,20 +29,16 @@ class EmailCodes(unittest.TestCase):
         with self.s.db() as c:c.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)',('ui_email_code','987654321'))
         otp.show_button(self.s,self.api,7,self.oid)
         button=self.api.calls[-1][1]['reply_markup']['inline_keyboard'][0][0]
-        self.assertEqual(button['style'],'primary')
+        self.assertEqual(button['style'],'success')
         self.assertEqual(button['icon_custom_emoji_id'],'987654321')
         self.assertEqual(button['callback_data'],'emailcode:'+self.oid)
-    def test_one_code_then_admin_escalation(self):
+    def test_request_is_admin_reviewed_without_automatic_delivery(self):
         self.bot.action(self.api,7,'emailcode:'+self.oid)
         with patch.object(otp,'fetch_code',return_value=('123456','mail:1:42')):
             otp.tick(self.s,self.api)
-            otp.tick(self.s,self.api)
-        self.assertEqual(len(self.code_messages()),1)
-        self.assertEqual(self.row(),'sent')
-        for _ in range(3):self.bot.action(self.api,7,'emailcode:'+self.oid)
-        self.assertEqual(len(self.code_messages()),1)
-        extra=[d for m,d in self.api.calls if m=='sendMessage' and d.get('chat_id')==self.admin and 'طلب كود إضافي' in d.get('text','')]
-        self.assertEqual(len(extra),1)
+        self.assertEqual(len(self.code_messages()),0)
+        self.assertEqual(self.row(),'escalated')
+
     def test_concurrent_presses_create_one_request(self):
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(lambda _:self.bot.action(self.api,7,'emailcode:'+self.oid),range(2)))
