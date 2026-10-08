@@ -805,18 +805,22 @@ def description_message_html(message, plain):
         if pair:
             opens.setdefault(s, []).append((e, pair[0]))
             closes.setdefault(e, []).append((s, pair[1]))
+    # Walk Unicode code points while tracking Telegram's UTF-16 offsets.
+    # Decoding one UTF-16 unit at a time silently dropped every emoji
+    # represented by a surrogate pair (including custom emoji placeholders).
     out = []
-    for i in range(total + 1):
-        for s, tag in sorted(closes.get(i, []), reverse=True):
+    position = 0
+    for character in plain:
+        for start, tag in sorted(closes.get(position, []), reverse=True):
             out.append(tag)
-        for e, tag in sorted(opens.get(i, []), reverse=True):
+        for end, tag in sorted(opens.get(position, []), reverse=True):
             out.append(tag)
-        if i < total:
-            try:
-                out.append(esc(data[i*2:(i+1)*2].decode('utf-16-le')))
-            except UnicodeDecodeError:
-                # Surrogate pair: consume safely through the plain-text fallback below.
-                pass
+        out.append(esc(character))
+        position += len(character.encode('utf-16-le')) // 2
+    for start, tag in sorted(closes.get(position, []), reverse=True):
+        out.append(tag)
+    for end, tag in sorted(opens.get(position, []), reverse=True):
+        out.append(tag)
     rendered = ''.join(out)
     # If UTF-16 surrogate splitting dropped visible characters, keep the exact text rather than corrupt it.
     visible = re.sub(r'<[^>]+>', '', rendered)
