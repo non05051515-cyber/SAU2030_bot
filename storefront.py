@@ -9181,7 +9181,7 @@ def payment(api, cid, pid, method):
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
         prepare_receipt_confirmation(cid, pid, method, usd, sar)
-        text += '\n\n' + tr(cid, 'بعد التحويل أرسل صورة الإيصال هنا أولًا، ثم اضغط «تم التحويل».', 'After transferring, send the receipt photo here first, then tap “Payment sent”.')
+        text += '\n\n' + tr(cid, '📎 <b>خطوات تأكيد الدفع:</b>\n1️⃣ بعد التحويل، أرسل صورة الإيصال هنا في المحادثة.\n2️⃣ بعد إرسال الصورة، اضغط زر «تم التحويل» أسفل الرسالة.\n⚠️ لا تضغط الزر قبل إرسال صورة الإيصال.', '📎 <b>Payment confirmation steps:</b>\n1️⃣ After transferring, send the receipt photo here in the chat.\n2️⃣ After sending the photo, tap “Payment sent” below.\n⚠️ Do not tap the button before sending the receipt photo.')
         rows.append([btn(tr(cid, '✅ تم التحويل', '✅ Payment sent'), f'receipt:{method}:{pid}')])
     else:
         text += '\n\n' + tr(cid, 'بيانات الدفع غير مكتملة. تواصل مع الدعم: ', 'Payment details are incomplete. Contact support: ') + SUPPORT
