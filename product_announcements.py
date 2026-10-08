@@ -55,7 +55,7 @@ def card(data, language='en', unsubscribe=False):
         lines.append(('added', ('Added: ' if en else 'الكمية المضافة: ') + str(data['added'])))
     quantity = data.get('stock', st['quantity'])
     lines += [('stock', ('Current stock: ' if en else 'المخزون الحالي: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
-              ('price', ('Price: ' if en else 'السعر: ') + str(s.price(0, pid, 'USD')))]
+              ('price', ('Price: ' if en else 'السعر: ') + (f'{s.amount(pid, "SAR"):.2f} ريال' if s.amount(pid, 'SAR') is not None else s.price(0, pid, 'SAR')))]
     text, entities = '', []
     units = lambda value: len(value.encode('utf-16-le')) // 2
     for key, value in lines:
