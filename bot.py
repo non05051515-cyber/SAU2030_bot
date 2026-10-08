@@ -290,6 +290,7 @@ def main():
      else:required_group.prompt(a,c)
      continue
     if txt.startswith('/start') and channel_catalog.resume(a,c):continue
+    if 'handle_private_message' in globals() and handle_private_message(a,m):continue
     if pandora_stock_notifications.import_message(a,m):continue
     if customer_inbox.handle(a,m):continue
     if local_delivery.handle_text(storefront,a,m):continue
@@ -357,6 +358,9 @@ order_inputs.install(storefront, globals())
 
 import email_codes
 email_codes.install(storefront, globals())
+
+import private_messages
+private_messages.install(globals())
 
 def warm_arabic_descriptions():
  try:
