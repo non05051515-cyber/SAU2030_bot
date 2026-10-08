@@ -3,6 +3,13 @@ import uuid,html
 from decimal import Decimal,ROUND_CEILING
 import storefront as s
 import payment_execution as execution
+
+def _notify_order(oid):
+ try:
+  import whatsapp_alerts
+  whatsapp_alerts.notify(s,oid)
+ except Exception as exc:
+  print('WhatsApp order alert unavailable:',type(exc).__name__,flush=True)
 def stars(usd):
  return max(1,int((Decimal(str(usd))*Decimal(320)/Decimal('3.50')).to_integral_value(rounding=ROUND_CEILING)))
 def setup(db):
@@ -56,6 +63,7 @@ def action(api,cid,value):
    if decision=='accept':
     oid=execution.create_order(s,db,'gift:'+ref,row[0],row[1],'telegram_gift','paid',row[2],row[3],row[4])
   if decision=='accept':
+   _notify_order(oid)
    s.fulfill_paid_order(api,oid)
    s.send(api,row[0],'✅ تم التحقق من وصول الهدية. رقم طلبك: <code>'+oid+'</code>')
    s.send(api,cid,'✅ تم اعتماد الهدية. رقم الطلب: <code>'+oid+'</code>')
@@ -86,6 +94,7 @@ def paid(api,m):
   changed=db.execute('UPDATE star_invoices SET charge_id=?,status=? WHERE payload=? AND status=?',(charge,'paid',payload,'pending')).rowcount
   if not changed:return True
   oid=execution.create_order(s,db,'stars:'+payload,cid,row[1],'telegram_stars','paid',row[3],row[4],row[5])
+ _notify_order(oid)
  s.fulfill_paid_order(api,oid)
  s.send(api,cid,'✅ تم تأكيد دفع '+str(row[2])+' ⭐. رقم طلبك: <code>'+oid+'</code>.')
  s.send(api,s.G['ADMIN_ID'],'⭐ <b>طلب مدفوع بنجوم تيليجرام</b>\nرقم: <code>'+oid+'</code>\nالعميل: <code>'+str(cid)+'</code>\nالمنتج: '+s.esc(s.name(row[1],cid))+'\nالكمية: '+str(row[5])+'\nالنجوم: '+str(row[2])+'\nCharge: <code>'+html.escape(charge)+'</code>')
