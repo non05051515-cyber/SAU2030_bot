@@ -261,9 +261,12 @@ def main():
       save_user(c)
       data=q.get('data','home')
       payment_execution.EVENT.message_id=q.get('message',{}).get('message_id')
+      # Record the customer action before extension handlers can consume it.
+      # Only log actions that reach the customer-facing bot, not admin actions.
+      if c==ADMIN_ID or required_group.approved(c):
+       storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
       if customer_inbox.action(a,c,data):continue
       if telegram_payments.action(a,c,data):continue
-      storefront.track_customer_activity(q.get('from', {}).get('id'), value=data)
       if data in ('ads:stop','ads:resume'):
        action(a,c,data);continue
       if data=='required_group:verify':
@@ -274,6 +277,9 @@ def main():
     m=u.get('message',{});c=m.get('chat',{}).get('id')
     if not c or m.get('chat',{}).get('type')!='private':continue
     save_user(c);txt=m.get('text','')
+    # Record incoming messages, including receipts and completed payment updates,
+    # before specialist handlers consume them.
+    storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if telegram_payments.paid(a,m):continue
     # A payment receipt photo takes precedence over stale product-input prompts.
     if m.get('photo'):
@@ -282,7 +288,6 @@ def main():
      if awaiting_receipt and storefront.receipt(a,m):continue
     if 'handle_order_input' in globals() and handle_order_input(a,m):continue
     customer_inbox.capture(m)
-    storefront.track_customer_activity(m.get('from', {}).get('id'), message=m)
     if txt.startswith('/start'):channel_catalog.remember(c,txt)
     if c!=ADMIN_ID and not required_group.approved(c):
      if txt.startswith('/start'):
