@@ -1,4 +1,4 @@
-"""One automatic Gmail OTP per delivered order, with admin escalation."""
+"""Per-product login assistance requests with admin review; no automatic OTP forwarding."""
 import email
 import base64
 from email.policy import default
@@ -67,15 +67,15 @@ def eligible(s,cid,oid):
 
 def button(s,cid,oid):
     return s.btn(s.tr(cid,'طلب كود الدخول','Request login code'),'emailcode:'+oid,
-                 s.ui_icon('ui_email_code'),style='primary')
+                 s.ui_icon('ui_email_code'),style='success')
 
 
 def show_button(s,api,cid,oid):
     if not eligible(s,cid,oid):return
     with s.db() as c:
         if c.execute('SELECT 1 FROM email_code_buttons WHERE order_id=?',(oid,)).fetchone():return
-    text=s.tr(cid,'عندما تظهر لك شاشة طلب الكود، اضغط الزر مباشرة لطلب كود الدخول. متاح كود تلقائي واحد لهذا الطلب؛ أي طلب إضافي يُرسل للإدارة.',
-              'When the code screen appears, press the button to request your login code. One automatic code is available for this order; additional requests go to support.')
+    text=s.tr(cid,'إذا ظهرت لك شاشة تطلب رمز تسجيل الدخول، اضغط «طلب الكود» عندما تكون جاهزًا. أدخل الرمز فور استلامه لأن صلاحيته قد تكون قصيرة. طلبك يُراجع من الإدارة حفاظًا على أمان الحساب.',
+              'When the login code screen appears, request help only when ready. Enter any code promptly as it may expire quickly. Support will review your request to protect the account.')
     if s.send(api,cid,text,s.kb([[button(s,cid,oid)]])):
         with s.db() as c:c.execute('INSERT OR IGNORE INTO email_code_buttons VALUES (?,?)',(oid,int(time.time())))
 
@@ -204,31 +204,32 @@ def notify_admin(s,api,oid,extra=False):
 
 
 def request(s,api,cid,oid):
+    """Notify store administration only; never extract or forward an email OTP."""
     with _LOCK:
         if not eligible(s,cid,oid):
-            return s.send(api,cid,s.tr(cid,'هذا الطلب غير متاح لطلب الكود من حسابك.','This order is not eligible for a code request.'))
+            return s.send(api,cid,s.tr(cid,
+                'هذا الطلب غير متاح لطلب المساعدة في تسجيل الدخول.',
+                'This order is not eligible for login assistance.'))
         with s.db() as c:
             previous=c.execute('SELECT status FROM email_code_requests WHERE order_id=?',(oid,)).fetchone()
-        if previous:
-            if previous[0] in ('pending','ready'):
-                return s.send(api,cid,s.tr(cid,'طلب الكود قيد المتابعة؛ انتظر وصوله.','Your code request is pending; please wait.'))
-            with s.db() as c:c.execute('INSERT OR IGNORE INTO email_code_extra VALUES (?,0)',(oid,))
-            notify_admin(s,api,oid,True)
-            return s.send(api,cid,s.tr(cid,'تم إرسال طلبك للإدارة لمراجعة طلب كود إضافي.','Your additional code request has been sent to support.'))
-        target=account(s,oid)
-        try:configured=bool(mailbox_configs())
-        except (ValueError,TypeError):configured=False
-        state='pending' if target and configured else 'escalated'
-        with s.db() as c:
-            c.execute('INSERT INTO email_code_requests(order_id,cid,email,status,requested) VALUES (?,?,?,?,?)',
-                      (oid,cid,target or '',state,int(time.time())))
-        if state=='escalated':
-            notify_admin(s,api,oid)
-            return s.send(api,cid,s.tr(cid,'تم إرسال طلب الكود للإدارة للمتابعة.','Your code request has been sent to support.'))
-        return s.send(api,cid,s.tr(cid,'جاري انتظار كود البريد، وسيصلك هنا فور استلامه.','Waiting for the email code. It will be sent here when received.'))
+            if previous and previous[0] in ('pending','ready','escalated'):
+                return s.send(api,cid,s.tr(cid,
+                    'طلبك قيد مراجعة الإدارة. يرجى الانتظار.',
+                    'Your request is being reviewed by support.'))
+            if previous:
+                c.execute("UPDATE email_code_requests SET status='escalated',code='',requested=?,admin_notified=0 WHERE order_id=?",
+                          (int(time.time()),oid))
+            else:
+                c.execute('INSERT INTO email_code_requests(order_id,cid,email,status,requested) VALUES (?,?,?,?,?)',
+                          (oid,cid,account(s,oid) or '','escalated',int(time.time())))
+        notify_admin(s,api,oid)
+        return s.send(api,cid,s.tr(cid,
+            'تم إرسال طلب المساعدة في تسجيل الدخول للإدارة. لا تشارك رموز التحقق مع أي شخص.',
+            'Your login assistance request was sent to support. Do not share verification codes.'))
 
 
 def tick(s,api):
+    """Display eligible buttons and notify admin; do not read Gmail or send codes."""
     ensure(s)
     with s.db() as c:
         delivered=c.execute("""SELECT o.id,o.cid FROM orders o JOIN email_code_products p ON p.pid=o.pid
@@ -237,39 +238,10 @@ def tick(s,api):
             ORDER BY o.rowid DESC LIMIT 20""").fetchall()
     for oid,cid in delivered:show_button(s,api,cid,oid)
     with s.db() as c:
-        rows=c.execute("SELECT order_id,cid,email,status,requested,code FROM email_code_requests WHERE status IN ('pending','ready','escalated') LIMIT 10").fetchall()
-    for oid,cid,target,status,requested,code in rows:
-        if status=='escalated':
-            notify_admin(s,api,oid);continue
-        if not eligible(s,cid,oid):continue
-        if status=='pending':
-            with s.db() as c:
-                used={r[0] for r in c.execute('SELECT message_key FROM email_code_used')}
-            try:found=fetch_code(target,requested,used)
-            except Exception:
-                found=None
-                with s.db() as c:c.execute("UPDATE email_code_requests SET status='escalated' WHERE order_id=?",(oid,))
-                notify_admin(s,api,oid);continue
-            if not found:
-                if time.time()-requested>180:
-                    with s.db() as c:c.execute("UPDATE email_code_requests SET status='escalated' WHERE order_id=?",(oid,))
-                    notify_admin(s,api,oid)
-                    s.send(api,cid,s.tr(cid,'لم يصل كود جديد؛ تم إرسال الطلب للإدارة.','No new code arrived; support has been notified.'))
-                continue
-            code,key=found
-            with s.db() as c:
-                used=c.execute('SELECT order_id FROM email_code_used WHERE message_key=?',(key,)).fetchone()
-                if used:continue
-                changed=c.execute("UPDATE email_code_requests SET status='ready',code=?,message_key=? WHERE order_id=? AND status='pending'",(code,key,oid)).rowcount
-                if not changed:continue
-                c.execute('INSERT INTO email_code_used VALUES (?,?)',(key,oid))
-        if time.time()-requested>300:
-            with s.db() as c:c.execute("UPDATE email_code_requests SET status='escalated',code='' WHERE order_id=?",(oid,))
-            notify_admin(s,api,oid);continue
-        deliver_ready(s,api,oid)
-    with s.db() as c:
-        extras=[r[0] for r in c.execute('SELECT order_id FROM email_code_extra WHERE notified=0 LIMIT 10')]
-    for oid in extras:notify_admin(s,api,oid,True)
+        # Migrate unfinished requests to manual review, without retaining OTPs.
+        c.execute("UPDATE email_code_requests SET status='escalated',code='',admin_notified=0 WHERE status IN ('pending','ready')")
+        requests=[r[0] for r in c.execute("SELECT order_id FROM email_code_requests WHERE status='escalated' AND admin_notified=0 LIMIT 10")]
+    for oid in requests:notify_admin(s,api,oid)
 
 
 def deliver_ready(s,api,oid):
@@ -309,7 +281,7 @@ def settings(s,api,cid,pid):
     rows=[[s.btn('تعطيل' if enabled(s,pid) else 'تفعيل','emailcodetoggle:'+pid)],
           [s.btn('أيقونة متحركة لزر طلب الكود','seticon:ui_email_code')],
           [s.btn('حالة ربط Gmail','emailcodestatus')],[s.btn('رجوع','infopick:'+pid)]]
-    s.send(api,cid,'<b>'+s.esc(s.name(pid,cid))+'</b>\n\nالحالة: '+('مفعّل' if enabled(s,pid) else 'معطّل')+'\nتفعيل هذا المنتج فقط؛ باقي المنتجات لا تتغير. جميع المنتجات المحددة تستخدم بريد Gmail المشترك. كود تلقائي واحد لكل طلب مسلّم؛ الطلبات الإضافية تصل للإدارة. ربط Google بصلاحية قراءة البريد يُجهّز في إعدادات الاستضافة.',
+    s.send(api,cid,'<b>'+s.esc(s.name(pid,cid))+'</b>\n\nالحالة: '+('مفعّل' if enabled(s,pid) else 'معطّل')+'\nتفعيل هذا المنتج فقط؛ باقي المنتجات لا تتغير. جميع المنتجات المحددة تستخدم بريد Gmail المشترك. طلبات المساعدة تُرسل للإدارة للمراجعة فقط. لا تُقرأ أكواد Gmail ولا تُرسل تلقائيًا للعملاء.',
            s.kb(rows))
 
 
@@ -351,7 +323,7 @@ def install(s,namespace):
             if prefix=='emailcodestatus':
                 try:ready=bool(mailbox_configs())
                 except Exception:ready=False
-                return s.send(api,cid,'إعدادات Gmail موجودة؛ يُختبر الاتصال عند طلب الكود.' if ready else 'Gmail غير مربوط. يلزم تفويض Google بصلاحية قراءة البريد وإضافة إعدادات OAuth في أسرار Railway. لا ترسل كلمة مرور Gmail في المحادثة.')
+                return s.send(api,cid,'خدمة Gmail مستقلة؛ طلبات العملاء تصل للإدارة فقط ولا تُقرأ أو تُرسل الأكواد تلقائيًا.')
             if prefix in ('emailcodemail','emailcodeadmin'):
                 with s.db() as c:
                     order=c.execute("SELECT cid FROM orders WHERE id=? AND status='delivered'",(arg,)).fetchone()
