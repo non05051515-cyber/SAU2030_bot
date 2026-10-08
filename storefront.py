@@ -9116,6 +9116,48 @@ def payments(api, cid, pid):
     send(api, cid, text, kb(rows))
 
 
+def prepare_receipt_confirmation(cid, pid, method, usd, sar):
+    """Arm receipt-first flow for a manual payment."""
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_confirmation (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_uploads (cid INTEGER PRIMARY KEY, message_id INTEGER NOT NULL)')
+        conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
+        conn.execute('INSERT OR REPLACE INTO receipt_confirmation VALUES (?,?,?)', (cid, pid, method))
+        conn.execute('DELETE FROM receipt_uploads WHERE cid=?', (cid,))
+
+
+def clear_receipt_confirmation(conn, cid):
+    conn.execute('DELETE FROM receipt_confirmation WHERE cid=?', (cid,))
+    conn.execute('DELETE FROM receipt_uploads WHERE cid=?', (cid,))
+
+
+def complete_confirmed_receipt(api, cid, pid, method, message_id):
+    with db() as conn:
+        row = conn.execute('SELECT usd,sar FROM receipts WHERE cid=? AND pid=? AND method=?', (cid, pid, method)).fetchone()
+    if not row:
+        return send(api, cid, tr(cid, 'انتهت جلسة الدفع. افتح طريقة الدفع مجددًا.', 'The payment session expired. Reopen the payment method.'))
+    usd, sar = row
+    username = str(cid)
+    try:
+        chat = api.call('getChat', chat_id=cid)
+        details = chat.get('result') or {}
+        if details.get('username'):
+            username = '@' + details['username']
+    except Exception:
+        pass
+    result = send(api, G['ADMIN_ID'], '🧾 <b>إثبات دفع جديد</b>\n\n' + esc(name(pid)) + f'\nالكمية: {product_options.snapshot(sys.modules[__name__], "receipt", cid)}\nالسعر عند الطلب: {sar} SAR / {usd} USD\nالطريقة: {esc(method)}\nالعميل: {esc(username)}\nID: <code>{cid}</code>')
+    forwarded = api.call('forwardMessage', chat_id=G['ADMIN_ID'], from_chat_id=cid, message_id=message_id) if result else None
+    if not forwarded:
+        return send(api, cid, tr(cid, 'تعذر إرسال الإثبات للإدارة. أعد المحاولة أو تواصل مع ', 'Could not forward the receipt. Retry or contact ') + SUPPORT)
+    import payment_execution
+    payment_execution.receipt_order(sys.modules[__name__], cid, pid, method, usd, sar, message_id)
+    with db() as conn:
+        conn.execute('DELETE FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method))
+        conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+        clear_receipt_confirmation(conn, cid)
+    send(api, cid, tr(cid, '✅ وصل الإثبات للإدارة للمراجعة. ستتم متابعة طلبك بعد التحقق.', '✅ Receipt sent for review. Your order will be followed up after verification.'), menu(cid))
+
+
 def payment(api, cid, pid, method):
     if not can_order(pid):
         payments(api, cid, pid)
@@ -9138,7 +9180,8 @@ def payment(api, cid, pid, method):
         sar, usd, _, _ = checkout_totals(cid, pid)
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO payment_quotes VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
-        text += '\n\n' + tr(cid, 'بعد التحويل أرسل صورة الإثبات للمراجعة.', 'After transferring, submit a receipt photo for review.')
+        prepare_receipt_confirmation(cid, pid, method, usd, sar)
+        text += '\n\n' + tr(cid, 'بعد التحويل أرسل صورة الإيصال هنا أولًا، ثم اضغط «تم التحويل».', 'After transferring, send the receipt photo here first, then tap “Payment sent”.')
         rows.append([btn(tr(cid, '✅ تم التحويل', '✅ Payment sent'), f'receipt:{method}:{pid}')])
     else:
         text += '\n\n' + tr(cid, 'بيانات الدفع غير مكتملة. تواصل مع الدعم: ', 'Payment details are incomplete. Contact support: ') + SUPPORT
@@ -9189,14 +9232,22 @@ def receipt_request(api, cid, pid, method):
     if not can_order(pid) or (method not in ('bank', 'bybitid', 'trc20', 'bep20') and not payment_methods.valid(sys.modules[__name__], method)):
         payments(api, cid, pid)
         return
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_confirmation (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_uploads (cid INTEGER PRIMARY KEY, message_id INTEGER NOT NULL)')
+        confirmation = conn.execute('SELECT pid,method FROM receipt_confirmation WHERE cid=?', (cid,)).fetchone()
+        uploaded = conn.execute('SELECT message_id FROM receipt_uploads WHERE cid=?', (cid,)).fetchone()
+    if confirmation and confirmation == (pid, method):
+        if not uploaded:
+            return send(api, cid, tr(cid, '📸 أرسل صورة الإيصال هنا أولًا، ثم اضغط «تم التحويل».', '📸 Send your receipt photo here first, then tap “Payment sent”.'))
+        return complete_confirmed_receipt(api, cid, pid, method, uploaded[0])
     sar, usd, _, _ = checkout_totals(cid, pid)
     with db() as conn:
         quote = conn.execute('SELECT usd,sar FROM payment_quotes WHERE cid=? AND pid=? AND method=?', (cid, pid, method)).fetchone()
         if quote:
             usd, sar = quote
         conn.execute('INSERT OR REPLACE INTO receipts VALUES (?,?,?,?,?)', (cid, pid, method, str(usd), str(sar)))
-    send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع هنا. ستصل للإدارة للمراجعة.', '📸 Send your payment receipt photo here. It will be sent to the administrator for review.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
-
+    send(api, cid, tr(cid, '📸 أرسل صورة الإيصال هنا أولًا، ثم اضغط «تم التحويل».', '📸 Send your receipt photo here first, then tap “Payment sent”.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pid)]]))
 
 def receipt(api, message):
     if payment_methods.message(sys.modules[__name__], api, message):
@@ -9360,6 +9411,15 @@ def receipt(api, message):
         return False
     if not message.get('photo'):
         send(api, cid, tr(cid, '📸 أرسل صورة إثبات الدفع، أو اضغط إلغاء.', '📸 Send a receipt photo, or tap Cancel.'), kb([[btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pending[0])]]))
+        return True
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_confirmation (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS receipt_uploads (cid INTEGER PRIMARY KEY, message_id INTEGER NOT NULL)')
+        confirmation = conn.execute('SELECT pid,method FROM receipt_confirmation WHERE cid=?', (cid,)).fetchone()
+        if confirmation and confirmation == (pending[0], pending[1]):
+            conn.execute('INSERT OR REPLACE INTO receipt_uploads VALUES (?,?)', (cid, message['message_id']))
+    if confirmation and confirmation == (pending[0], pending[1]):
+        send(api, cid, tr(cid, '✅ وصلت صورة الإيصال. الآن اضغط «تم التحويل» لإرسالها للمراجعة.', '✅ Receipt photo received. Now tap “Payment sent” to submit it for review.'), kb([[btn(tr(cid, '🟢 تم التحويل', '🟢 Payment sent'), f'receipt:{pending[1]}:{pending[0]}')], [btn(tr(cid, '❌ إلغاء', '❌ Cancel'), 'cancel:' + pending[0])]]))
         return True
     pid, method, usd, sar = pending
     user = message.get('from', {})
@@ -9667,6 +9727,7 @@ def action(api, cid, value):
     elif prefix in ('buy', 'cancel'):
         with db() as conn:
             conn.execute('DELETE FROM receipts WHERE cid=?', (cid,))
+            clear_receipt_confirmation(conn, cid)
         if prefix == 'buy': payments(api, cid, arg)
         elif arg in VARIANTS: item(api, cid, arg)
         else: category(api, cid, arg)
