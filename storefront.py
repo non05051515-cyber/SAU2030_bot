@@ -828,6 +828,17 @@ def description_message_html(message, plain):
         return esc(plain)
     return rendered
 
+def styled_product_description(pid, cid=0):
+    """Render every product description as a Telegram blockquote, preserving custom emoji."""
+    body = product_description_html(pid, cid)
+    if not body:
+        return body
+    # Avoid nesting blockquotes if an admin has already styled the description.
+    if '<blockquote' in body:
+        return body
+    return '<blockquote>' + body + '</blockquote>'
+
+
 def product_description_html(pid, cid=0):
     pid = LEGACY.get(pid, pid)
     plain = product_description(pid, cid)
@@ -3560,7 +3571,7 @@ def item(api, cid, pid):
         desc = product_description(pid, cid)
         text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
         if desc:
-            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -3572,7 +3583,7 @@ def item(api, cid, pid):
     desc = product_description(pid, cid)
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
-        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
     if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -4890,7 +4901,7 @@ def item(api, cid, pid):
         desc = product_description(pid, cid)
         text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
         if desc:
-            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -4902,7 +4913,7 @@ def item(api, cid, pid):
     desc = product_description(pid, cid)
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
-        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
     if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -7669,7 +7680,7 @@ def item(api, cid, pid):
         desc = product_description(pid, cid)
         text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
         if desc:
-            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -7681,7 +7692,7 @@ def item(api, cid, pid):
     desc = product_description(pid, cid)
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
-        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
     if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
@@ -8924,7 +8935,7 @@ def item(api, cid, pid):
         desc = product_description(pid, cid)
         text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + '\n\n' + esc(status)
         if desc:
-            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+            text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
         rows = [[btn(tr(cid, '🛒 طلب المنتج', '🛒 Order'), 'buy:' + pid)]] if can_order(pid) else []
         rows += [[btn(tr(cid, '⚡ VEXA VOLT', '⚡ VEXA VOLT'), 'support')], nav(cid, 'product:' + category_id)]
         card(api, cid, None, name(pid, cid), text, kb(rows), pid=pid)
@@ -8936,7 +8947,7 @@ def item(api, cid, pid):
     desc = product_description(pid, cid)
     text = '<b>' + esc(name(pid, cid)) + '</b>\n\n' + info_block(pid,cid) + (('\n\n' + esc(available)) if available else '')
     if desc:
-        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + product_description_html(pid, cid)
+        text += '\n\n<b>' + tr(cid,'تفاصيل المنتج','Product details') + '</b>\n' + styled_product_description(pid, cid)
     if v.get('promotions') and promotions_visible(pid):
         text += '\n\n' + esc(tr(cid, 'أسعار الكميات — تواصل مع الدعم:', 'Bulk prices — contact support:'))
         for tier in v['promotions']:
