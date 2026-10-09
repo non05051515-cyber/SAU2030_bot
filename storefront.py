@@ -6845,6 +6845,19 @@ ACTIVITY_LABELS = {
     'home': 'فتح الرئيسية', 'products': 'عرض المنتجات', 'buy': 'بدء الطلب',
     'wallet': 'فتح المحفظة', 'support': 'فتح الدعم', 'receipt': 'إرسال صورة',
     'message': 'إرسال رسالة', 'interaction': 'تفاعل مع البوت',
+    'options': 'عرض خيارات المنتج', 'payment_wallet': 'اختيار الدفع من المحفظة',
+    'payment_crypto': 'اختيار Crypto Pay', 'payment_bybit': 'اختيار Bybit Pay',
+    'payment_stars': 'اختيار نجوم تيليجرام', 'payment_gifts': 'اختيار هدايا تيليجرام',
+    'payment_custom': 'اختيار وسيلة دفع أخرى',
+    'wallet_topup': 'بدء شحن المحفظة', 'wallet_transfer': 'بدء تحويل رصيد',
+    'coupon': 'فتح خانة كود الخصم', 'coupon_remove': 'إزالة كود الخصم',
+    'topup_crypto': 'اختيار Crypto Pay للشحن', 'topup_bybit': 'اختيار Bybit للشحن',
+    'topup_manual': 'اختيار التحويل البنكي للشحن', 'topup_sent': 'تأكيد إرسال الشحن',
+    'payment_check': 'التحقق من الدفع', 'topup_check': 'التحقق من شحن المحفظة',
+    'receipt_upload': 'تأكيد التحويل / إرسال الإيصال', 'language': 'فتح إعداد اللغة',
+    'currency': 'فتح إعداد العملة', 'referrals': 'فتح الإحالات',
+    'warranty': 'فتح الضمان', 'support_message': 'التواصل مع الدعم',
+    'quantity': 'اختيار كمية المنتج', 'paid': 'اكتمل الدفع', 'wallet_transfer_done': 'تأكيد تحويل الرصيد',
 }
 
 
@@ -6858,6 +6871,9 @@ def track_customer_activity(cid, value=None, message=None):
         return
     if message is not None:
         text = message.get('text', '')
+        if message.get('successful_payment'):
+            log_activity(cid, 'paid', '')
+            return
         value = G.get('MENU', {}).get(text)
         if text.startswith('/start'):
             value = 'start'
@@ -6868,16 +6884,77 @@ def track_customer_activity(cid, value=None, message=None):
             return
     value = value or ''
     prefix, _, arg = value.partition(':')
+    action_name = None
+    pid = ''
     if value in LEGACY:
         action_name, pid = 'item', LEGACY[value]
-    elif prefix in ('product', 'item', 'claude', 'buy'):
-        action_name = {'product': 'category', 'claude': 'item'}.get(prefix, prefix)
-        pid = LEGACY.get(arg, arg)
     else:
-        action_name = {'enter_store': 'home'}.get(prefix, prefix)
-        if action_name not in ACTIVITY_LABELS:
+        # Map customer-facing navigation and checkout steps explicitly. Do not
+        # persist callback arguments such as order IDs, coupon text, or amounts.
+        if prefix == 'product':
+            action_name, pid = 'category', LEGACY.get(arg, arg)
+        elif prefix in ('item', 'claude'):
+            action_name, pid = 'item', LEGACY.get(arg, arg)
+        elif prefix == 'options':
+            action_name, pid = 'options', LEGACY.get(arg, arg)
+        elif prefix in ('qty', 'chooseqty', 'customqty'):
+            action_name = 'quantity'
+            product_id = arg.split(':', 1)[0]
+            pid = LEGACY.get(product_id, product_id)
+        elif prefix == 'buy':
+            action_name, pid = 'buy', LEGACY.get(arg, arg)
+        elif prefix in ('paywallet', 'paycrypto', 'paybybit', 'paystars', 'paygifts', 'custompay', 'paybank'):
+            product_id = arg.split(':')[-1]
+            action_name = {
+                'paywallet': 'payment_wallet', 'paycrypto': 'payment_crypto',
+                'paybybit': 'payment_bybit', 'paystars': 'payment_stars',
+                'paygifts': 'payment_gifts',
+            }.get(prefix, 'payment_custom')
+            pid = LEGACY.get(product_id, product_id)
+        elif prefix == 'coupon':
+            action_name, pid = 'coupon', LEGACY.get(arg, arg)
+        elif prefix == 'couponremove':
+            action_name, pid = 'coupon_remove', LEGACY.get(arg, arg)
+        elif prefix == 'wallet':
+            action_name = {'topup': 'wallet_topup', 'transfer': 'wallet_transfer'}.get(arg, 'wallet')
+        elif prefix in ('topupcrypto', 'topupbybit', 'topupmanual', 'topupsend', 'bybitid', 'trc20', 'bep20'):
+            method = arg.split(':', 1)[0] if prefix == 'topupsend' else prefix
+            action_name = {
+                'topupcrypto': 'topup_crypto', 'bybitid': 'topup_bybit',
+                'topupbybit': 'topup_bybit', 'topupmanual': 'topup_manual',
+                'trc20': 'topup_manual', 'bep20': 'topup_manual',
+            }.get(method, 'topup_manual')
+        elif prefix in ('topupreceipt', 'approvetopup', 'rejecttopup'):
+            action_name = 'topup_sent'
+        elif prefix == 'checkorder':
+            action_name = 'payment_check'
+        elif prefix == 'checktopup':
+            action_name = 'topup_check'
+        elif prefix == 'receipt':
+            action_name = 'receipt_upload'
+            product_id = arg.split(':')[-1]
+            pid = LEGACY.get(product_id, product_id)
+        elif prefix == 'wallettransferconfirm':
+            action_name = 'wallet_transfer_done'
+        elif prefix == 'settings':
+            action_name = 'currency' if arg == 'currency' else 'language'
+        elif prefix == 'setlang':
+            action_name = 'language'
+        elif prefix in ('setcurrency', 'currencyview'):
+            action_name = 'currency'
+        elif prefix == 'referrals':
+            action_name = 'referrals'
+        elif prefix == 'support':
+            action_name = 'support_message'
+        elif prefix == 'warranty':
+            action_name = 'warranty'
+        elif prefix in ('home', 'enter_store', 'start', 'products'):
+            action_name = 'home' if prefix == 'enter_store' else prefix
+        elif prefix in ('admin', 'inbox', 'orderdeliver', 'payreview'):
+            # Admin actions are not customer journey events.
+            return
+        else:
             action_name = 'interaction'
-        pid = ''
     # Never persist private message text, payment details, or arbitrary callback data.
     log_activity(cid, action_name, pid)
 
