@@ -39,6 +39,7 @@ class DiscountTests(unittest.TestCase):
         self.bot.action(self.api, self.admin, 'couponadmin:new')
         self.assertTrue(self.msg(self.admin, 'vexa5'))
         self.assertTrue(self.msg(self.admin, amount))
+        if amount != 'NaN': self.bot.action(self.api, self.admin, 'couponadmin:all')
     def apply(self):
         self.bot.action(self.api, self.cid, 'coupon:' + self.pid)
         self.assertTrue(self.msg(self.cid, ' vExA5 '))
@@ -49,6 +50,7 @@ class DiscountTests(unittest.TestCase):
         with self.s.db() as c:
             self.assertEqual(c.execute('SELECT COUNT(*) FROM discount_codes').fetchone()[0], 0)
         self.msg(self.admin, '٥٫٥٠')
+        self.bot.action(self.api, self.admin, 'couponadmin:all')
         self.apply()
         self.assertEqual(self.s.checkout_totals(self.cid, self.pid)[:2], (Decimal('24.50'), Decimal('6.53')))
         self.assertIn('24.50', str(self.api.calls))
@@ -126,5 +128,45 @@ class DiscountTests(unittest.TestCase):
         self.bot.action(self.api, self.cid, 'buy:' + self.pid)
         self.assertFalse(self.msg(self.cid, 'VEXA5'))
 
+    def test_selected_scope_requires_selection_and_rejects_other_product(self):
+        import discounts
+        self.bot.action(self.api, self.admin, 'couponadmin:new')
+        self.msg(self.admin, 'ONLYONE')
+        self.msg(self.admin, '5')
+        self.bot.action(self.api, self.admin, 'couponadmin:select')
+        self.bot.action(self.api, self.admin, 'couponadmin:save')
+        with self.s.db() as c:
+            self.assertIsNone(c.execute('SELECT code FROM discount_codes').fetchone())
+        ids = discounts.product_ids(self.s)
+        self.bot.action(self.api, self.admin, 'couponadmin:pick:' + str(ids.index(self.pid)) + ':0')
+        self.bot.action(self.api, self.admin, 'couponadmin:save')
+        with self.s.db() as c:
+            self.assertEqual(c.execute('SELECT scope FROM discount_codes').fetchone()[0], 'selected')
+            self.assertEqual(c.execute('SELECT pid FROM discount_products').fetchall(), [(self.pid,)])
+        self.bot.action(self.api, self.cid, 'coupon:*')
+        self.msg(self.cid, 'ONLYONE')
+        self.assertEqual(self.s.checkout_totals(self.cid, self.pid)[0], Decimal('25'))
+        other = 'pd_03'
+        with self.s.db() as c:
+            c.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (other, '30', 'SAR'))
+            c.execute('INSERT OR REPLACE INTO product_availability VALUES (?,1)', (other,))
+            c.execute('INSERT OR REPLACE INTO product_visibility VALUES (?,1)', (other,))
+        self.assertEqual(self.s.checkout_totals(self.cid, other)[0], Decimal('30'))
+        self.bot.action(self.api, self.cid+1, 'coupon:' + other)
+        self.msg(self.cid+1, 'ONLYONE')
+        with self.s.db() as c:
+            self.assertIsNone(c.execute('SELECT code FROM customer_discounts WHERE cid=?', (self.cid+1,)).fetchone())
+
+    def test_legacy_coupon_migration(self):
+        import sqlite3
+        import discounts
+        with sqlite3.connect(':memory:') as c:
+            c.execute('CREATE TABLE discount_codes (code TEXT PRIMARY KEY, sar TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)')
+            c.execute("INSERT INTO discount_codes VALUES ('OLD','5',1)")
+            discounts.prepare(c)
+            discounts.prepare(c)
+            self.assertEqual(c.execute('SELECT code,scope FROM discount_codes').fetchone(), ('OLD', 'all'))
+
 
 if __name__ == '__main__': unittest.main()
+
