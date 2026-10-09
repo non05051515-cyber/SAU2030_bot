@@ -52,7 +52,9 @@ def scope_panel(s, api, cid, draft, page=0):
         for index in range(page*15, min(len(ids), (page+1)*15)):
             pid = ids[index]
             label = ('✓ ' if pid in selected else '') + s.name(pid, cid)
-            if variable and pid in selected: label += ' — خصم ' + draft['amounts'][pid] + ' ر.س'
+            if variable and pid in selected:
+                amount = draft.get('amounts', {}).get(pid)
+                label += ' — خصم ' + (amount + ' ر.س' if amount is not None else 'حدد المبلغ')
             rows.append([s.btn(label, 'couponadmin:pick:' + str(index) + ':' + str(page))])
         nav = []
         if page: nav.append(s.btn('السابق', 'couponadmin:page:' + str(page-1)))
@@ -72,8 +74,17 @@ def save_coupon(s, api, cid, draft):
         scope_panel(s, api, cid, draft)
         return
     amounts = draft.get('amounts', {}) if draft.get('mode') == 'variable' else {}
-    if draft.get('mode') == 'variable' and any(pid not in amounts for pid in selected):
-        s.send(api, cid, 'حدد مبلغ الخصم لكل منتج قبل الحفظ.')
+    missing = [pid for pid in selected if pid not in amounts]
+    if draft.get('mode') == 'variable' and missing:
+        pid = missing[0]
+        index = draft.get('available', []).index(pid) if pid in draft.get('available', []) else 0
+        page = index // 15
+        draft.update(pending_product=pid, pending_page=page)
+        with s.db() as conn:
+            conn.execute('UPDATE admin_state SET action=?,value=? WHERE cid=?', ('coupon_product_amount', json.dumps(draft), cid))
+        rows = [[s.btn('رجوع للمنتجات', 'couponadmin:backproducts')],
+                [s.btn('إزالة المنتج من الكود', 'couponadmin:removeproduct')]]
+        s.send(api, cid, 'باقي تحديد مبلغ الخصم لهذا المنتج قبل الحفظ: <b>' + s.esc(s.name(pid, cid)) + '</b>\nأرسل المبلغ بالريال، أو أزل المنتج من الكود.', s.kb(rows))
         return
     with s.db() as conn:
         if not draft.get('edit_code') and conn.execute('SELECT 1 FROM discount_codes WHERE code=?', (draft['code'],)).fetchone():
@@ -141,7 +152,9 @@ def action(s, api, cid, value):
                 return True
             draft = {'code': code, 'edit_code': code, 'sar': row[0], 'scope': 'selected',
                      'mode': 'variable', 'products': [p[0] for p in products],
-                     'amounts': {p[0]: p[1] for p in products if p[1] is not None},
+                     # Older selected-product coupons stored a shared amount on the
+                     # coupon and NULL per product. Keep that amount when editing.
+                     'amounts': {p[0]: (p[1] if p[1] is not None else row[0]) for p in products},
                      'available': product_ids(s)}
             with s.db() as conn:
                 conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'coupon_scope', json.dumps(draft)))

@@ -216,8 +216,13 @@ class DiscountTests(unittest.TestCase):
                 c.execute('INSERT OR REPLACE INTO product_visibility VALUES (?,1)', (pid,))
         self.set_product_discount(ids, self.pid, '3')
         self.bot.action(self.api, self.admin, 'couponadmin:save')
+        with self.s.db() as c:
+            # Simulate an older selected coupon with a shared coupon amount.
+            c.execute('UPDATE discount_products SET sar=NULL WHERE code=? AND pid=?', ('GROWING', self.pid))
+            c.execute('UPDATE discount_codes SET sar=? WHERE code=?', ('3', 'GROWING'))
         self.bot.action(self.api, self.admin, 'couponadmin:manage:GROWING')
         self.bot.action(self.api, self.admin, 'couponadmin:extend:GROWING')
+        self.assertIn('خصم 3 ر.س', str(self.api.calls))
         self.set_product_discount(ids, added, '4')
         self.bot.action(self.api, self.admin, 'couponadmin:save')
         with self.s.db() as c:
