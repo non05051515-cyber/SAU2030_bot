@@ -76,15 +76,20 @@ def save_coupon(s, api, cid, draft):
         s.send(api, cid, 'حدد مبلغ الخصم لكل منتج قبل الحفظ.')
         return
     with s.db() as conn:
-        if conn.execute('SELECT 1 FROM discount_codes WHERE code=?', (draft['code'],)).fetchone():
+        if not draft.get('edit_code') and conn.execute('SELECT 1 FROM discount_codes WHERE code=?', (draft['code'],)).fetchone():
             s.send(api, cid, 'هذا الكود موجود مسبقًا. أنشئ كودًا باسم آخر.')
             return
-        conn.execute('INSERT INTO discount_codes(code,sar,scope) VALUES (?,?,?)', (draft['code'], draft['sar'], scope))
+        if draft.get('edit_code'):
+            conn.execute('UPDATE discount_codes SET scope=? WHERE code=?', (scope, draft['code']))
+            conn.execute('DELETE FROM discount_products WHERE code=?', (draft['code'],))
+        else:
+            conn.execute('INSERT INTO discount_codes(code,sar,scope) VALUES (?,?,?)', (draft['code'], draft['sar'], scope))
         conn.executemany('INSERT INTO discount_products(code,pid,sar) VALUES (?,?,?)', [(draft['code'], pid, amounts.get(pid)) for pid in selected] if scope == 'selected' else [])
         conn.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
     label = 'كل المنتجات' if scope == 'all' else str(len(selected)) + ' منتجات محددة'
     amount_label = 'بخصم مختلف لكل منتج' if draft.get('mode') == 'variable' else f"بخصم {draft['sar']} ر.س"
-    s.send(api, cid, f"✅ تم إنشاء الكود <code>{draft['code']}</code> {amount_label} — {label}.")
+    verb = 'تم تحديث' if draft.get('edit_code') else 'تم إنشاء'
+    s.send(api, cid, f"✅ {verb} الكود <code>{draft['code']}</code> {amount_label} — {label}.")
     panel(s, api, cid)
 
 
@@ -98,7 +103,8 @@ def panel(s, api, cid):
     for code, sar, active, scope, variable in rows:
         label = 'الكل' if scope == 'all' else 'منتجات محددة'
         amount_label = 'خصم مختلف لكل منتج' if variable else f'{sar} ر.س'
-        buttons.append([s.btn(f'{code} — {amount_label} — {label} — ' + ('تعطيل' if active else 'تفعيل'), 'couponadmin:toggle:' + code)])
+        buttons.append([s.btn(f'{code} — {amount_label} — {label}', 'couponadmin:manage:' + code),
+                        s.btn('تعطيل' if active else 'تفعيل', 'couponadmin:toggle:' + code)])
     buttons.append([s.btn('↩️ لوحة التحكم', 'admin')])
     # Keep large collections within Telegram message/keyboard limits.
     for offset in range(0, len(buttons), 40):
@@ -110,6 +116,37 @@ def action(s, api, cid, value):
         if cid != s.G['ADMIN_ID']:
             return True
         arg = value.split(':', 1)[1]
+        if arg.startswith('manage:'):
+            code = arg[7:]
+            with s.db() as conn:
+                row = conn.execute('SELECT sar,active,scope FROM discount_codes WHERE code=?', (code,)).fetchone()
+                count = conn.execute('SELECT COUNT(*) FROM discount_products WHERE code=?', (code,)).fetchone()[0]
+            if not row:
+                panel(s, api, cid)
+                return True
+            buttons = []
+            if row[2] == 'selected' or count:
+                buttons.append([s.btn('➕ إضافة/تعديل منتجات الكود', 'couponadmin:extend:' + code)])
+            buttons.extend([[s.btn('تعطيل الكود' if row[1] else 'تفعيل الكود', 'couponadmin:toggle:' + code)],
+                            [s.btn('↩️ رجوع للأكواد', 'couponadmin:list')]])
+            s.send(api, cid, f'🎟 <b>الكود {s.esc(code)}</b>\nالنطاق: {"منتجات محددة" if row[2] == "selected" else "كل المنتجات"}\nعدد المنتجات المحددة: {count}\nيمكنك إضافة منتجات جديدة أو تعديل خصم منتج موجود، وستبقى خصومات المنتجات الحالية محفوظة.', s.kb(buttons))
+            return True
+        if arg.startswith('extend:'):
+            code = arg[7:]
+            with s.db() as conn:
+                row = conn.execute('SELECT sar,scope FROM discount_codes WHERE code=?', (code,)).fetchone()
+                products = conn.execute('SELECT pid,sar FROM discount_products WHERE code=?', (code,)).fetchall()
+            if not row:
+                panel(s, api, cid)
+                return True
+            draft = {'code': code, 'edit_code': code, 'sar': row[0], 'scope': 'selected',
+                     'mode': 'variable', 'products': [p[0] for p in products],
+                     'amounts': {p[0]: p[1] for p in products if p[1] is not None},
+                     'available': product_ids(s)}
+            with s.db() as conn:
+                conn.execute('INSERT OR REPLACE INTO admin_state VALUES (?,?,?)', (cid, 'coupon_scope', json.dumps(draft)))
+            scope_panel(s, api, cid, draft)
+            return True
         if arg == 'variable':
             with s.db() as conn:
                 state = conn.execute("SELECT action,value FROM admin_state WHERE cid=? AND action IN ('coupon_amount','coupon_scope')", (cid,)).fetchone()
@@ -117,7 +154,8 @@ def action(s, api, cid, value):
                 panel(s, api, cid)
                 return True
             draft = json.loads(state[1]) if state[0] == 'coupon_scope' else {'code': state[1], 'available': product_ids(s)}
-            draft.update(scope='selected', mode='variable', sar='0', products=[], amounts={})
+            if not draft.get('edit_code'):
+                draft.update(scope='selected', mode='variable', sar='0', products=[], amounts={})
             with s.db() as conn:
                 conn.execute('UPDATE admin_state SET action=?,value=? WHERE cid=?', ('coupon_scope', json.dumps(draft), cid))
             scope_panel(s, api, cid, draft)
@@ -284,4 +322,5 @@ def message(s, api, message):
     s.send(api, cid, s.tr(cid, '✅ تم حفظ كود الخصم وسيطبق على المنتجات المشمولة به عند الشراء.', '✅ Discount code saved. It applies to eligible products at checkout.'))
     (s.home(api, cid) if pid == '*' else s.payments(api, cid, pid))
     return True
+
 

@@ -206,6 +206,27 @@ class DiscountTests(unittest.TestCase):
         self.bot.action(self.api, self.admin, 'couponadmin:toggle:DIFFERENT')
         self.assertEqual(self.s.checkout_totals(self.cid, other)[0], Decimal('14'))
 
+    def test_existing_variable_coupon_can_be_extended_without_losing_old_products(self):
+        ids = self.start_variable(code='GROWING')
+        added = 'pd_03'
+        with self.s.db() as c:
+            for pid, price in ((self.pid, '7'), (added, '14')):
+                c.execute('INSERT OR REPLACE INTO product_prices VALUES (?,?,?)', (pid, price, 'SAR'))
+                c.execute('INSERT OR REPLACE INTO product_availability VALUES (?,1)', (pid,))
+                c.execute('INSERT OR REPLACE INTO product_visibility VALUES (?,1)', (pid,))
+        self.set_product_discount(ids, self.pid, '3')
+        self.bot.action(self.api, self.admin, 'couponadmin:save')
+        self.bot.action(self.api, self.admin, 'couponadmin:manage:GROWING')
+        self.bot.action(self.api, self.admin, 'couponadmin:extend:GROWING')
+        self.set_product_discount(ids, added, '4')
+        self.bot.action(self.api, self.admin, 'couponadmin:save')
+        with self.s.db() as c:
+            self.assertEqual(c.execute('SELECT pid,sar FROM discount_products WHERE code=? ORDER BY pid', ('GROWING',)).fetchall(),
+                             [(self.pid, '3'), (added, '4')])
+        self.bot.action(self.api, self.cid, 'coupon:' + added)
+        self.msg(self.cid, 'GROWING')
+        self.assertEqual(self.s.checkout_totals(self.cid, added)[0], Decimal('10'))
+
     def test_product_amount_validation_edit_removal_and_cancel(self):
         ids = self.start_variable()
         self.set_product_discount(ids, self.pid, 'NaN')
@@ -244,5 +265,6 @@ class DiscountTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
 
 
