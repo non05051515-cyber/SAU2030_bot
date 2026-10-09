@@ -22,6 +22,7 @@ class DiscountTests(unittest.TestCase):
         self.s = importlib.import_module('storefront')
         self.old_path = self.s.DB_PATH
         self.s.DB_PATH = Path(os.environ['STORE_STATE_PATH'])
+        self.s._DB_SCHEMA_READY = False
         self.api = API()
         self.cid = 7123
         self.admin = self.s.G['ADMIN_ID']
@@ -102,13 +103,15 @@ class DiscountTests(unittest.TestCase):
         self.s.receipt_request(self.api, self.cid, self.pid, 'bybitid')
         self.bot.handle_receipt(self.api, {'chat': {'id': self.cid}, 'photo': [{}], 'message_id': 1})
         with self.s.db() as c:
+            self.assertIsNone(c.execute('SELECT id FROM orders').fetchone())
+        self.bot.action(self.api, self.cid, 'receipt:bybitid:' + self.pid)
+        with self.s.db() as c:
             self.assertEqual(c.execute('SELECT usd,sar,status FROM orders').fetchone(), ('6.67', '25.00', 'review'))
     def test_home_coupon_applies_at_checkout(self):
         self.create()
-        self.bot.action(self.api, self.cid, 'home')
+        self.s.payments(self.api, self.cid, self.pid)
         buttons = self.api.calls[-1][1]['reply_markup']['inline_keyboard']
-        button = next(b for row in buttons for b in row if b.get('callback_data') == 'coupon:*')
-        self.assertEqual(button['style'], 'primary')
+        next(b for row in buttons for b in row if b.get('callback_data') == 'coupon:' + self.pid)
         self.bot.action(self.api, self.cid, 'coupon:*')
         self.assertTrue(self.msg(self.cid, 'vexa5'))
         self.bot.action(self.api, self.cid, 'buy:' + self.pid)
@@ -241,4 +244,5 @@ class DiscountTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
 

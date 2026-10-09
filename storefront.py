@@ -52,6 +52,8 @@ def db():
                 conn.execute('PRAGMA synchronous=NORMAL')
                 conn.execute('CREATE TABLE IF NOT EXISTS preferences (cid INTEGER PRIMARY KEY, lang TEXT NOT NULL DEFAULT "ar", currency TEXT NOT NULL DEFAULT "SAR")')
                 conn.execute('CREATE TABLE IF NOT EXISTS receipts (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL, usd TEXT, sar TEXT)')
+                conn.execute('CREATE TABLE IF NOT EXISTS receipt_confirmation (cid INTEGER PRIMARY KEY, pid TEXT NOT NULL, method TEXT NOT NULL)')
+                conn.execute('CREATE TABLE IF NOT EXISTS receipt_uploads (cid INTEGER PRIMARY KEY, message_id INTEGER NOT NULL)')
                 conn.execute('CREATE TABLE IF NOT EXISTS wallets (cid INTEGER PRIMARY KEY, balance_sar TEXT NOT NULL DEFAULT "0")')
                 conn.execute('CREATE TABLE IF NOT EXISTS wallet_topups (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, amount_sar TEXT NOT NULL, method TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
                 conn.execute('CREATE TABLE IF NOT EXISTS crypto_orders (id TEXT PRIMARY KEY, cid INTEGER NOT NULL, pid TEXT NOT NULL, amount_usd TEXT NOT NULL, external_id TEXT, status TEXT NOT NULL)')
