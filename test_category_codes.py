@@ -13,6 +13,40 @@ class CodePage(unittest.TestCase):
         self.p.setUp()
         self.s, self.api, self.bot, self.admin = self.p.s, self.p.api, self.p.bot, self.p.admin
     def tearDown(self): self.p.tearDown()
+    def test_english_catalog_repairs_arabic_cached_as_english(self):
+        import re
+        import catalog_language
+        source='<tg-emoji emoji-id="123456">⬇️</tg-emoji> جميع مايخص ChatGPT\nجميع المنتجات بضمان\nجميع المنتجات لمدة شهر\nماعدا المنتج الثالث (ع ايميلك) المدة ٣ شهور'
+        with self.s.db() as c:
+            c.execute("INSERT OR REPLACE INTO preferences(cid,lang,currency) VALUES (7,'en','USD')")
+            for lang in ('ar','en'):
+                c.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',('chatgpt','category_description',lang,source))
+            for pid,title in [('pc_0','بيانات جاهزة'),('pc_1','على ايميلك'),('pc_2','مشترك،مع عدد قليل'),('pc_3','مشترك')]:
+                c.execute("UPDATE admin_products SET name=?,category_id='chatgpt' WHERE pid=?",(title,pid))
+                c.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',(pid,'name','en',title))
+        with patch('chatgpt_extension.translate_text',side_effect=AssertionError('Offline translation must not need credentials')):
+            self.bot.action(self.api,7,'product:chatgpt')
+        data=next(d for m,d in self.api.calls if m=='sendMessage' and 'Everything related to' in d.get('text',''))
+        self.assertTrue(catalog_language.english(data['text']))
+        self.assertIn('3 months',data['text'])
+        self.assertIn('<tg-emoji emoji-id="123456">⬇️</tg-emoji>',data['text'])
+        labels=str(data['reply_markup'])
+        self.assertIn('Ready account',labels)
+        self.assertIn('On your email',labels)
+        self.assertIn('Shared with a small group',labels)
+        self.assertTrue(catalog_language.english(labels))
+        with self.s.db() as c:
+            self.assertEqual(c.execute("SELECT value FROM product_text WHERE pid='chatgpt' AND field='category_description' AND lang='ar'").fetchone()[0],source)
+    def test_failed_translation_never_caches_arabic_as_english(self):
+        import catalog_language
+        source='تعليمات مختلفة لا توجد في القاموس'
+        with patch('chatgpt_extension.translate_text',return_value=source):
+            self.assertEqual(self.s.auto_translate(source,'en'),'')
+            with self.s.db() as c:
+                c.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)',('chatgpt','category_description','ar',source))
+            self.assertTrue(catalog_language.english(self.s.category_description_html('chatgpt',7,'en')))
+        with self.s.db() as c:
+            self.assertIsNone(c.execute("SELECT 1 FROM product_text WHERE pid='chatgpt' AND field='category_description' AND lang='en'").fetchone())
     def test_actual_admin_dashboard_links_to_edit_panel(self):
         self.bot.action(self.api,self.admin,'admin')
         rows=[row for method,data in self.api.calls if method=='sendMessage' for row in data.get('reply_markup',{}).get('inline_keyboard',[])]

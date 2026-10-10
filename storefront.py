@@ -415,6 +415,11 @@ def auto_translate(text, target='en'):
     text = (text or '').strip()
     if not text:
         return text
+    if target == 'en':
+        import catalog_language
+        saved = catalog_language.offline(text, SAVED_ARABIC_DESCRIPTIONS)
+        if saved is not None:
+            return saved
     if target == 'ar':
         saved = SAVED_ARABIC_DESCRIPTIONS.get(text)
         if saved:
@@ -423,10 +428,13 @@ def auto_translate(text, target='en'):
         import chatgpt_extension
         language = 'English' if target == 'en' else 'Arabic'
         translated = chatgpt_extension.translate_text(text, target)
-        return (translated or text).strip()
+        result = (translated or text).strip()
+        if target == 'en' and not catalog_language.english(result):
+            return ''
+        return result
     except Exception as exc:
         print('Auto translation error:', type(exc).__name__, flush=True)
-        return text
+        return '' if target == 'en' else text
 
 
 def crypto_call(method, **data):
@@ -722,10 +730,11 @@ def stock_editor(api, cid, pid, value=None):
 
 
 def text_override(pid, field, lang, default):
+    import catalog_language
     pid = LEGACY.get(pid, pid)
     with db() as conn:
         row = conn.execute('SELECT value FROM product_text WHERE pid=? AND field=? AND lang=?', (pid, field, lang)).fetchone()
-        if row and not (field == 'description' and lang == 'ar'
+        if row and not (lang == 'en' and not catalog_language.english(row[0])) and not (field == 'description' and lang == 'ar'
                         and row[0] and not re.search(r'[\u0621-\u064a]', row[0])):
             return row[0]
         other_lang = 'en' if lang == 'ar' else 'ar'
@@ -747,13 +756,15 @@ def text_override(pid, field, lang, default):
             return translated
         print('Arabic description translation unavailable:', pid, flush=True)
         return source
-    if source and field in ('description','name'):
+    if source and field in ('description','name','category_name'):
         translated = auto_translate(source, lang)
         if translated and translated.strip() and translated.strip() != source.strip():
             translated = translated[:1500 if field == 'description' else 120]
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, field, lang, translated))
             return translated
+    if lang == 'en' and not catalog_language.english(default):
+        return catalog_language.fallback(field)
     return default
 
 
@@ -961,21 +972,28 @@ def admin_text_menu(api, cid, field, category_id=None):
 
 
 def category_description_html(pid, cid, lang=None):
-    # Category copy is independent of product descriptions, even when IDs match.
+    import catalog_language
     lang = lang if lang in ('ar', 'en') else prefs(cid)[0]
     with db() as conn:
         row = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, lang)).fetchone()
-        if row:
-            return row[0]
         other_lang = 'en' if lang == 'ar' else 'ar'
         other = conn.execute("SELECT value FROM product_text WHERE pid=? AND field='category_description' AND lang=?", (pid, other_lang)).fetchone()
-    if other and other[0]:
-        translated = auto_translate(re.sub(r'<[^>]+>', '', other[0]), lang)
-        if translated and translated.strip() and translated.strip() != re.sub(r'<[^>]+>', '', other[0]).strip():
-            translated = esc(translated[:1500])
+    if row and (lang != 'en' or catalog_language.english(row[0])):
+        return row[0]
+    source = other[0] if other and other[0] else (row[0] if row else '')
+    if source:
+        # Preserve Telegram custom emoji and formatting in offline translations.
+        translated = catalog_language.offline(source, SAVED_ARABIC_DESCRIPTIONS) if lang == 'en' else None
+        if translated is None:
+            plain = html.unescape(re.sub(r'<[^>]+>', '', source))
+            result = auto_translate(plain, lang)
+            translated = esc(result[:1500]) if result and result.strip() != plain.strip() else None
+        if translated and (lang != 'en' or catalog_language.english(translated)):
             with db() as conn:
                 conn.execute('INSERT OR REPLACE INTO product_text VALUES (?,?,?,?)', (pid, 'category_description', lang, translated))
             return translated
+        if lang == 'en':
+            return catalog_language.fallback('description')
     return None
 
 
@@ -985,7 +1003,7 @@ def category_label(pid, cid=0):
         return 'YouTube'
     custom = custom_category(pid)
     if custom:
-        return custom[1]
+        return text_override(pid, 'category_name', prefs(cid)[0], custom[1])
     product = G['PRODUCTS'].get(pid)
     if product:
         return product.get('name', pid)
