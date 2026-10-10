@@ -19,7 +19,7 @@ class CodePage(unittest.TestCase):
         rows = [[self.s.btn('product','item:pc_1')], self.s.nav(7)]
         markup = self.s.product_keyboard(7, rows, 'c:chatgpt')['inline_keyboard']
         self.assertEqual(markup[1][0]['callback_data'],'codepage:chatgpt')
-        self.assertEqual(markup[1][0]['style'],'primary')
+        self.assertNotIn('style',markup[1][0])
         self.assertEqual(markup[1][0]['icon_custom_emoji_id'],'987654321')
         self.assertEqual(markup[2][0]['callback_data'],'products')
         self.assertEqual(codes.add_rows(self.s,7,rows,'c:youtube'),rows)

@@ -35,7 +35,7 @@ def add_rows(s, cid, rows, route):
     result = list(rows)
     label = get(s, 'label', s.tr(cid, 'طلب كود الدخول', 'Request login code'))
     index = next((i for i, row in enumerate(result) if any(b.get('callback_data') == 'products' for b in row)), len(result))
-    result.insert(index, [s.btn(label, 'codepage:' + route[2:], s.ui_icon('ui_category_codes'), style='primary')])
+    result.insert(index, [s.btn(label, 'codepage:' + route[2:], s.ui_icon('ui_category_codes'))])
     return result
 
 def page(s, api, cid, pid='chatgpt'):
