@@ -222,6 +222,8 @@ def kb(rows):
 
 
 def product_keyboard(cid, rows, route='p'):
+    import category_codes
+    rows = category_codes.add_rows(sys.modules[__name__], cid, rows, route)
     target = 'USD' if prefs(cid)[1] == 'SAR' else 'SAR'
     label = (tr(cid, 'تحويل العملة إلى الدولار', 'Switch currency to USD')
              if target == 'USD' else tr(cid, 'تحويل العملة إلى الريال السعودي', 'Switch currency to SAR'))
@@ -1905,6 +1907,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
+                             [btn('إعداد صفحة أكواد ChatGPT', 'codeui:panel', style='primary')],
                              [btn('✏️ تعديل الأسماء', 'admin:names', style='primary')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎁 عروض الكميات', 'admin:promotions')],
@@ -6176,6 +6179,7 @@ def admin_panel(api, cid):
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
                              [btn('➕ إضافة قسم ومنتجات', 'admin:addcategoryproducts', style='success')],
                              [btn('🎟 أكواد الخصم', 'couponadmin:list')],
+                             [btn('إعداد صفحة أكواد ChatGPT', 'codeui:panel', style='primary')],
                              [btn('✏️ تعديل الأسماء', 'admin:names', style='primary')],
                              [btn('✏️ تعديل السعر', 'admin:prices')],
                              [btn('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],

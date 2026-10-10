@@ -367,6 +367,9 @@ email_codes.install(storefront, globals())
 import private_messages
 private_messages.install(globals())
 
+import category_codes
+category_codes.install(storefront, globals())
+
 def warm_arabic_descriptions():
  try:
   sources={}
