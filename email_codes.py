@@ -367,3 +367,5 @@ def install(s,namespace):
     namespace['action']=namespace['handle_action']=action
     namespace['handle_receipt']=receipt
     namespace['tick_email_codes']=lambda api:start_tick(s,api)
+    import otp_bridge
+    otp_bridge.install(s)
