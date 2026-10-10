@@ -525,6 +525,7 @@ UI_ICON_LABELS = {
     'ui_api': '🔗 API', 'ui_warranty': '🛡 الضمان', 'ui_volt': '⚡ VEXA VOLT',
     'ui_community': '📢 مجتمع VEXA STORE',
     'ui_wallet_balance': '💰 أيقونة رصيد المحفظة',
+    'home_points': '⭐ أيقونة نقاط العميل في الصفحة الرئيسية',
     'ui_admin': '🧾 لوحة الطلبات', 'ui_back': '↩️ رجوع', 'ui_home': '🏠 الرئيسية',
     'ui_broadcast_product': 'زر الذهاب للمنتج في الإعلان',
     'ui_broadcast_buy': 'زر شراء مباشرة في الإعلان',
@@ -2789,7 +2790,7 @@ def home_text_icon(key, fallback):
 
 def admin_home_text_icons(api, cid):
     if cid != G['ADMIN_ID']: return
-    items=(('welcome','👋 الترحيب'),('member','🆔 رقم العضوية'),('account','👤 الحساب'),('balance','💳 الرصيد'),('purchases','🛍 المشتريات'))
+    items=(('welcome','👋 الترحيب'),('member','🆔 رقم العضوية'),('account','👤 الحساب'),('balance','💳 الرصيد'),('purchases','🛍 المشتريات'),('points','⭐ النقاط'))
     rows=[[btn(label,'seticon:home_'+key,ui_icon('home_'+key))] for key,label in items]
     send(api,cid,'🏠 <b>أيقونات معلومات الصفحة الرئيسية</b>\n\nاختر الأيقونة التي تريد تغييرها:',kb(rows+[[btn('↩️ رجوع','admin:icons')]]))
 
@@ -2798,6 +2799,7 @@ def admin_icons(api, cid):
         return home(api, cid)
     send(api, cid, '➕ <b>الأسماء والأيقونات</b>\n\nمن هنا تستطيع تعديل الاسم كاملًا أو حذف الاسم/الأيقونة ثم إضافتهما من جديد:',
          kb([[btn('✏️ تعديل الاسم كاملًا', 'admin:buttonlabels', style='success')],
+             [btn('🏠 أيقونات بيانات الصفحة الرئيسية', 'admin:homeicons')],
              [btn('📦 أسماء وأيقونات المنتجات', 'iconmenu:products', style='primary')],
              [btn('📁 أسماء وأيقونات الأقسام', 'iconmenu:categories')],
              [btn('⌨️ أزرار قائمة تيليجرام السفلية', 'iconmenu:telegrambottom', style='success')],
@@ -6197,6 +6199,7 @@ def admin_panel(api, cid):
         activity_count = total_activity_count(conn)
     text = f'🧾 <b>لوحة إدارة VEXA</b>\n\nالطلبات: <b>{orders_count}</b>\nبانتظار المراجعة: <b>{review_count}</b>\nسجل الاختيارات: <b>{activity_count}</b>'
     send(api, cid, text, kb([[btn('🔔 الطلبات الجديدة / التسليم', 'admin:orders', style='primary')],
+                             [btn('⭐ نقاط العملاء', 'admin:points', style='success')],
                              [btn('👀 نشاط العملاء', 'admin:activity')],
                              [btn('📨 مراسلات العملاء', 'inbox:menu', style='primary')],
                              [btn('➕ إضافة منتج مباشر', 'admin:adddirect', style='success'), btn('📦 منتجاتي', 'admin:myproducts')],
@@ -6861,6 +6864,8 @@ def admin_orders(api, cid):
             action_buttons.append([btn('✅ قبول #' + oid, 'payreview:accept:' + oid, style='success'), btn('❌ رفض', 'payreview:reject:' + oid, style='danger')])
         elif status == 'paid':
             action_buttons.append([btn('📤 تسليم #' + oid, 'orderdeliver:' + oid, style='success')])
+        if status in ('paid', 'delivered'):
+            action_buttons.append([btn('⭐ إضافة نقاط لهذا العميل', 'loyalty:order:' + oid, style='primary')])
     action_buttons.extend([[btn('🔄 تحديث', 'admin:orders')], [btn('↩️ لوحة الإدارة', 'admin')]])
     send(api, cid, '\n'.join(parts), kb(action_buttons))
 
@@ -8778,8 +8783,8 @@ def home(api, cid):
     balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
-    iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍')
-    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n\nChoose from the menu below:')
+    iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍'); ips=home_text_icon('points','⭐')
+    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
     rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency'),style='primary'), btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):

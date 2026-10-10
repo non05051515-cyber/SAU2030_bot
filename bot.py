@@ -370,6 +370,9 @@ private_messages.install(globals())
 import category_codes
 category_codes.install(storefront, globals())
 
+import loyalty
+loyalty.install(storefront, globals())
+
 def warm_arabic_descriptions():
  try:
   sources={}
