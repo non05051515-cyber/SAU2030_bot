@@ -64,6 +64,18 @@ def read_token():
     with open(DATA_PATH, "rb") as handle:
         return json.loads(cipher().decrypt(handle.read()))
 
+def relay_access_token():
+    refresh = read_token()["refresh_token"]
+    result = http_json("https://oauth2.googleapis.com/token", {
+        "client_id": os.environ["GOOGLE_CLIENT_ID"],
+        "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+        "refresh_token": refresh, "grant_type": "refresh_token",
+    })
+    scopes = result.get("scope", "").split()
+    if scopes and scopes != [SCOPE]:
+        raise ValueError("readonly_scope_required")
+    return result["access_token"]
+
 class Handler(BaseHTTPRequestHandler):
     def respond(self, status, message, headers=None):
         data = message.encode()
@@ -94,9 +106,60 @@ class Handler(BaseHTTPRequestHandler):
         self.respond(401, "Administrator access required", {"WWW-Authenticate": 'Basic realm="VEXA Gmail setup"'})
         return False
 
+    def relay_authorized(self):
+        expected = os.environ.get("OTP_RELAY_SECRET", "")
+        return len(expected) >= 32 and hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + expected)
+
+    def do_POST(self):
+        if self.path != "/otp/code":
+            return self.respond(404, "Not found")
+        if not self.relay_authorized():
+            return self.respond(401, "Unauthorized")
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 65536:
+                raise ValueError()
+            data = json.loads(self.rfile.read(size))
+            target = str(data["target"]).lower()
+            requested = int(data["requested"])
+            used = data.get("used", [])
+            import email_codes
+            if not email_codes.re.fullmatch(email_codes.EMAIL_RE, target):
+                raise ValueError()
+            if not time.time() - 300 <= requested <= time.time() + 60:
+                raise ValueError()
+            if not isinstance(used, list) or len(used) > 2000 or any(not isinstance(k, str) or len(k) > 300 for k in used):
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            return self.respond(400, "Invalid request")
+        try:
+            access = relay_access_token()
+            profile = http_json("https://gmail.googleapis.com/gmail/v1/users/me/profile", bearer=access)
+            cfg = {"client_id": os.environ["GOOGLE_CLIENT_ID"],
+                   "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+                   "refresh_token": read_token()["refresh_token"],
+                   "user": profile["emailAddress"]}
+            found = email_codes.fetch_oauth_code(cfg, target, requested, set(used))
+            return self.respond(200, json.dumps({"code": found[0], "message_key": found[1]} if found else {}))
+        except Exception:
+            return self.respond(502, "Mailbox retrieval failed")
+
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path
+        if path == "/otp/status":
+            if not self.relay_authorized():
+                return self.respond(401, "Unauthorized")
+            connected = os.path.isfile(DATA_PATH)
+            verified = False
+            if connected:
+                try:
+                    access = relay_access_token()
+                    http_json("https://gmail.googleapis.com/gmail/v1/users/me/labels", bearer=access)
+                    verified = True
+                except Exception:
+                    pass
+            return self.respond(200, json.dumps({"connected": connected, "verified": verified}))
         if path == "/health":
             return self.respond(200, "OK")
         if path == "/":
