@@ -159,6 +159,7 @@ def install(namespace):
             [sg['btn']('إضافة بيانات تسليم المنتجات', 'localstockmenu', style='success')],
             [sg['btn']('🏦 طرق الدفع / إضافة طريقة دفع', 'pm:list', style='success')],
             [sg['btn']('🎟 أكواد الخصم', 'couponadmin:list', style='primary')],
+            [sg['btn']('إعداد صفحة أكواد ChatGPT', 'codeui:panel')],
             [sg['btn']('🔗 ربط منتج بـPandora', 'admin:pandoralink', style='success')],
             [sg['btn']('✏️ تعديل سعر منتج', 'admin:prices', style='primary')],
             [sg['btn']('🎛 إعداد عرض بيانات المنتج', 'admin:info', style='primary')],

@@ -13,6 +13,13 @@ class CodePage(unittest.TestCase):
         self.p.setUp()
         self.s, self.api, self.bot, self.admin = self.p.s, self.p.api, self.p.bot, self.p.admin
     def tearDown(self): self.p.tearDown()
+    def test_actual_admin_dashboard_links_to_edit_panel(self):
+        self.bot.action(self.api,self.admin,'admin')
+        rows=[row for method,data in self.api.calls if method=='sendMessage' for row in data.get('reply_markup',{}).get('inline_keyboard',[])]
+        button=next(b for row in rows for b in row if b.get('callback_data')=='codeui:panel')
+        self.assertEqual(button['text'],'إعداد صفحة أكواد ChatGPT')
+        self.bot.action(self.api,self.admin,button['callback_data'])
+        self.assertIn('codeui:text_ar',str(self.api.calls[-1][1]['reply_markup']))
     def test_button_under_products_before_back_and_other_categories_unchanged(self):
         with self.s.db() as c:
             c.execute('INSERT OR REPLACE INTO category_icons VALUES (?,?)', ('ui_category_codes','987654321'))
