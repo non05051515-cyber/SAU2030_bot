@@ -57,6 +57,35 @@ class AnnouncementTests(unittest.TestCase):
         self.assertFalse(any(d.get('chat_id') in self.ad.TARGETS.values() for _,d in self.api.calls))
         self.assertEqual(self.ad.catalog.state(self.pid)['quantity'], 29)
 
+
+    def test_freeform_text_animated_emoji_and_editable_button_labels(self):
+        self.bot.action(self.api, self.cid, 'ad:home')
+        self.bot.action(self.api, self.cid, 'ad:pick:' + self.pid)
+        text = '🔥 عرض خاص لمدة محدودة'
+        custom_entities = [{'type': 'custom_emoji', 'offset': 0, 'length': 2, 'custom_emoji_id': '777'}]
+        self.bot.handle_admin_delivery(self.api, {
+            'chat': {'id': self.cid}, 'text': text, 'entities': custom_entities
+        })
+        preview = next(data for _, data in reversed(self.api.calls)
+                       if data.get('chat_id') == self.cid and data.get('text') == text)
+        self.assertEqual(preview['entities'], custom_entities)
+        self.assertNotIn('parse_mode', preview)
+
+        self.bot.action(self.api, self.cid, 'ad:labels')
+        self.bot.action(self.api, self.cid, 'ad:label:buy_ar')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': 'اطلبه الآن'})
+        self.bot.action(self.api, self.cid, 'ad:label:stop_ar')
+        self.bot.handle_admin_delivery(self.api, {'chat': {'id': self.cid}, 'text': 'إخفاء الإعلانات'})
+
+        card = self.ad.card(self.ad.draft(self.cid)[1], 'ar', unsubscribe=True)
+        row = card['reply_markup']['inline_keyboard'][0]
+        self.assertEqual(row[0]['text'], '🛍️ اطلبه الآن')
+        self.assertEqual(row[0]['style'], 'success')
+        self.assertEqual(row[1]['text'], '🔕 إخفاء الإعلانات')
+        self.assertEqual(row[1]['style'], 'primary')
+        self.assertEqual(card['text'], text)
+        self.assertEqual(card['entities'], custom_entities)
+
     def test_confirmation_once_admin_only_and_unavailable(self):
         self.select()
         token = self.ad.draft(self.cid)[0]
@@ -76,7 +105,7 @@ class AnnouncementTests(unittest.TestCase):
         with self.s.db() as c:
             c.executemany('INSERT OR REPLACE INTO preferences(cid,lang,currency) VALUES (?,?,?)', [(42,'ar','USD'),(43,'en','USD')])
         payload = {'localized': {lang: self.ad.card({'pid':self.pid,'added':20,'stock':18}, lang, unsubscribe=True) for lang in ('ar','en')}}
-        for lang, text, buy, stop in [('ar','المخزون الحالي: 18','شراء الآن','إيقاف الإعلانات'),('en','Current stock: 18','Buy now','Stop ads')]:
+        for lang, text, buy, stop in [('ar','المخزون الحالي: 18','شراء من البوت','🔕 إيقاف الإعلانات'),('en','Current stock: 18','Buy in the bot','🔕 Stop ads')]:
             card = payload['localized'][lang]
             self.assertIn(text, card['text'])
             row = card['reply_markup']['inline_keyboard'][0]
