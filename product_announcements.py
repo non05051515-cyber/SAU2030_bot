@@ -17,6 +17,7 @@ def db():
     c = s.db()
     c.execute('CREATE TABLE IF NOT EXISTS product_ad_drafts (cid INTEGER PRIMARY KEY, token TEXT, payload TEXT, status TEXT)')
     c.execute('CREATE TABLE IF NOT EXISTS pandora_notification_icons (key TEXT PRIMARY KEY, custom_emoji_id TEXT NOT NULL)')
+    c.execute('CREATE TABLE IF NOT EXISTS product_ad_button_labels (key TEXT PRIMARY KEY, label TEXT NOT NULL)')
     return c
 
 
@@ -38,59 +39,76 @@ def clear(cid):
         c.execute('DELETE FROM product_ad_drafts WHERE cid=?', (cid,))
 
 
+def button_labels(language='en'):
+    defaults = {'buy_ar': 'شراء من البوت', 'buy_en': 'Buy in the bot',
+                'stop_ar': 'إيقاف الإعلانات', 'stop_en': 'Stop ads'}
+    with db() as c:
+        saved = dict(c.execute('SELECT key,label FROM product_ad_button_labels'))
+    labels = {**defaults, **saved}
+    return {'buy': labels['buy_en' if language == 'en' else 'buy_ar'],
+            'stop': labels['stop_en' if language == 'en' else 'stop_ar']}
+
+
 def card(data, language='en', unsubscribe=False):
     if data.get('language') in ('ar', 'en'):
         language = data['language']
     pid = data['pid']
-    st = catalog.state(pid)
     with db() as c:
         icons = dict(c.execute('SELECT key,custom_emoji_id FROM pandora_notification_icons'))
     en = language == 'en'
-    canonical = s.LEGACY.get(pid, pid)
-    variant = s.VARIANTS.get(canonical)
-    fallback = variant['name'][language] if variant else s.name(pid, s.G['ADMIN_ID'])
-    title = s.text_override(canonical, 'name', language, fallback)
-    lines = [('product', title)]
-    if data.get('added') is not None:
-        lines.append(('added', ('Added: ' if en else 'الكمية المضافة: ') + str(data['added'])))
-    quantity = data.get('stock', st['quantity'])
-    lines += [('stock', ('Current stock: ' if en else 'المخزون الحالي: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
-              ('price', ('Price: ' if en else 'السعر: ') + (f'{s.amount(pid, "SAR"):.2f} ريال' if s.amount(pid, 'SAR') is not None else s.price(0, pid, 'SAR')))]
-    text, entities = '', []
-    units = lambda value: len(value.encode('utf-16-le')) // 2
-    for key, value in lines:
-        if text:
-            text += '\n'
-        offset = units(text)
-        emoji = ICONS[key][0]
-        text += emoji + ' ' + str(value)
-        eid = str(icons.get(key, ''))
-        if eid.isdecimal():
-            entities.append({'type': 'custom_emoji', 'offset': offset, 'length': units(emoji), 'custom_emoji_id': eid})
-        entities.append({'type': 'bold', 'offset': offset + units(emoji) + 1, 'length': units(str(value))})
-    buy_text = 'Buy now' if en else 'شراء الآن'
-    button = {'text': '🛒 ' + buy_text, 'url': catalog.link(pid), 'style': 'success'}
-    if str(icons.get('buy', '')).isdecimal():
-        button.update(text=buy_text, icon_custom_emoji_id=str(icons['buy']))
-    row = [button]
+    text = str(data.get('custom_text') or '').strip()
+    entities = data.get('custom_entities') or []
+    if not text:
+        st = catalog.state(pid)
+        canonical = s.LEGACY.get(pid, pid)
+        variant = s.VARIANTS.get(canonical)
+        fallback = variant['name'][language] if variant else s.name(pid, s.G['ADMIN_ID'])
+        title = s.text_override(canonical, 'name', language, fallback)
+        lines = [('product', title)]
+        if data.get('added') is not None:
+            lines.append(('added', ('Added: ' if en else 'الكمية المضافة: ') + str(data['added'])))
+        quantity = data.get('stock', st['quantity'])
+        lines += [('stock', ('Current stock: ' if en else 'المخزون الحالي: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
+                  ('price', ('Price: ' if en else 'السعر: ') + (f'{s.amount(pid, "SAR"):.2f} ريال' if s.amount(pid, 'SAR') is not None else s.price(0, pid, 'SAR')))]
+        text, entities = '', []
+        units = lambda value: len(value.encode('utf-16-le')) // 2
+        for key, value in lines:
+            if text:
+                text += '\n'
+            offset = units(text)
+            emoji = ICONS[key][0]
+            text += emoji + ' ' + str(value)
+            eid = str(icons.get(key, ''))
+            if eid.isdecimal():
+                entities.append({'type': 'custom_emoji', 'offset': offset, 'length': units(emoji), 'custom_emoji_id': eid})
+            entities.append({'type': 'bold', 'offset': offset + units(emoji) + 1, 'length': units(str(value))})
+    labels = button_labels(language)
+    buy_icon = str(icons.get('buy', ''))
+    buy_button = {'text': labels['buy'] if buy_icon.isdecimal() else ('🛍️ ' + labels['buy']),
+                   'url': catalog.link(pid), 'style': 'success'}
+    if buy_icon.isdecimal():
+        buy_button['icon_custom_emoji_id'] = buy_icon
+    row = [buy_button]
     if unsubscribe:
-        stop_button = s.btn('Stop ads' if en else 'إيقاف الإعلانات', 'ads:stop', style='primary')
-        if str(icons.get('stop_ads', '')).isdecimal():
-            stop_button['icon_custom_emoji_id'] = str(icons['stop_ads'])
+        stop_icon = str(icons.get('stop_ads', ''))
+        stop_button = {'text': labels['stop'] if stop_icon.isdecimal() else ('🔕 ' + labels['stop']),
+                       'callback_data': 'ads:stop', 'style': 'primary'}
+        if stop_icon.isdecimal():
+            stop_button['icon_custom_emoji_id'] = stop_icon
         row.append(stop_button)
     return {'text': text, 'entities': entities, 'reply_markup': {'inline_keyboard': [row]}}
-
 
 def preview(api, cid, data):
     token = save(cid, data)
     if not api.call('sendMessage', chat_id=cid, **card(data, s.prefs(cid)[0], unsubscribe=True)):
         return s.send(api, cid, 'تعذرت المعاينة. راجع إعداد الأيقونات وصلاحية البوت لاستخدامها.',
                       s.kb([[s.btn('🎨 الأيقونات المتحركة', 'ad:icons')], [s.btn('↩️ رجوع', 'ad:home')]]))
-    return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر:', s.kb([
+    return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر أو عدّل النص والأزرار:', s.kb([
         [s.btn('✅ نشر في القناة', 'ad:send:channel:' + token, style='success')],
         [s.btn('✅ نشر في المجموعة', 'ad:send:group:' + token, style='success')],
         [s.btn('📨 إرسال لمستخدمي البوت', 'ad:send:bot:' + token, style='success')],
-        [s.btn('✏️ الكمية المضافة (Added)', 'ad:added')],
+        [s.btn('✏️ تعديل نص الإعلان', 'ad:text')],
+        [s.btn('✏️ أسماء الأزرار', 'ad:labels')],
         [s.btn('📦 تعديل Current stock', 'ad:stock')],
         [s.btn('🌐 لغة الإعلان', 'ad:language')],
         [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
@@ -168,9 +186,10 @@ def install(namespace):
             clear(cid)
             with s.db() as c:
                 c.execute('DELETE FROM admin_state WHERE cid=?', (cid,))
-            return s.send(api, cid, '📢 <b>إعلان منتج</b>\n\nاسم المنتج، الكمية المضافة، المخزون والسعر، مع زر شراء أخضر يفتح المنتج مباشرة.', s.kb([
+            return s.send(api, cid, '📢 <b>إعلان منتج</b>\n\nاختر المنتج، ثم أرسل نصًا حرًا مع الإيموجي المتحرك والتنسيق. زر المنتج أخضر وزر إيقاف الإعلانات أزرق، وتقدر تغيّر اسميهما وأيقونتيهما.', s.kb([
                 [s.btn('🛍 اختيار المنتج', 'ad:products:0', style='success')],
-                [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
+                [s.btn('✏️ أسماء الأزرار', 'ad:labels')],
+                [s.btn('🎨 أيقونات الإعلان والأزرار', 'ad:icons')],
                 [s.btn('↩️ لوحة الإدارة', 'admin')]]))
         if verb == 'products':
             clear(cid)
@@ -187,8 +206,27 @@ def install(namespace):
             if verb == 'pick': data = {'pid': ':'.join(parts[2:])}
             if data.get('pid') not in catalog.product_ids(): return
             save(cid, data, 'added')
-            return s.send(api, cid, 'أرسل الكمية المضافة (Added)، مثل 20. هذا الرقم للإعلان فقط ولا يغير مخزون المنتج.', s.kb([
+            return s.send(api, cid, 'أرسل نص الإعلان مباشرة مع الإيموجي المتحرك، أو أرسل رقم الكمية المضافة مثل 20 لإعلان تفاصيل المنتج تلقائيًا.', s.kb([
+                [s.btn('✍️ كتابة نص إعلان خاص', 'ad:custom')],
                 [s.btn('بدون سطر الكمية المضافة', 'ad:skip')], [s.btn('❌ إلغاء', 'ad:home')]]))
+        if verb == 'custom' and data.get('pid'):
+            save(cid, data, 'message')
+            return s.send(api, cid, 'أرسل نص الإعلان كما تريده أن يظهر للعملاء. يمكنك إدراج الإيموجي المتحرك والتنسيق في نفس الرسالة.', s.kb([
+                [s.btn('❌ إلغاء', 'ad:home')]]))
+        if verb == 'text' and data.get('pid'):
+            save(cid, data, 'message')
+            return s.send(api, cid, 'أرسل نص الإعلان الجديد، مع أيقونات متحركة وتنسيق إذا رغبت.', s.kb([
+                [s.btn('↩️ رجوع للمعاينة', 'ad:preview')]]))
+        if verb == 'labels':
+            return s.send(api, cid, '✏️ <b>تعديل أسماء الأزرار</b>\n\nاختر الاسم الذي تريد تغييره. وظيفة الزرين وألوانهما ثابتة: زر المنتج أخضر، وإيقاف الإعلانات أزرق.', s.kb([
+                [s.btn('🛍 اسم زر المنتج — عربي', 'ad:label:buy_ar')],
+                [s.btn('🛍 اسم زر المنتج — English', 'ad:label:buy_en')],
+                [s.btn('🔕 اسم زر إيقاف الإعلانات — عربي', 'ad:label:stop_ar')],
+                [s.btn('🔕 اسم زر إيقاف الإعلانات — English', 'ad:label:stop_en')],
+                [s.btn('↩️ رجوع', 'ad:preview' if data.get('pid') else 'ad:home')]]))
+        if verb == 'label' and len(parts) == 3 and parts[2] in ('buy_ar', 'buy_en', 'stop_ar', 'stop_en'):
+            save(cid, data, 'label:' + parts[2])
+            return s.send(api, cid, 'أرسل الاسم الجديد للزر (حتى 40 حرفًا).')
         if verb == 'stock' and data.get('pid'):
             save(cid, data, 'stock')
             return s.send(api, cid, '📦 أرسل عدد المخزون الذي تريد عرضه في Current stock. التعديل للإعلان فقط ولا يغير مخزون المتجر.', s.kb([
@@ -284,12 +322,38 @@ def install(namespace):
             clear(cid)
             return old_input(api, message)
         _, data, status = current
+        if status == 'message':
+            custom_text = (message.get('text') or '').strip()
+            if not custom_text or len(custom_text) > 3900:
+                s.send(api, cid, 'أرسل نصًا من 1 إلى 3900 حرفًا.')
+                return True
+            data['custom_text'] = custom_text
+            data['custom_entities'] = message.get('entities') or []
+            preview(api, cid, data)
+            return True
+        if status.startswith('label:'):
+            key = status.split(':', 1)[1]
+            label = (message.get('text') or '').strip()
+            if not label or len(label) > 40:
+                s.send(api, cid, 'أرسل اسمًا للزر من 1 إلى 40 حرفًا.')
+                return True
+            with db() as c:
+                c.execute('INSERT OR REPLACE INTO product_ad_button_labels VALUES (?,?)', (key, label))
+            save(cid, data)
+            s.send(api, cid, '✅ تم حفظ اسم الزر.')
+            action(api, cid, 'ad:labels')
+            return True
         if status in ('added', 'stock'):
             try:
                 added = int(text)
                 if not 0 <= added <= 1000000000: raise ValueError()
             except ValueError:
-                s.send(api, cid, 'أرسل عددًا صحيحًا موجبًا أو صفرًا.' if status == 'stock' else 'أرسل عددًا صحيحًا موجبًا أو صفرًا، أو اضغط «بدون سطر الكمية المضافة».')
+                if status == 'added' and text and len(text) <= 3900:
+                    data['custom_text'] = text
+                    data['custom_entities'] = message.get('entities') or []
+                    preview(api, cid, data)
+                    return True
+                s.send(api, cid, 'أرسل نصًا إعلانيًا، أو عددًا صحيحًا موجبًا أو صفرًا.' if status == 'added' else 'أرسل عددًا صحيحًا موجبًا أو صفرًا.')
                 return True
             data[status] = added
             preview(api, cid, data)
