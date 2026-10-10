@@ -313,7 +313,11 @@ def install(s,namespace):
     def action(api,cid,value):
         ensure(s)
         prefix,_,arg=value.partition(':')
-        if prefix=='emailcode':return request(s,api,cid,arg)
+        if prefix=='emailcode':
+            current=button(s,cid,arg)
+            if current.get('url'):
+                return s.send(api,cid,s.tr(cid,'افتح بوت الأكواد من الزر التالي، ثم اضغط طلب الكود.','Open the code bot below, then request your code.'),s.kb([[current]]))
+            return request(s,api,cid,arg)
         if prefix.startswith('emailcode'):
             if cid!=s.G['ADMIN_ID']:return
             if prefix=='emailcodeproduct':return settings(s,api,cid,arg)
@@ -352,7 +356,15 @@ def install(s,namespace):
                     with s.db() as c:
                         c.execute('INSERT OR REPLACE INTO email_code_accounts VALUES (?,?)',(oid,raw.lower()))
                         c.execute('DELETE FROM admin_state WHERE cid=?',(cid,))
-                    s.send(api,cid,'تم ربط بريد الحساب بهذا الطلب.');return True
+                    with s.db() as c:
+                        customer=c.execute("SELECT cid FROM orders WHERE id=? AND status='delivered'",(oid,)).fetchone()
+                    current=button(s,customer[0],oid) if customer else {}
+                    if current.get('url'):
+                        delivered=s.send(api,customer[0],s.tr(customer[0],'تم تجهيز طلب الكود. افتح بوت الأكواد من الزر التالي.','Your code request is ready. Open the code bot below.'),s.kb([[current]]))
+                        s.send(api,cid,'تم ربط بريد الحساب وإرسال زر بوت الأكواد للعميل.' if delivered else 'تم ربط البريد. تعذر إرسال الزر؛ يستطيع العميل فتحه من طلباته.')
+                    else:
+                        s.send(api,cid,'تم ربط بريد الحساب بهذا الطلب. يستطيع العميل إعادة فتح الطلب لتحديث زر الكود.')
+                    return True
                 if not re.fullmatch(r'\d{6}',raw):
                     s.send(api,cid,'أرسل كودًا من 6 أرقام.');return True
                 with s.db() as c:
