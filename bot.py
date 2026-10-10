@@ -271,7 +271,20 @@ def main():
        action(a,c,data);continue
       if data=='required_group:verify':
        if required_group.verify(a,c) and not channel_catalog.resume(a,c):show_start(a,c)
-      elif c==ADMIN_ID or required_group.approved(c):action(a,c,data)
+      elif c==ADMIN_ID or required_group.approved(c):
+       if data in ('home','enter_store'):
+        storefront.home(a,c);continue
+       if data=='settings:lang':
+        storefront.settings(a,c,'lang');continue
+       if data.startswith('setlang:'):
+        chosen=data.split(':',1)[1]
+        if chosen in ('ar','en'):
+         with storefront.db() as conn:
+          conn.execute('INSERT OR IGNORE INTO preferences(cid) VALUES (?)',(c,))
+          conn.execute('UPDATE preferences SET lang=?,currency=? WHERE cid=?',(chosen,'SAR' if chosen=='ar' else 'USD',c))
+         storefront.home(a,c)
+        continue
+       action(a,c,data)
       else:required_group.prompt(a,c)
      continue
     m=u.get('message',{});c=m.get('chat',{}).get('id')
