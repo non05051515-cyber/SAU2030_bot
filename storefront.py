@@ -177,6 +177,11 @@ def esc(value):
 def display_product_name(pid, cid=0, label=None):
     label = compact_name(pid, cid) if label is None else label
     label = label.lstrip('🔴🟢⏸ ')
+    # The ChatGPT activation on the customer's email lasts three months.
+    if label.strip().lower() in ('على ايميلك', 'على إيميلك', 'on your email'):
+        import category_codes
+        if category_codes.chatgpt_product(sys.modules[__name__], pid):
+            label += ' • ' + tr(cid, '٣ شهور', '3M')
     label = re.sub(r'(\d+)\s*أشهر', r'\1M', label)
     label = re.sub(r'(\d+)\s*(?:أيام|ايام)', r'\1D', label)
     for old, new in [('شهر واحد','1M'), ('شهر','1M'), ('يومان','2D'), ('سنة','1Y'), ('يوم','1D')]:
