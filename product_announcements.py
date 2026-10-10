@@ -98,9 +98,18 @@ def card(data, language='en', unsubscribe=False):
         row.append(stop_button)
     return {'text': text, 'entities': entities, 'reply_markup': {'inline_keyboard': [row]}}
 
+def send_card(api, cid, data, language='en', unsubscribe=False):
+    payload = card(data, language, unsubscribe=unsubscribe)
+    photo = str(data.get('photo') or '').strip()
+    if photo:
+        return api.call('sendPhoto', chat_id=cid, photo=photo,
+                        caption=payload['text'], caption_entities=payload['entities'],
+                        reply_markup=payload['reply_markup'])
+    return api.call('sendMessage', chat_id=cid, **payload)
+
 def preview(api, cid, data):
     token = save(cid, data)
-    if not api.call('sendMessage', chat_id=cid, **card(data, s.prefs(cid)[0], unsubscribe=True)):
+    if not send_card(api, cid, data, s.prefs(cid)[0], unsubscribe=True):
         return s.send(api, cid, 'تعذرت المعاينة. راجع إعداد الأيقونات وصلاحية البوت لاستخدامها.',
                       s.kb([[s.btn('🎨 الأيقونات المتحركة', 'ad:icons')], [s.btn('↩️ رجوع', 'ad:home')]]))
     return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر أو عدّل النص والأزرار:', s.kb([
@@ -108,6 +117,7 @@ def preview(api, cid, data):
         [s.btn('✅ نشر في المجموعة', 'ad:send:group:' + token, style='success')],
         [s.btn('📨 إرسال لمستخدمي البوت', 'ad:send:bot:' + token, style='success')],
         [s.btn('✏️ تعديل نص الإعلان', 'ad:text')],
+        [s.btn('🖼️ إضافة / تغيير صورة', 'ad:photo')],
         [s.btn('✏️ أسماء الأزرار', 'ad:labels')],
         [s.btn('📦 تعديل Current stock', 'ad:stock')],
         [s.btn('🌐 لغة الإعلان', 'ad:language')],
@@ -213,6 +223,11 @@ def install(namespace):
             save(cid, data, 'message')
             return s.send(api, cid, 'أرسل نص الإعلان كما تريده أن يظهر للعملاء. يمكنك إدراج الإيموجي المتحرك والتنسيق في نفس الرسالة.', s.kb([
                 [s.btn('❌ إلغاء', 'ad:home')]]))
+        if verb == 'photo' and data.get('pid'):
+            save(cid, data, 'photo')
+            return s.send(api, cid, '🖼️ أرسل الصورة التي تريد إرفاقها مع الإعلان. ستبقى الأزرار ونصوصها كما هي.', s.kb([
+                [s.btn('↩️ رجوع للمعاينة', 'ad:preview')],
+                [s.btn('❌ إلغاء', 'ad:home')]]))
         if verb == 'text' and data.get('pid'):
             save(cid, data, 'message')
             return s.send(api, cid, 'أرسل نص الإعلان الجديد، مع أيقونات متحركة وتنسيق إذا رغبت.', s.kb([
@@ -266,12 +281,12 @@ def install(namespace):
                 clear(cid)
                 return s.send(api, cid, 'المنتج لم يعد متوفرًا للنشر.')
             if parts[2] == 'bot':
-                payload = {'localized': {lang: card(data, lang, unsubscribe=True) for lang in ('ar', 'en')}}
+                payload = {'localized': {lang: {**card(data, lang, unsubscribe=True), 'photo': data.get('photo')} for lang in ('ar', 'en')}}
                 count = namespace['queue_product_announcement'](parts[3], data['pid'], payload)
                 clear(cid)
                 return s.send(api, cid, f'⏳ تمت جدولة الإعلان للإرسال إلى {count} من مستخدمي البوت. سيصلك تقرير بالنتيجة بعد الانتهاء.',
                               s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))
-            result = api.call('sendMessage', chat_id=TARGETS[parts[2]], **card(data))
+            result = send_card(api, TARGETS[parts[2]], data)
             clear(cid)
             return s.send(api, cid, '✅ تم نشر الإعلان مع زر الشراء.' if result else '❌ تعذر تأكيد النشر. راجع القناة أو المجموعة قبل المحاولة مجددًا، وتحقق من صلاحيات النشر والأيقونات.', s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))
 
@@ -322,8 +337,22 @@ def install(namespace):
             clear(cid)
             return old_input(api, message)
         _, data, status = current
+        if status == 'photo':
+            photos = message.get('photo') or []
+            if not photos:
+                s.send(api, cid, 'أرسل صورة كملف صورة، أو ارجع للمعاينة.')
+                return True
+            data['photo'] = photos[-1]['file_id']
+            if len(card(data, s.prefs(cid)[0], unsubscribe=True)['text']) > 1024:
+                s.send(api, cid, 'نص الصورة في تيليجرام لا يتجاوز 1024 حرفًا. قصّر نص الإعلان ثم أرفق الصورة.')
+                return True
+            preview(api, cid, data)
+            return True
         if status == 'message':
             custom_text = (message.get('text') or '').strip()
+            if data.get('photo') and len(custom_text) > 1024:
+                s.send(api, cid, 'مع الصورة، نص الإعلان يصل إلى 1024 حرفًا كحد أقصى. أرسل نصًا أقصر أو أزل الصورة ببدء إعلان جديد.')
+                return True
             if not custom_text or len(custom_text) > 3900:
                 s.send(api, cid, 'أرسل نصًا من 1 إلى 3900 حرفًا.')
                 return True

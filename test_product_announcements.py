@@ -86,6 +86,54 @@ class AnnouncementTests(unittest.TestCase):
         self.assertEqual(card['text'], text)
         self.assertEqual(card['entities'], custom_entities)
 
+    def test_photo_attaches_without_changing_ad_buttons(self):
+        import broadcast_admin as broadcast
+
+        self.select()
+        self.bot.action(self.api, self.cid, 'ad:photo')
+        self.bot.handle_admin_delivery(self.api, {
+            'chat': {'id': self.cid},
+            'photo': [{'file_id': 'small-photo'}, {'file_id': 'vexa-photo-id'}],
+        })
+
+        preview_call = next((method, data) for method, data in self.api.calls
+                            if method == 'sendPhoto' and data.get('chat_id') == self.cid)
+        self.assertEqual(preview_call[1]['photo'], 'vexa-photo-id')
+        preview_buttons = preview_call[1]['reply_markup']['inline_keyboard'][0]
+        self.assertEqual(len(preview_buttons), 2)
+        self.assertEqual(preview_buttons[0]['style'], 'success')
+        self.assertEqual(preview_buttons[0]['url'], self.ad.catalog.link(self.pid))
+        self.assertEqual(preview_buttons[1]['callback_data'], 'ads:stop')
+        self.assertEqual(preview_buttons[1]['style'], 'primary')
+
+        token = self.ad.draft(self.cid)[0]
+        self.bot.action(self.api, self.cid, 'ad:send:channel:' + token)
+        channel_call = next((method, data) for method, data in self.api.calls
+                            if method == 'sendPhoto' and data.get('chat_id') == self.ad.catalog.CHANNEL)
+        self.assertEqual(channel_call[1]['photo'], 'vexa-photo-id')
+        channel_buttons = channel_call[1]['reply_markup']['inline_keyboard'][0]
+        self.assertEqual(len(channel_buttons), 1)
+        self.assertEqual(channel_buttons[0]['url'], preview_buttons[0]['url'])
+        self.assertEqual(channel_buttons[0]['style'], preview_buttons[0]['style'])
+
+        self.select()
+        self.bot.action(self.api, self.cid, 'ad:photo')
+        self.bot.handle_admin_delivery(self.api, {
+            'chat': {'id': self.cid}, 'photo': [{'file_id': 'vexa-photo-id'}],
+        })
+        token = self.ad.draft(self.cid)[0]
+        with patch.object(broadcast, '_users', return_value=[42]):
+            self.bot.action(self.api, self.cid, 'ad:send:bot:' + token)
+        broadcast.DELIVERY_WORKER(self.api)
+        user_call = next((method, data) for method, data in self.api.calls
+                         if method == 'sendPhoto' and data.get('chat_id') == 42)
+        self.assertEqual(user_call[1]['photo'], 'vexa-photo-id')
+        user_buttons = user_call[1]['reply_markup']['inline_keyboard'][0]
+        self.assertEqual(user_buttons[0]['url'], preview_buttons[0]['url'])
+        self.assertEqual(user_buttons[0]['style'], preview_buttons[0]['style'])
+        self.assertEqual(user_buttons[1]['callback_data'], preview_buttons[1]['callback_data'])
+        self.assertEqual(user_buttons[1]['style'], preview_buttons[1]['style'])
+
     def test_confirmation_once_admin_only_and_unavailable(self):
         self.select()
         token = self.ad.draft(self.cid)[0]

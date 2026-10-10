@@ -211,6 +211,11 @@ def install(namespace):
             payload = template['native_announcement']
             if 'localized' in payload:
                 payload = payload['localized'].get(sg['prefs'](cid)[0], payload['localized']['ar'])
+            if payload.get('photo'):
+                return api.call('sendPhoto', chat_id=cid, photo=payload['photo'],
+                                caption=payload.get('text', '')[:1024],
+                                caption_entities=payload.get('entities', []),
+                                reply_markup=payload['reply_markup'])
             return api.call('sendMessage', chat_id=cid, text=payload['text'],
                             entities=payload.get('entities', []), reply_markup=payload['reply_markup'])
         tpl = merged_template(template)
