@@ -70,7 +70,7 @@ def _fulfill(s,api,oid):
         c.execute("BEGIN IMMEDIATE")
         existing=[c.execute("SELECT id,email,password,profile,delivered_at,content FROM local_delivery_stock WHERE order_id=?",(key,)).fetchone() for key in keys]
         missing=sum(row is None for row in existing)
-        stock=c.execute("SELECT id,email,password,profile,delivered_at FROM local_delivery_stock WHERE pid=? AND order_id IS NULL ORDER BY id LIMIT ?",(pid,missing)).fetchall()
+        stock=c.execute("SELECT id,email,password,profile,delivered_at,content FROM local_delivery_stock WHERE pid=? AND order_id IS NULL ORDER BY id LIMIT ?",(pid,missing)).fetchall()
         if len(stock)<missing:
             s.send(api,s.G['ADMIN_ID'],'⚠️ الطلب المدفوع #'+s.esc(oid)+' ينتظر إضافة بيانات تسليم كافية.',s.kb([[s.btn('إضافة بيانات الحسابات','localstockadd:'+pid)],[s.btn('إعادة محاولة التسليم','localretry:'+str(oid))]]))
             return True
@@ -98,6 +98,10 @@ def _fulfill(s,api,oid):
     with s.db() as c:c.execute("UPDATE orders SET status='delivered' WHERE id=? AND status='paid'",(oid,))
     if hasattr(s,'show_code_button'):
         s.show_code_button(api,cid,oid)
+    for actor,pending in list(s.G.get('PENDING_ADMIN_DELIVERY',{}).items()):
+        if pending.get('order_id')==oid:
+            s.G['PENDING_ADMIN_DELIVERY'].pop(actor,None)
+    print('VEXA local delivery completed:',str(oid),flush=True)
     s.send(api,s.G['ADMIN_ID'],'✅ تم التسليم التلقائي للطلب <code>'+html.escape(str(oid))+'</code>')
     return True
 
@@ -174,3 +178,16 @@ def action(s,api,cid,value):
     elif prefix=='localstockclear':clear(s,api,cid,arg)
     elif prefix=='localretry':fulfill(s,api,arg)
     return True
+
+def tick(s,api):
+    """Resume only paid orders with stock already reserved; never allocate unrelated backlog."""
+    with s.db() as c:
+        prepare(c)
+        orders=c.execute("""SELECT o.id FROM orders o WHERE o.status='paid'
+            AND EXISTS(SELECT 1 FROM local_delivery_stock r
+                WHERE (r.order_id=o.id OR instr(r.order_id,o.id||'/')=1)
+                AND (r.delivered_at IS NULL OR r.delivered_at='' OR r.delivered_at='text_sent'))
+            ORDER BY o.rowid LIMIT 10""").fetchall()
+    for oid, in orders:
+        try:fulfill(s,api,oid)
+        except Exception as exc:print('Local delivery recovery:',type(exc).__name__,flush=True)

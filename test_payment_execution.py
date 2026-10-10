@@ -199,4 +199,36 @@ class Payments(unittest.TestCase):
   import json
   self.bot.action(self.api,self.admin,'pricepick:pd_16')
   self.assertEqual(json.loads(self.query("SELECT value FROM admin_state WHERE action='price'")[0][0])[0],'pc_2')
+
+ def test_local_fresh_stock_delivers_content_and_file_once(self):
+  import local_delivery
+  with self.s.db() as c:
+   c.execute("UPDATE supplier_api SET enabled=0 WHERE pid='pc_2'")
+   local_delivery.prepare(c)
+   c.execute("INSERT INTO local_delivery_stock(pid,email,password,profile,content) VALUES (?,?,?,?,?)",('pc_2','','','','FAKE ACCOUNT DATA'))
+  oid=self.order('pc_2',qty=1)
+  with patch.object(local_delivery,'_send_file',return_value=True) as file:
+   self.e.approve(self.s,self.api,self.admin,'accept',oid)
+   self.assertEqual(self.query('SELECT status FROM orders WHERE id=?',(oid,)),[('delivered',)])
+   file.assert_called_once()
+   messages=[d for m,d in self.api.calls if m=='sendMessage' and d.get('chat_id')==7 and 'FAKE ACCOUNT DATA' in d.get('text','')]
+   self.assertEqual(len(messages),1)
+   local_delivery.fulfill(self.s,self.api,oid)
+   file.assert_called_once()
+ def test_local_reserved_order_recovers_without_another_account(self):
+  import local_delivery
+  with self.s.db() as c:
+   c.execute("UPDATE supplier_api SET enabled=0 WHERE pid='pc_2'")
+   local_delivery.prepare(c)
+  oid=self.order('pc_2',qty=1,status='paid')
+  self.bot.PENDING_ADMIN_DELIVERY[self.admin]={'customer':7,'order_id':oid}
+  with self.s.db() as c:
+   c.execute("INSERT INTO local_delivery_stock(pid,email,password,profile,order_id) VALUES (?,?,?,?,?)",('pc_2','one@example.test','fake','1',oid))
+   c.execute("INSERT INTO local_delivery_stock(pid,email,password,profile) VALUES (?,?,?,?)",('pc_2','two@example.test','fake','2'))
+  with patch.object(local_delivery,'_send_file',return_value=True):
+   self.e.tick(self.s,self.api)
+   self.e.tick(self.s,self.api)
+  self.assertEqual(self.query('SELECT status FROM orders WHERE id=?',(oid,)),[('delivered',)])
+  self.assertEqual(local_delivery.count_available(self.s,'pc_2'),1)
+  self.assertNotIn(self.admin,self.bot.PENDING_ADMIN_DELIVERY)
 if __name__=='__main__':unittest.main()

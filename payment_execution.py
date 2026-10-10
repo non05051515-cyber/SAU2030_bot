@@ -267,6 +267,8 @@ def fulfill(s, api, oid):
 
 
 def tick(s, api):
+    import local_delivery
+    local_delivery.tick(s,api)
     # Poll only already-created orders. Never purchase backlog orders at startup.
     with s.db() as c:
         prepare(c)
