@@ -101,7 +101,7 @@ def install(store, namespace):
     old_action = namespace['action']
     old_input = namespace['handle_admin_product']
 
-    def ordered_send(api, cid, text, markup=None):
+    def ordered_send(api, cid, text, markup=None, **kwargs):
         if isinstance(text, str) and ('اختر الخدمة:' in text or 'Choose a service:' in text) and isinstance(markup, dict):
             keyboard = markup.get('inline_keyboard')
             if isinstance(keyboard, list):
@@ -121,7 +121,7 @@ def install(store, namespace):
                 new_rows = [[cat_map[x] for x in cat_ids[i:i+3]] for i in range(0, len(cat_ids), 3)]
                 new_rows += [[direct_map[x]] for x in direct_ids]
                 markup['inline_keyboard'] = new_rows + other
-        return old_send(api, cid, text, markup)
+        return old_send(api, cid, text, markup, **kwargs)
 
     def action(api, cid, value):
         if cid == store.G['ADMIN_ID'] and value == 'admin:product_order':
