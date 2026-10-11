@@ -168,6 +168,7 @@ def install(namespace):
             [sg['btn']('📢 إرسال رسالة للجميع', 'admin:broadcast', style='primary')],
             [sg['btn']('🛍 إرسال منتج للجميع', 'admin:product_broadcast', style='primary')],
             [sg['btn']('📢 إعلان منتج', 'ad:home', style='success')],
+            [sg['btn']('↕️ ترتيب ظهور المنتجات', 'admin:product_order', style='primary')],
             [sg['btn']('👥 النشر في المجموعة', 'channel:group', style='primary')],
             [sg['btn']('📢 النشر في القناة @VEXA2030', 'channel:list', style='success')],
             [sg['btn']('📊 الإحصائيات', 'admin:stats')],
