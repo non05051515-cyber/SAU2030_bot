@@ -94,13 +94,17 @@ def ask_model(cid, text):
     return answer
 
 
+TRANSLATION_AUTH_FAILED = False
+
+
 def translate_text(text, target='en'):
     """Stateless translation helper for store catalog text."""
+    global TRANSLATION_AUTH_FAILED
     text = (text or '').strip()
     if not text:
         return text
     key = os.getenv("MIRAI_API_KEY", "").strip()
-    if not key:
+    if not key or TRANSLATION_AUTH_FAILED:
         return text
     base = os.getenv("MIRAI_API_BASE", "https://api.miraiapi.com/v1").rstrip("/")
     model = os.getenv("MIRAI_MODEL", "claude-opus-4.8")
@@ -125,7 +129,12 @@ def translate_text(text, target='en'):
         result = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         return result or text
     except Exception as exc:
-        print("Translation error:", type(exc).__name__, "status:", getattr(exc, "code", None), flush=True)
+        status = getattr(exc, "code", None)
+        if status == 401:
+            TRANSLATION_AUTH_FAILED = True
+            print("Translation disabled for this run: MIRAI_API_KEY was rejected (401); offline fallback remains active.", flush=True)
+        else:
+            print("Translation error:", type(exc).__name__, "status:", status, flush=True)
         return text
 
 
