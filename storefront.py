@@ -3275,12 +3275,11 @@ def start(api, cid):
 
 
 def home(api, cid):
-    balance_sar = wallet_balance(cid)
-    balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    balance_sar = wallet_balance(cid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍'); ips=home_text_icon('points','⭐')
-    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
+    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>{balance_sar:.2f} ر.س</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>{balance_sar:.2f} SAR</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
     rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
@@ -3664,11 +3663,10 @@ def summary(cid, pid):
 
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
-    usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     balance_icon = ui_icon('ui_wallet_balance')
     balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
     text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
-    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {sar:.2f} ' + tr(cid, 'ر.س', 'SAR')
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -4704,12 +4702,11 @@ def start(api, cid):
 
 
 def home(api, cid):
-    balance_sar = wallet_balance(cid)
-    balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    balance_sar = wallet_balance(cid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍'); ips=home_text_icon('points','⭐')
-    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
+    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>{balance_sar:.2f} ر.س</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>{balance_sar:.2f} SAR</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
     rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency'),style='primary'), btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
@@ -4991,11 +4988,10 @@ def summary(cid, pid):
 
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
-    usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     balance_icon = ui_icon('ui_wallet_balance')
     balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
     text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
-    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {sar:.2f} ' + tr(cid, 'ر.س', 'SAR')
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -7464,12 +7460,11 @@ def start(api, cid):
 
 
 def home(api, cid):
-    balance_sar = wallet_balance(cid)
-    balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    balance_sar = wallet_balance(cid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍'); ips=home_text_icon('points','⭐')
-    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
+    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>{balance_sar:.2f} ر.س</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>{balance_sar:.2f} SAR</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
     rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
@@ -7854,11 +7849,10 @@ def summary(cid, pid):
 
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
-    usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     balance_icon = ui_icon('ui_wallet_balance')
     balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
     text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
-    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {sar:.2f} ' + tr(cid, 'ر.س', 'SAR')
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
@@ -8779,12 +8773,11 @@ def start(api, cid):
 
 
 def home(api, cid):
-    balance_sar = wallet_balance(cid)
-    balance_usd = (balance_sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    balance_sar = wallet_balance(cid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     with db() as conn:
         purchases = conn.execute('SELECT COUNT(*) FROM orders WHERE cid=? AND status="paid"', (cid,)).fetchone()[0]
     iw=home_text_icon('welcome','👋'); im=home_text_icon('member','🆔'); ia=home_text_icon('account','👤'); ib=home_text_icon('balance','💳'); ip=home_text_icon('purchases','🛍'); ips=home_text_icon('points','⭐')
-    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>${balance_usd:.2f}</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>${balance_usd:.2f}</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
+    text = tr(cid, f'{iw} <b>أهلاً بك في VEXA STORE!</b>\n\n{im} رقم العضوية: <code>{cid}</code>\n{ia} حسابك: <a href="tg://user?id={cid}">فتح الحساب</a>\n{ib} الرصيد: <b>{balance_sar:.2f} ر.س</b>\n{ip} المشتريات: <b>{purchases}</b>\n{ips} النقاط: <b>{loyalty_points(cid)}</b>\n\nاختر من القائمة أدناه:', f'{iw} <b>Welcome to VEXA STORE!</b>\n\n{im} Member ID: <code>{cid}</code>\n{ia} Account: <a href="tg://user?id={cid}">Open profile</a>\n{ib} Balance: <b>{balance_sar:.2f} SAR</b>\n{ip} Purchases: <b>{purchases}</b>\n{ips} Points: <b>{loyalty_points(cid)}</b>\n\nChoose from the menu below:')
     rows = [[btn(tr(cid,'المنتجات','Products'),'products',ui_icon('ui_products'),style='primary'), btn(tr(cid,'شحن الرصيد','Top up'),'wallet:topup',ui_icon('ui_topup'),style='primary')], [btn(tr(cid,'الإحالات','Referrals'),'referrals',ui_icon('ui_referrals'),style='primary'), btn(tr(cid,'حسابي','My account'),'wallet',ui_icon('ui_account'),style='primary')], [btn(tr(cid,'تواصل مع الدعم','Contact support'),'support',ui_icon('ui_support'),style='primary'), btn(tr(cid,'إبلاغ عن مشكلة','Report issue'),'support',ui_icon('ui_report'),style='primary')], [btn(tr(cid,'العملة','Currency'),'settings:currency',ui_icon('ui_currency'),style='primary'), btn('Language / اللغة','settings:lang',ui_icon('ui_language'),style='primary')]]
     rows.append([btn(tr(cid, '📢 مجتمع VEXA STORE', '📢 VEXA STORE Community'), 'community', ui_icon('ui_community'), style='primary')])
     if cid == G.get('ADMIN_ID'):
@@ -9106,11 +9099,10 @@ def summary(cid, pid):
 
 def wallet(api, cid):
     sar = wallet_balance(cid).quantize(Decimal('0.01'))
-    usd = (sar / RATE).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     balance_icon = ui_icon('ui_wallet_balance')
     balance_mark = ('<tg-emoji emoji-id="' + esc(balance_icon) + '">💰</tg-emoji>') if balance_icon else '💰'
     text = tr(cid, '<b>محفظة VEXA</b>\n\n', '<b>VEXA Wallet</b>\n\n')
-    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {usd:.2f} USD'
+    text += balance_mark + ' <b>' + tr(cid, 'رصيدك الحالي:', 'Your current balance:') + f'</b> {sar:.2f} ' + tr(cid, 'ر.س', 'SAR')
     rows = [[btn(tr(cid, 'إضافة رصيد', 'Add funds'), 'wallet:topup', ui_icon('ui_wallet_add'), style='success'),
              btn(tr(cid, 'تحويل', 'Transfer'), 'wallet:transfer', ui_icon('ui_wallet_transfer'), style='primary')],
             [btn(tr(cid, 'الرجوع للقائمة', 'Back to Menu'), 'home', ui_icon('ui_wallet_back'), style='primary')]]
