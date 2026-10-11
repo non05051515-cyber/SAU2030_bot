@@ -11,6 +11,7 @@ ICONS = {'product': ('🛍', 'المنتج'), 'added': ('➕', 'الكمية ا�
          'stop_ads': ('🔕', 'زر إيقاف الإعلانات')}
 TARGETS = {'channel': catalog.CHANNEL, 'group': '@SAU2030_k'}
 REQUEST_STATE = {}
+BUTTON_STYLES = {'primary': '🔵 أزرق', 'success': '🟢 أخضر', 'danger': '🔴 أحمر'}
 
 
 def db():
@@ -85,7 +86,8 @@ def card(data, language='en', unsubscribe=False):
     labels = button_labels(language)
     buy_icon = str(icons.get('buy', ''))
     buy_button = {'text': labels['buy'] if buy_icon.isdecimal() else ('🛍️ ' + labels['buy']),
-                   'url': catalog.link(pid), 'style': 'success'}
+                   'url': catalog.link(pid),
+                   'style': data.get('button_style') if data.get('button_style') in BUTTON_STYLES else 'success'}
     if buy_icon.isdecimal():
         buy_button['icon_custom_emoji_id'] = buy_icon
     row = [buy_button]
@@ -119,6 +121,7 @@ def preview(api, cid, data):
         [s.btn('✏️ تعديل نص الإعلان', 'ad:text')],
         [s.btn('🖼️ إضافة / تغيير صورة', 'ad:photo')],
         [s.btn('✏️ أسماء الأزرار', 'ad:labels')],
+        [s.btn('🎨 لون زر الشراء', 'ad:button_color')],
         [s.btn('📦 تعديل Current stock', 'ad:stock')],
         [s.btn('🌐 لغة الإعلان', 'ad:language')],
         [s.btn('🎨 الأيقونات المتحركة', 'ad:icons')],
@@ -239,6 +242,18 @@ def install(namespace):
                 [s.btn('🔕 اسم زر إيقاف الإعلانات — عربي', 'ad:label:stop_ar')],
                 [s.btn('🔕 اسم زر إيقاف الإعلانات — English', 'ad:label:stop_en')],
                 [s.btn('↩️ رجوع', 'ad:preview' if data.get('pid') else 'ad:home')]]))
+        if verb == 'button_color':
+            if len(parts) == 3:
+                style = parts[2]
+                if style not in BUTTON_STYLES:
+                    return s.send(api, cid, 'لون الزر غير معروف.')
+                data['button_style'] = style
+                return preview(api, cid, data)
+            current_style = data.get('button_style', 'success')
+            rows = [[s.btn(('✅ ' if style == current_style else '') + label, 'ad:button_color:' + style,
+                           style=style)] for style, label in BUTTON_STYLES.items()]
+            rows.append([s.btn('↩️ رجوع للمعاينة', 'ad:preview')])
+            return s.send(api, cid, '🎨 اختر لون زر الشراء. سيظهر اللون نفسه في معاينة الإعلان.', s.kb(rows))
         if verb == 'label' and len(parts) == 3 and parts[2] in ('buy_ar', 'buy_en', 'stop_ar', 'stop_en'):
             save(cid, data, 'label:' + parts[2])
             return s.send(api, cid, 'أرسل الاسم الجديد للزر (حتى 40 حرفًا).')
