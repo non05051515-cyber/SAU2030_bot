@@ -385,6 +385,8 @@ category_codes.install(storefront, globals())
 
 import loyalty
 loyalty.install(storefront, globals())
+import product_order
+product_order.install(storefront, globals())
 
 def warm_arabic_descriptions():
  try:
