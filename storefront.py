@@ -1846,6 +1846,16 @@ def handle_admin_product(api, message):
         if verified != len(saved_product_ids):
             send(api, cid, '❌ لم يكتمل حفظ المنتج في قاعدة البيانات. حاول مرة أخرى.')
             return True
+        order_scope = None
+        order_entry = None
+        if is_direct and saved_product_ids:
+            order_scope, order_entry = 'direct', saved_product_ids[0]
+        elif not payload.get('category_id') and saved_product_ids:
+            order_scope, order_entry = 'category', category_id
+        if order_scope:
+            import product_order
+            product_order.prompt_position(api, cid, order_scope, order_entry, saved_product_ids)
+            return True
         send(api, cid, '✅ تم حفظ المنتجات وظهرت في المتجر.\\n\\n📣 هل تريد نشرها في القناة الآن أم لاحقًا؟',
              kb([[btn('📣 نشر الآن', 'channel:publish_new:' + ','.join(saved_product_ids), style='success')],
                  [btn('🕒 لاحقًا', 'channel:defer_new:' + ','.join(saved_product_ids))]]))
