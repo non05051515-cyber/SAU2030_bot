@@ -137,7 +137,7 @@ def install(namespace):
         PRODUCT_BROADCAST.pop(cid, None)
         clear_draft(cid)
         with sg['db']() as conn:
-            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method','category_description')", (cid,))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action IN ('price','product_text','product_photo','coupon_name','coupon_amount','payment_method','category_description','wallet_credit_admin')", (cid,))
             orders_count = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
             review_count = conn.execute('SELECT COUNT(*) FROM orders WHERE status="review"').fetchone()[0]
             activity_count = sg['total_activity_count'](conn)
@@ -148,6 +148,7 @@ def install(namespace):
         sg['send'](api, cid, text, sg['kb']([
             [sg['btn']('🔔 الطلبات الجديدة / التسليم', 'admin:orders', style='primary')],
             [sg['btn']('👥 مستخدمو البوت', 'admin:users', style='success')],
+            [sg['btn']('➕ إضافة رصيد لمحفظة عميل', 'admin:wallet_credit', style='success')],
             [sg['btn']('👀 نشاط العملاء', 'admin:activity')],
             [sg['btn']('👁 عرض/إخفاء المنتجات', 'admin:visibility', style='primary')],
             [sg['btn']('🖼️ صورة المنتج', 'admin:photos')],
@@ -332,7 +333,103 @@ def install(namespace):
     global DELIVERY_WORKER
     DELIVERY_WORKER = deliver_queued
 
+    def wallet_credit_prompt(api, cid):
+        with sg['db']() as conn:
+            conn.execute('INSERT OR REPLACE INTO admin_state(cid,action,value) VALUES (?,?,?)',
+                         (cid, 'wallet_credit_admin', json.dumps({'step': 'customer'})))
+        return sg['send'](api, cid,
+                          '➕ <b>إضافة رصيد لمحفظة عميل</b>\n\nأرسل رقم حساب العميل (Chat ID).',
+                          sg['kb']([[sg['btn']('❌ إلغاء', 'admin:wallet_credit_cancel')]]))
+
+    def handle_wallet_credit_message(api, message):
+        cid = message.get('chat', {}).get('id')
+        if cid != admin_id:
+            return False
+        with sg['db']() as conn:
+            row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='wallet_credit_admin'", (cid,)).fetchone()
+        if not row:
+            return False
+        try:
+            state = json.loads(row[0])
+        except (TypeError, ValueError):
+            state = {}
+        raw = (message.get('text') or '').strip()
+        if state.get('step') == 'customer':
+            if not raw.isdecimal() or int(raw) <= 0:
+                sg['send'](api, cid, '⚠️ أرسل رقم Chat ID صحيحًا بالأرقام فقط.')
+                return True
+            state.update(step='amount', customer=int(raw))
+            with sg['db']() as conn:
+                conn.execute("UPDATE admin_state SET value=? WHERE cid=? AND action='wallet_credit_admin'",
+                             (json.dumps(state), cid))
+            sg['send'](api, cid, f'👤 رقم العميل: <code>{state["customer"]}</code>\n\nأرسل مبلغ الإضافة بالريال السعودي. مثال: <code>25</code> أو <code>12.50</code>.')
+            return True
+        if state.get('step') == 'amount':
+            try:
+                value = sg['Decimal'](raw.replace(',', '.'))
+                if not value.is_finite() or value <= 0 or value > sg['Decimal']('100000') or value.as_tuple().exponent < -2:
+                    raise ValueError
+                value = value.quantize(sg['Decimal']('0.01'))
+            except Exception:
+                sg['send'](api, cid, '⚠️ أرسل مبلغًا موجبًا صحيحًا، بحد أقصى منزلتين عشريتين وبحد أقصى 100,000 ريال.')
+                return True
+            state.update(step='confirm', amount=str(value))
+            current = sg['wallet_balance'](state['customer'])
+            updated = (current + value).quantize(sg['Decimal']('0.01'))
+            with sg['db']() as conn:
+                conn.execute("UPDATE admin_state SET value=? WHERE cid=? AND action='wallet_credit_admin'",
+                             (json.dumps(state), cid))
+            return sg['send'](api, cid,
+                f'تأكيد إضافة الرصيد؟\n\n👤 العميل: <code>{state["customer"]}</code>\n➕ المبلغ: <b>{value:.2f} ريال</b>\n💳 الرصيد الحالي: <b>{current:.2f} ريال</b>\n💰 الرصيد بعد الإضافة: <b>{updated:.2f} ريال</b>',
+                sg['kb']([[sg['btn']('✅ تأكيد الإضافة', 'admin:wallet_credit_confirm', style='success')],
+                          [sg['btn']('❌ إلغاء', 'admin:wallet_credit_cancel', style='danger')]]))
+        return True
+
+    def complete_wallet_credit(api, cid):
+        with sg['db']() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute("SELECT value FROM admin_state WHERE cid=? AND action='wallet_credit_admin'", (cid,)).fetchone()
+            if not row:
+                return sg['send'](api, cid, 'ℹ️ لا توجد إضافة رصيد بانتظار التأكيد.', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            try:
+                state = json.loads(row[0])
+                customer = int(state['customer'])
+                amount = sg['Decimal'](state['amount']).quantize(sg['Decimal']('0.01'))
+            except Exception:
+                conn.execute("DELETE FROM admin_state WHERE cid=? AND action='wallet_credit_admin'", (cid,))
+                return sg['send'](api, cid, '⚠️ انتهت صلاحية بيانات العملية. ابدأ الإضافة من جديد.', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            if state.get('step') != 'confirm' or customer <= 0 or amount <= 0:
+                return sg['send'](api, cid, '⚠️ العملية غير مكتملة. ابدأ الإضافة من جديد.', sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+            conn.execute('CREATE TABLE IF NOT EXISTS admin_wallet_adjustments (id TEXT PRIMARY KEY, admin_cid INTEGER NOT NULL, customer_cid INTEGER NOT NULL, amount_sar TEXT NOT NULL, balance_before TEXT NOT NULL, balance_after TEXT NOT NULL, created_at TEXT NOT NULL)')
+            conn.execute('INSERT OR IGNORE INTO wallets(cid,balance_sar) VALUES (?,?)', (customer, '0'))
+            current = sg['Decimal'](conn.execute('SELECT balance_sar FROM wallets WHERE cid=?', (customer,)).fetchone()[0])
+            updated = (current + amount).quantize(sg['Decimal']('0.01'))
+            conn.execute('UPDATE wallets SET balance_sar=? WHERE cid=?', (str(updated), customer))
+            conn.execute('INSERT INTO admin_wallet_adjustments VALUES (?,?,?,?,?,?,?)',
+                         (uuid.uuid4().hex, cid, customer, str(amount), str(current), str(updated), sg['now_saudi']()))
+            conn.execute("DELETE FROM admin_state WHERE cid=? AND action='wallet_credit_admin'", (cid,))
+        notified = True
+        try:
+            notified = bool(sg['send'](api, customer,
+                       f'💳 تمت إضافة <b>{amount:.2f} ريال</b> إلى محفظتك في VEXA STORE.\nرصيدك الحالي: <b>{updated:.2f} ريال</b>'))
+        except Exception:
+            notified = False
+        note = '' if notified else '\n\nتعذر إرسال إشعار للعميل، لكن تمت إضافة الرصيد بنجاح.'
+        return sg['send'](api, cid,
+                          f'✅ تمت إضافة <b>{amount:.2f} ريال</b> إلى محفظة العميل <code>{customer}</code>.\nرصيده الجديد: <b>{updated:.2f} ريال</b>{note}',
+                          sg['kb']([[sg['btn']('↩️ لوحة الإدارة', 'admin')]]))
+
     def action(api, cid, value):
+        if value.startswith('admin:wallet_credit') and cid != admin_id:
+            return namespace['show_home'](api, cid)
+        if cid == admin_id and value == 'admin:wallet_credit':
+            return wallet_credit_prompt(api, cid)
+        if cid == admin_id and value == 'admin:wallet_credit_cancel':
+            with sg['db']() as conn:
+                conn.execute("DELETE FROM admin_state WHERE cid=? AND action='wallet_credit_admin'", (cid,))
+            return admin_panel(api, cid)
+        if cid == admin_id and value == 'admin:wallet_credit_confirm':
+            return complete_wallet_credit(api, cid)
         if value.startswith(('admin:product_broadcast', 'pbcat:', 'pbpick:', 'pbphoto:', 'pbconfirm:', 'pbtext:', 'pbpreview:')) and cid != admin_id:
             return namespace['show_home'](api, cid)
         if cid == admin_id and value == 'admin:product_broadcast':
@@ -623,6 +720,8 @@ def install(namespace):
         return old_action(api, cid, value)
 
     def handle_receipt(api, message):
+        if handle_wallet_credit_message(api, message):
+            return True
         cid = message.get('chat', {}).get('id')
         pending = draft(cid) if cid == admin_id else None
         if pending and pending.get('awaiting_field') == 'custom_text':
