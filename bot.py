@@ -431,8 +431,31 @@ def apply_requested_catalog_updates():
   row = conn.execute('SELECT category_id,price_usd,stock FROM admin_products WHERE pid=?',(pid,)).fetchone()
  print('Owner catalog update verified:',pid,row,flush=True)
 
+
+def apply_chatgpt_stock_update():
+ """Apply the owner's stock change once, without replenishing stock on restart."""
+ key = 'chatgpt_only_applepay_stock_20261111_v1'
+ apple = 'custom_chatgpt_plus_applepay'
+ with storefront.db() as conn:
+  ids = {pid for pid, variant in storefront.VARIANTS.items() if variant.get('category') == 'chatgpt'}
+  ids.update(row[0] for row in conn.execute('SELECT pid FROM admin_products WHERE category_id=?', ('chatgpt',)))
+  if apple not in ids:
+   raise RuntimeError('Apple Pay product missing from ChatGPT category')
+  if not conn.execute('SELECT 1 FROM content_migrations WHERE key=?', (key,)).fetchone():
+   for pid in sorted(ids):
+    qty = 2 if pid == apple else 0
+    conn.execute('INSERT OR REPLACE INTO product_stock_overrides(pid,stock) VALUES (?,?)', (pid,qty))
+    conn.execute('INSERT OR REPLACE INTO product_availability(pid,available) VALUES (?,?)', (pid,int(qty > 0)))
+    conn.execute('UPDATE admin_products SET stock=?,available=? WHERE pid=?', (qty,int(qty > 0),pid))
+   conn.execute('INSERT INTO content_migrations(key,applied_at) VALUES (?,?)', (key,storefront.now_saudi()))
+  rows = [(pid, conn.execute('SELECT stock FROM product_stock_overrides WHERE pid=?',(pid,)).fetchone()[0],
+                conn.execute('SELECT available FROM product_availability WHERE pid=?',(pid,)).fetchone()[0])
+          for pid in sorted(ids)]
+ print('ChatGPT stock update verified:',rows,flush=True)
+
 if __name__=='__main__':
  apply_requested_catalog_updates()
+ apply_chatgpt_stock_update()
  threading.Thread(target=warm_arabic_descriptions,daemon=True).start()
  main()
 
