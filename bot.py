@@ -411,7 +411,28 @@ def warm_arabic_descriptions():
   print('Arabic descriptions warmup:',translated,'translated;',failed,'unavailable',flush=True)
  except Exception as exc:print('Arabic descriptions warmup error:',type(exc).__name__,flush=True)
 
+
+def apply_requested_catalog_updates():
+ """Apply the owner's Apple Pay SKU once; restarts must not replenish sold stock."""
+ key = 'chatgpt_plus_apple_pay_20261111_v1'
+ pid = 'custom_chatgpt_plus_applepay'
+ ar_name = 'شات جي بي تي بلس Apple Pay'
+ en_name = 'ChatGPT Plus Apple Pay'
+ ar_description = 'اشتراك ChatGPT Plus لمدة شهر.\nالضمان: ٢٩ يومًا.\nتم تفعيل الاشتراك عن طريق Apple Pay.'
+ en_description = 'ChatGPT Plus subscription for one month.\nWarranty: 29 days.\nActivated through Apple Pay.'
+ with storefront.db() as conn:
+  if not conn.execute('SELECT 1 FROM content_migrations WHERE key=?', (key,)).fetchone():
+   conn.execute('INSERT INTO admin_products(pid,name,description,price_sar,available,created_at,category_id,price_usd,stock) VALUES (?,?,?,?,?,?,?,?,?)',
+                (pid, ar_name, ar_description, str(storefront.Decimal('4.00') * storefront.RATE), 1, storefront.now_saudi(), 'chatgpt', '4.00', 2))
+   for field,lang,value in [('name','ar',ar_name),('name','en',en_name),('description','ar',ar_description),('description','en',en_description)]:
+    conn.execute('INSERT INTO product_text(pid,field,lang,value) VALUES (?,?,?,?)', (pid,field,lang,value))
+   conn.execute('INSERT INTO product_info_display(pid,show_price,show_stock,show_warranty,warranty) VALUES (?,1,1,1,?)', (pid,'29 days / ٢٩ يومًا'))
+   conn.execute('INSERT INTO content_migrations(key,applied_at) VALUES (?,?)', (key,storefront.now_saudi()))
+  row = conn.execute('SELECT category_id,price_usd,stock FROM admin_products WHERE pid=?',(pid,)).fetchone()
+ print('Owner catalog update verified:',pid,row,flush=True)
+
 if __name__=='__main__':
+ apply_requested_catalog_updates()
  threading.Thread(target=warm_arabic_descriptions,daemon=True).start()
  main()
 
