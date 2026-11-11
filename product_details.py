@@ -150,6 +150,8 @@ def install(s, namespace):
             if visible:
                 line('extra_'+fid, label, s.esc(value), owner=owner)
         if sw:
+            if warranty == '29 days / ٢٩ يومًا':
+                warranty = s.tr(cid, '٢٩ يومًا', '29 days')
             line('warranty', s.tr(cid, 'الضمان', 'Warranty'), s.esc(warranty or s.tr(cid, 'غير محدد', 'Not specified')), '🛡')
         return '\n'.join(lines)
 
