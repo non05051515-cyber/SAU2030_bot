@@ -7,7 +7,17 @@ import storefront as s
 
 APPLE = "custom_chatgpt_plus_applepay"
 RESET = "merchant_catalog_public_selection_20261119"
-CATEGORY_NAMES = {"chatgpt": "ChatGPT", "gemini": "Gemini"}
+CATEGORY_NAMES = {
+    "chatgpt": "ChatGPT", "gemini": "Gemini", "canva": "Canva",
+    "claude": "Claude", "capcut": "CapCut", "spotify": "Spotify",
+    "gamma": "Gamma AI", "netflix": "Netflix", "duolingo": "Duolingo",
+    "youtube": "YouTube", "microsoft": "Microsoft 365", "figma": "Figma",
+    "adobe": "Adobe", "turnitin": "Turnitin", "grok": "Grok",
+    "elsa": "Elsa Speak", "veo": "Veo 4", "kling": "Kling",
+    "scribd": "Scribd", "zoom": "Zoom", "cursor": "Cursor",
+    "elevenlabs": "ElevenLabs", "daughter": "Daughter",
+    "heygen": "HeyGen", "wink": "Wink",
+}
 PAGE_SIZE = 12
 
 
@@ -97,11 +107,97 @@ def home(api, cid):
     return s.send(api, cid, text, s.kb(rows))
 
 
+def setting(key, fallback=""):
+    with s.db() as db:
+        row = db.execute("SELECT value FROM merchant_settings WHERE key=?", (key,)).fetchone()
+    return row[0] if row else fallback
+
+
 def shop(api, cid):
-    buttons = [s.btn(category_name(cid, section), "merchant:section:" + section, s.ui_icon(section), style="primary") for section in catalog()]
-    rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
-    rows.append([s.btn(s.tr(cid, "↩️ القائمة الرئيسية", "↩️ Main menu"), "home")])
-    return s.send(api, cid, s.tr(cid, "📁 <b>التصنيفات</b>\n\nاختر القسم.", "📁 <b>Categories</b>\n\nChoose a category."), s.kb(rows))
+    groups = catalog()
+    buttons = []
+    for category, ids in groups.items():
+        available = any(stock(pid) > 0 and s.can_order(pid) for pid in ids)
+        buttons.append(s.btn(category_name(cid, category), "merchant:section:" + category,
+                             s.ui_icon(category), style="success" if available else "danger"))
+    rows = [buttons[index:index + 3] for index in range(0, len(buttons), 3)]
+    rows += [
+        [s.btn(s.tr(cid, "💳 المحفظة", "💳 Wallet"), "wallet", style="primary"),
+         s.btn(s.tr(cid, "🧾 طلباتي", "🧾 My orders"), "myorders")],
+        [s.btn(s.tr(cid, "➕ شحن الرصيد", "➕ Top up"), "wallet:topup", style="success"),
+         s.btn(s.tr(cid, "💬 الدعم", "💬 Support"), "support")],
+        [s.btn("العربية / English", "settings:lang")],
+    ]
+    if cid == s.G["ADMIN_ID"]:
+        rows.append([s.btn("لوحة الإدارة", "admin", style="primary"),
+                     s.btn("تعديل روابط الترحيب", "merchant:links", style="primary")])
+        rows.append([s.btn("إنشاء وصف مقترح", "merchant:describe", style="primary")])
+    channel = setting("welcome_channel_url", "https://example.com/channel")
+    group = setting("welcome_group_url", "https://example.com/group")
+    title = s.tr(cid, "<b>VEXA STORE — اشتراكات رقمية للتجّار</b>",
+                 "<b>VEXA STORE — Digital subscriptions for merchants</b>")
+    note = s.tr(cid, "اختر قسمًا لتصفح المنتجات والأسعار والكميات.",
+                "Choose a category to browse products, prices and stock.")
+    links = ('<a href="' + s.esc(channel) + '">' + s.tr(cid, "القناة", "Channel") + '</a> · ' +
+             '<a href="' + s.esc(group) + '">' + s.tr(cid, "المجموعة", "Group") + '</a>')
+    return s.send(api, cid, title + "\n\n" + links + "\n\n" + note, s.kb(rows))
+
+
+def owner_input(api, message):
+    cid = message.get("chat", {}).get("id")
+    if cid != s.G["ADMIN_ID"]:
+        return False
+    with s.db() as db:
+        row = db.execute("SELECT action,value FROM admin_state WHERE cid=? AND action='merchant_links'", (cid,)).fetchone()
+    if not row:
+        return False
+    raw = (message.get("text") or "").strip()
+    if raw.startswith("/"):
+        with s.db() as db:
+            db.execute("DELETE FROM admin_state WHERE cid=? AND action='merchant_links'", (cid,))
+        return False
+    from urllib.parse import urlsplit
+    parts = raw.split()
+    valid = len(parts) == 2
+    for url in parts:
+        try:
+            parsed = urlsplit(url)
+            valid = valid and parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username and not parsed.password
+        except ValueError:
+            valid = False
+    if not valid:
+        s.send(api, cid, "أرسل رابط القناة ثم رابط المجموعة، كل رابط بسطر ويبدأ بـ https://")
+        return True
+    with s.db() as db:
+        db.executemany("INSERT OR REPLACE INTO merchant_settings VALUES (?,?)",
+                       [("welcome_channel_url", parts[0]), ("welcome_group_url", parts[1])])
+        db.execute("DELETE FROM admin_state WHERE cid=? AND action='merchant_links'", (cid,))
+    shop(api, cid)
+    return True
+
+
+def description_draft(pid):
+    name = s.name(pid, s.G["ADMIN_ID"])
+    cp = s.custom_product(pid)
+    category = cp[5] if cp else ""
+    uses = {
+        "chatgpt": ("مناسب للمحادثات والكتابة وتلخيص المحتوى.", "For conversations, writing and summarizing content."),
+        "gemini": ("مناسب للمساعدة في الكتابة وتنظيم الأفكار.", "For writing assistance and organizing ideas."),
+        "canva": ("مناسب لتصميم العروض والمحتوى البصري.", "For presentations and visual content."),
+        "claude": ("مناسب للكتابة ومراجعة النصوص.", "For writing and reviewing text."),
+        "capcut": ("مناسب لتحرير الفيديو وصناعة المحتوى.", "For video editing and content creation."),
+    }
+    ar, en = uses.get(category, ("منتج رقمي للاستخدام حسب الباقة المختارة.", "A digital product for use according to the selected plan."))
+    return name + "\n" + ar, name + "\n" + en
+
+
+def description_preview(api, cid, pid):
+    if not s.custom_product(pid):
+        return s.send(api, cid, "اختر منتجًا مضافًا من لوحة الإدارة.")
+    ar, en = description_draft(pid)
+    return s.send(api, cid, "<b>وصف مقترح للمراجعة</b>\n\n" + s.esc(ar) + "\n\n" + s.esc(en),
+        s.kb([[s.btn("حفظ الوصف بالعربي والإنجليزي", "merchant:desc_save:" + pid, style="success")],
+              [s.btn("رجوع", "merchant:describe")]]))
 
 
 def section(api, cid, category, page=0):
@@ -214,10 +310,33 @@ def install(namespace):
 
     def action(api, cid, value):
         admin = cid == s.G["ADMIN_ID"]
+        if value.startswith(("merchant:links", "merchant:describe", "merchant:desc_")):
+            if not admin:
+                return
+            if value == "merchant:links":
+                with s.db() as db:
+                    db.execute("INSERT OR REPLACE INTO admin_state VALUES (?,'merchant_links','')", (cid,))
+                return s.send(api, cid, "أرسل رابط القناة ثم رابط المجموعة، كل واحد بسطر. الروابط الحالية أمثلة مؤقتة.")
+            if value == "merchant:describe":
+                with s.db() as db:
+                    ids = [row[0] for row in db.execute("SELECT pid FROM admin_products ORDER BY rowid DESC LIMIT 35")]
+                rows = [[s.btn(s.name(pid, cid), "merchant:desc_preview:" + pid)] for pid in ids]
+                return s.send(api, cid, "اختر منتجًا لتجهيز وصف مقترح. راجعه قبل الحفظ.", s.kb(rows + [[s.btn("رجوع", "admin")]]))
+            pid = value.split(":", 2)[2]
+            if value.startswith("merchant:desc_preview:"):
+                return description_preview(api, cid, pid)
+            if s.custom_product(pid):
+                ar, en = description_draft(pid)
+                with s.db() as db:
+                    db.execute("UPDATE admin_products SET description=? WHERE pid=?", (ar, pid))
+                    db.executemany("INSERT OR REPLACE INTO product_text VALUES (?,'description',?,?)",
+                                   [(pid, "ar", ar), (pid, "en", en)])
+                return s.send(api, cid, "تم حفظ الوصف المقترح.")
+            return
         if value in ("products", "merchant:shop"):
             return shop(api, cid)
         if value in ("home", "enter_store"):
-            return home(api, cid)
+            return shop(api, cid)
         if value.startswith("merchant:section:"):
             parts = value.split(":")
             page = int(parts[3]) if len(parts) > 3 and parts[3].isascii() and parts[3].isdigit() and len(parts[3]) <= 4 else 0
@@ -256,9 +375,9 @@ def install(namespace):
         return original_action(api, cid, value)
 
     def message_input(api, message):
-        return channel_input(api, message) or original_input(api, message)
+        return owner_input(api, message) or channel_input(api, message) or original_input(api, message)
 
-    s.home, s.products = home, shop
-    namespace.update(action=action, handle_action=action, show_home=home, show_products=shop,
+    s.home, s.products = shop, shop
+    namespace.update(action=action, handle_action=action, show_start=shop, show_home=shop, show_products=shop,
                      handle_admin_delivery=message_input, tick_channel_catalog=announcements,
                      tick_auto_ads=None)
