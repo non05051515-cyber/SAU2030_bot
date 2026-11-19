@@ -117,9 +117,8 @@ def shop(api, cid):
     groups = catalog()
     buttons = []
     for category, ids in groups.items():
-        available = any(stock(pid) > 0 and s.can_order(pid) for pid in ids)
         buttons.append(s.btn(category_name(cid, category), "merchant:section:" + category,
-                             s.ui_icon(category), style="success" if available else "danger"))
+                             s.ui_icon(category), style="danger" if category in ("youtube", "daughter") else "success"))
     rows = [buttons[index:index + 3] for index in range(0, len(buttons), 3)]
     rows += [
         [s.btn(s.tr(cid, "💳 المحفظة", "💳 Wallet"), "wallet", style="primary"),
