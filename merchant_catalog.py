@@ -118,7 +118,7 @@ def shop(api, cid):
     buttons = []
     for category, ids in groups.items():
         buttons.append(s.btn(category_name(cid, category), "merchant:section:" + category,
-                             s.ui_icon(category), style="danger" if category in ("youtube", "daughter") else "success"))
+                             s.ui_icon(category), style="danger" if category in ("youtube", "daughter") else None))
     rows = [buttons[index:index + 3] for index in range(0, len(buttons), 3)]
     rows += [
         [s.btn(s.tr(cid, "💳 المحفظة", "💳 Wallet"), "wallet", style="primary"),
@@ -212,7 +212,7 @@ def section(api, cid, category, page=0):
         quantity_label = s.tr(cid, f"الكمية: {quantity}", f"Stock: {quantity}")
         rows.append([s.btn(f"{title} · {unit_price(pid)} · {quantity_label}", "options:" + pid,
                            s.product_button_icon(pid, cid) or s.ui_icon(category),
-                           style="success" if quantity and s.can_order(pid) else "danger")])
+                           style=None if quantity and s.can_order(pid) else "danger")])
     if page or (page + 1) * PAGE_SIZE < len(candidates):
         nav = []
         if page:
