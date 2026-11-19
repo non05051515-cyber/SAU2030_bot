@@ -98,7 +98,7 @@ def home(api, cid):
 
 
 def shop(api, cid):
-    buttons = [s.btn(category_name(cid, section), "merchant:section:" + section, style="primary") for section in catalog()]
+    buttons = [s.btn(category_name(cid, section), "merchant:section:" + section, s.ui_icon(section), style="primary") for section in catalog()]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
     rows.append([s.btn(s.tr(cid, "↩️ القائمة الرئيسية", "↩️ Main menu"), "home")])
     return s.send(api, cid, s.tr(cid, "📁 <b>التصنيفات</b>\n\nاختر القسم.", "📁 <b>Categories</b>\n\nChoose a category."), s.kb(rows))
@@ -116,7 +116,7 @@ def section(api, cid, category, page=0):
         title = ("🍋 " if pid == APPLE else "") + s.name(pid, cid)
         quantity_label = s.tr(cid, f"الكمية: {quantity}", f"Stock: {quantity}")
         rows.append([s.btn(f"{title} · {unit_price(pid)} · {quantity_label}", "options:" + pid,
-                           style="success" if quantity and s.can_order(pid) else "danger")])
+                           s.product_button_icon(pid, cid) or s.ui_icon(category),\n                           style="success" if quantity and s.can_order(pid) else "danger")])
     if page or (page + 1) * PAGE_SIZE < len(candidates):
         nav = []
         if page:
