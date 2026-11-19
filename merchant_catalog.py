@@ -116,7 +116,8 @@ def section(api, cid, category, page=0):
         title = ("🍋 " if pid == APPLE else "") + s.name(pid, cid)
         quantity_label = s.tr(cid, f"الكمية: {quantity}", f"Stock: {quantity}")
         rows.append([s.btn(f"{title} · {unit_price(pid)} · {quantity_label}", "options:" + pid,
-                           s.product_button_icon(pid, cid) or s.ui_icon(category),\n                           style="success" if quantity and s.can_order(pid) else "danger")])
+                           s.product_button_icon(pid, cid) or s.ui_icon(category),
+                           style="success" if quantity and s.can_order(pid) else "danger")])
     if page or (page + 1) * PAGE_SIZE < len(candidates):
         nav = []
         if page:
