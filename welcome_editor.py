@@ -31,7 +31,7 @@ def show(api, cid):
     values = settings()
     lang = s.prefs(cid)[0]
     text = values.get(lang, DEFAULTS[lang])
-    keyboard = s.kb([[s.btn(s.tr(cid, '🛍 تصفّح كتالوج الجملة', '🛍 Browse wholesale catalog'), 'enter_store', s.ui_icon('ui_start'), style='primary')],
+    keyboard = s.kb([[s.btn(s.tr(cid, '🛍 تصفّح كتالوج الجملة', '🛍 Browse wholesale catalog'), 'merchant:shop', s.ui_icon('ui_start'), style='primary')],
                      [s.btn('🌐 العربية / English', 'settings:lang', s.ui_icon('ui_language'))]])
     photo = values.get('cover_photo')
     if photo is None:

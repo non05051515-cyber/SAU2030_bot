@@ -455,7 +455,11 @@ def apply_chatgpt_stock_update():
 
 if __name__=='__main__':
  apply_requested_catalog_updates()
- apply_chatgpt_stock_update()
+ import merchant_catalog
+ merchant_catalog.setup()
+ merchant_catalog.install(globals())
+ print('Merchant catalog ready:', storefront.price(0, merchant_catalog.APPLE, 'USD'),
+       'stock:', merchant_catalog.stock(merchant_catalog.APPLE), flush=True)
  threading.Thread(target=warm_arabic_descriptions,daemon=True).start()
  main()
 

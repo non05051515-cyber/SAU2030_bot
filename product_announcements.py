@@ -9,7 +9,9 @@ import broadcast_admin as broadcast
 ICONS = {'product': ('🛍', 'المنتج'), 'added': ('➕', 'الكمية المضافة'),
          'stock': ('📦', 'المخزون'), 'price': ('💵', 'السعر'), 'buy': ('🛒', 'زر الشراء'),
          'stop_ads': ('🔕', 'زر إيقاف الإعلانات')}
-TARGETS = {'channel': catalog.CHANNEL, 'group': '@SAU2030_k'}
+def channel_target():
+    from merchant_catalog import channel_target as current_target
+    return current_target()
 REQUEST_STATE = {}
 BUTTON_STYLES = {'primary': '🔵 أزرق', 'success': '🟢 أخضر', 'danger': '🔴 أحمر'}
 
@@ -67,10 +69,10 @@ def card(data, language='en', unsubscribe=False):
         title = s.text_override(canonical, 'name', language, fallback)
         lines = [('product', title)]
         if data.get('added') is not None:
-            lines.append(('added', ('Added: ' if en else 'الكمية المضافة: ') + str(data['added'])))
+            lines.append(('added', ('Added: ' if en else 'أضيفت: ') + str(data['added'])))
         quantity = data.get('stock', st['quantity'])
-        lines += [('stock', ('Current stock: ' if en else 'المخزون الحالي: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
-                  ('price', ('Price: ' if en else 'السعر: ') + (f'{s.amount(pid, "SAR"):.2f} ريال' if s.amount(pid, 'SAR') is not None else s.price(0, pid, 'SAR')))]
+        lines += [('stock', ('Available now: ' if en else 'الكمية المتوفرة حاليًا: ') + (str(quantity) if quantity is not None else ('Available' if en else 'متوفر'))),
+                  ('price', ('Unit price: ' if en else 'سعر الوحدة: ') + s.price(0, pid, 'USD'))]
         text, entities = '', []
         units = lambda value: len(value.encode('utf-16-le')) // 2
         for key, value in lines:
@@ -114,9 +116,9 @@ def preview(api, cid, data):
     if not send_card(api, cid, data, s.prefs(cid)[0], unsubscribe=True):
         return s.send(api, cid, 'تعذرت المعاينة. راجع إعداد الأيقونات وصلاحية البوت لاستخدامها.',
                       s.kb([[s.btn('🎨 الأيقونات المتحركة', 'ad:icons')], [s.btn('↩️ رجوع', 'ad:home')]]))
+    target = [s.btn('✅ نشر في القناة', 'ad:send:channel:' + token, style='success')] if channel_target() else [s.btn('➕ إعداد قناة الإعلانات', 'merchant:channel', style='primary')]
     return s.send(api, cid, 'هذه معاينة الإعلان. اختر مكان النشر أو عدّل النص والأزرار:', s.kb([
-        [s.btn('✅ نشر في القناة', 'ad:send:channel:' + token, style='success')],
-        [s.btn('✅ نشر في المجموعة', 'ad:send:group:' + token, style='success')],
+        target,
         [s.btn('📨 إرسال لمستخدمي البوت', 'ad:send:bot:' + token, style='success')],
         [s.btn('✏️ تعديل نص الإعلان', 'ad:text')],
         [s.btn('🖼️ إضافة / تغيير صورة', 'ad:photo')],
@@ -286,7 +288,10 @@ def install(namespace):
         if verb == 'icon' and len(parts) == 3 and parts[2] in ICONS:
             save(cid, data, 'icon:' + parts[2])
             return s.send(api, cid, 'أرسل أيقونة متحركة واحدة أو معرفها الرقمي. اكتب 0 لاستخدام الأيقونة العادية. لقطة الشاشة لا تحتوي على معرف الأيقونة.', s.kb([[s.btn('↩️ رجوع', 'ad:icons')]]))
-        if verb == 'send' and len(parts) == 4 and parts[2] in (*TARGETS, 'bot'):
+        if verb == 'send' and len(parts) == 4 and parts[2] in ('channel', 'bot'):
+            target = channel_target() if parts[2] == 'channel' else None
+            if parts[2] == 'channel' and target is None:
+                return s.send(api, cid, 'أضف قناة الإعلانات من لوحة الإدارة أولًا.')
             with db() as c:
                 claimed = c.execute("UPDATE product_ad_drafts SET status='sending' WHERE cid=? AND token=? AND status='ready'", (cid, parts[3])).rowcount
                 row = c.execute('SELECT payload FROM product_ad_drafts WHERE cid=? AND token=?', (cid, parts[3])).fetchone() if claimed else None
@@ -301,7 +306,7 @@ def install(namespace):
                 clear(cid)
                 return s.send(api, cid, f'⏳ تمت جدولة الإعلان للإرسال إلى {count} من مستخدمي البوت. سيصلك تقرير بالنتيجة بعد الانتهاء.',
                               s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))
-            result = send_card(api, TARGETS[parts[2]], data)
+            result = send_card(api, target, data)
             clear(cid)
             return s.send(api, cid, '✅ تم نشر الإعلان مع زر الشراء.' if result else '❌ تعذر تأكيد النشر. راجع القناة أو المجموعة قبل المحاولة مجددًا، وتحقق من صلاحيات النشر والأيقونات.', s.kb([[s.btn('↩️ إعلان منتج', 'ad:home')]]))
 
