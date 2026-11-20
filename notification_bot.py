@@ -17,6 +17,7 @@ DATABASE = DATA / "soqid-notifications.sqlite3"
 STORE_URL = os.getenv("STOREFRONT_URL", "").rstrip("/")
 ADMIN_ID = int(os.getenv("NOTIFICATIONS_ADMIN_ID", "8386371522"))
 BOT_USERNAME = ""
+MINI_APP_READY = False
 MAX_BODY = 16000
 
 
@@ -148,7 +149,7 @@ def keyboard(cid):
     language, enabled = preference(cid)
     english = language == "en"
     rows = [
-        [{"text": "Open store" if english else "افتح متجر سوق ID", "url": store_link()}],
+        [{"text": "Open store" if english else "افتح متجر سوق ID", "web_app": {"url": store_link()}}],
         [{"text": ("Stop notifications" if english else "إيقاف الإشعارات") if enabled else
                   ("Enable notifications" if english else "تفعيل الإشعارات"),
           "callback_data": "notifications:off" if enabled else "notifications:on"}],
@@ -259,7 +260,7 @@ def notification(data, language):
         "text": text,
         "parse_mode": "HTML",
         "reply_markup": {"inline_keyboard": [
-            [{"text": "Open product" if english else "افتح المنتج", "url": store_link(data["product_id"])}],
+            [{"text": "Open product" if english else "افتح المنتج", "web_app": {"url": store_link(data["product_id"])}}],
             [{"text": "Stop notifications" if english else "إيقاف الإشعارات", "callback_data": "notifications:off"}],
         ]},
     }
@@ -327,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self.respond(200, {"status": "ok", "mode": "notifications", "bot": BOT_USERNAME})
+            return self.respond(200, {"status": "ok", "mode": "notifications", "bot": BOT_USERNAME, "mini_app": MINI_APP_READY})
         if self.path == "/internal/notifications" and self.authenticated():
             with db() as connection:
                 pending = connection.execute("SELECT count(*) FROM deliveries WHERE status='pending'").fetchone()[0]
@@ -356,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global BOT_USERNAME
+    global BOT_USERNAME, MINI_APP_READY
     if not os.getenv("BOT_TOKEN") or len(os.getenv("STOCK_NOTIFICATIONS_SECRET", "")) < 24:
         raise RuntimeError("Notification service credentials are missing")
     if not STORE_URL.startswith("https://"):
@@ -375,7 +376,13 @@ def main():
         {"command": "stop", "description": "إيقاف الإشعارات | Stop notifications"},
         {"command": "language", "description": "اللغة | Language"},
     ])
-    telegram("setChatMenuButton", menu_button={"type": "commands"})
+    telegram("setChatMenuButton", menu_button={
+        "type": "web_app", "text": "افتح المتجر", "web_app": {"url": store_link()}
+    })
+    menu = telegram("getChatMenuButton")
+    MINI_APP_READY = menu.get("type") == "web_app" and menu.get("web_app", {}).get("url") == store_link()
+    if not MINI_APP_READY:
+        raise RuntimeError("Telegram Mini App menu was not configured")
     server = ThreadingHTTPServer(("0.0.0.0", int(os.getenv("PORT", "8080"))), Handler)
     threading.Thread(target=server.serve_forever, daemon=True, name="notification-http").start()
     threading.Thread(target=delivery_loop, daemon=True, name="notification-delivery").start()

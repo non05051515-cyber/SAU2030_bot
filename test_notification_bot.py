@@ -47,7 +47,7 @@ class NotificationTests(unittest.TestCase):
             self.assertTrue(n.deliver_one())
             send.assert_called_once()
             self.assertIn("$3.95", send.call_args.kwargs["text"])
-            self.assertEqual(send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["url"],
+            self.assertEqual(send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"],
                              "https://store.example/?product=gpt")
             self.assertFalse(n.deliver_one())
 
@@ -76,7 +76,7 @@ class NotificationTests(unittest.TestCase):
     def test_old_checkout_callback_redirects_to_store(self):
         with patch.object(n, "telegram") as send:
             n.process_update({"callback_query": {"id": "callback", "from": {"id": 11}, "data": "buy:gpt"}})
-        self.assertEqual(send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["url"],
+        self.assertEqual(send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"],
                          "https://store.example/")
 
 
