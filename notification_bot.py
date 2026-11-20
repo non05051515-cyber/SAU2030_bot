@@ -149,7 +149,7 @@ def keyboard(cid):
     language, enabled = preference(cid)
     english = language == "en"
     rows = [
-        [{"text": "Open store" if english else "افتح متجر سوق ID", "web_app": {"url": store_link()}}],
+        [{"text": "Open store" if english else "افتح متجر سوق ID", "web_app": {"url": store_link()}, "style": "primary"}],
         [{"text": ("Stop notifications" if english else "إيقاف الإشعارات") if enabled else
                   ("Enable notifications" if english else "تفعيل الإشعارات"),
           "callback_data": "notifications:off" if enabled else "notifications:on"}],
@@ -164,10 +164,10 @@ def welcome(cid):
     language, enabled = preference(cid)
     english = language == "en"
     text = (
-        "Soq ID\nStock notifications and product updates. Open the store to browse and order.\n\n"
+        "👋 Welcome to Soq ID!\nTap Open store to browse and shop. New stock announcements will appear here.\n\n"
         + ("Notifications enabled." if enabled else "Notifications paused.")
         if english else
-        "سوق ID\nإشعارات المخزون وتحديثات المنتجات. افتح المتجر للتصفح والطلب.\n\n"
+        "👋 يا هلا بك في سوق ID!\nاضغط «افتح المتجر» وخذ لك جولة بين الاشتراكات. التصفح والشراء من الموقع، وهنا توصلك أخبار الدفعات الجديدة. ✨\n\n"
         + ("الإشعارات مفعّلة." if enabled else "الإشعارات متوقفة.")
     )
     telegram("sendMessage", chat_id=cid, text=text, reply_markup=keyboard(cid))
@@ -223,7 +223,10 @@ def validate_event(data):
             raise ValueError(key)
     if data["added"] <= 0 or data["stock"] < data["added"]:
         raise ValueError("stock")
-    return {key: data[key] for key in ("id", "product_id", "name", "added", "stock", "price_cents")}
+    event = {key: data[key] for key in ("id", "product_id", "name", "added", "stock", "price_cents")}
+    if data.get("photo") is True:
+        event["photo"] = True
+    return event
 
 
 def queue_event(data):
@@ -250,20 +253,34 @@ def notification(data, language):
     title = html.escape(data["name"][1 if english else 0])
     amount = "$" + format(data["price_cents"] / 100, ".2f")
     text = (
-        f"📦 <b>{title}</b>\n➕ Added: {data['added']}\n"
+        f"📦 <b>New stock at Soq ID</b>\n\n<b>{title}</b>\n➕ Added: {data['added']}\n"
         f"Available now: {data['stock']}\n💵 Price: {amount}"
         if english else
-        f"📦 <b>{title}</b>\n➕ تمت الإضافة: {data['added']}\n"
+        f"📦 <b>دفعة جديدة في سوق ID</b>\n\n<b>{title}</b>\n➕ تمت الإضافة: {data['added']}\n"
         f"الكمية المتوفرة حاليًا: {data['stock']}\n💵 السعر: {amount}"
     )
     return {
         "text": text,
         "parse_mode": "HTML",
         "reply_markup": {"inline_keyboard": [
-            [{"text": "Open product" if english else "افتح المنتج", "web_app": {"url": store_link(data["product_id"])}}],
+            [{"text": "🛍️ Open product" if english else "🛍️ افتح المنتج", "style": "primary", "web_app": {"url": store_link(data["product_id"])}}],
             [{"text": "Stop notifications" if english else "إيقاف الإشعارات", "callback_data": "notifications:off"}],
         ]},
     }
+
+
+def send_stock_announcement(cid, data, language):
+    card = notification(data, language)
+    if data.get("photo"):
+        photo_url = STORE_URL + "/product-image/" + urllib.parse.quote(data["product_id"], safe="")
+        photo_card = {**card, "caption": card["text"]}
+        del photo_card["text"]
+        try:
+            return telegram("sendPhoto", chat_id=cid, photo=photo_url, **photo_card)
+        except TelegramError as error:
+            if error.code != 400:
+                raise
+    return telegram("sendMessage", chat_id=cid, **card)
 
 
 def deliver_one():
@@ -281,12 +298,13 @@ def deliver_one():
     retry_at = 0
     if row["enabled"]:
         try:
-            telegram("sendMessage", chat_id=row["cid"], **notification(json.loads(row["payload"]), row["language"]))
+            send_stock_announcement(row["cid"], json.loads(row["payload"]), row["language"])
             status = "sent"
         except TelegramError as error:
             if error.code in (400, 403):
                 status = "unavailable"
-                subscribe(row["cid"], False)
+                if error.code == 403:
+                    subscribe(row["cid"], False)
             else:
                 status = "pending"
                 retry_at = int(time.time()) + max(15, min(error.retry_after, 3600))
