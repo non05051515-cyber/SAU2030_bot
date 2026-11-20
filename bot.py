@@ -207,6 +207,9 @@ def _run_embedded_capcut_sync():
  pandora_catalog_sync.run()
 
 def main():
+ if os.getenv('STOREFRONT_MODE') == 'notifications':
+  import notification_bot
+  return notification_bot.main()
  t=os.getenv('BOT_TOKEN')
  if not t:raise RuntimeError('BOT_TOKEN missing')
  a=API(t)
